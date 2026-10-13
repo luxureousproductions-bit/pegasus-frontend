@@ -8,7 +8,7 @@
     <application
         android:hardwareAccelerated="true"
         android:name="org.qtproject.qt5.android.bindings.QtApplication"
-        android:label="Pegasus"
+        android:label="Pegasus XOS"
         android:icon="@mipmap/icon"
         android:banner="@mipmap/banner"
         android:extractNativeLibs="true"
@@ -16,7 +16,7 @@
         <activity
             android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density"
             android:name=".MainActivity"
-            android:label="Pegasus"
+            android:label="Pegasus XOS"
             android:screenOrientation="userLandscape"
             android:launchMode="singleTop"
             android.theme="@style/PegasusMain">
@@ -70,7 +70,7 @@
 
         <provider
             android:name="org.pegasus_frontend.android.LaunchFileProvider"
-            android:authorities="org.pegasus_frontend.android.files"
+            android:authorities="${applicationId}.files"
             android:grantUriPermissions="true"
             android:exported="false">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/fileprovider_paths" />

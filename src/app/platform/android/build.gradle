@@ -74,6 +74,8 @@ android {
     }
 
     defaultConfig {
+        // Separate install id so this build sits beside stock Pegasus
+        applicationId "org.pegasus_frontend.android.xbox"
         resConfig "en"
         minSdkVersion = qtMinSdkVersion
         targetSdkVersion = qtTargetSdkVersion

@@ -258,7 +258,7 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
     public static String toContentUri(String path) {
         final Uri uri = FileProvider.getUriForFile(
             m_self,
-            "org.pegasus_frontend.android.files",
+            m_self.getPackageName() + ".files",
             new File(path));
         return uri.toString();
     }
