@@ -41,6 +41,7 @@ public:
     void teardown();
 
     void clearCache();
+    bool isLoaded() const { return m_engine != nullptr; }
 
 signals:
     void rebuildComplete();

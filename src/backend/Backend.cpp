@@ -277,13 +277,24 @@ void Backend::onFavoritesChanged()
 
 void Backend::onProcessLaunched()
 {
+#ifdef Q_OS_ANDROID
+    // Keep the UI alive while the game runs. Destroying the QML engine
+    // frees some memory, but rebuilding it means a full theme reload
+    // (loading screen, lost theme state) every time the user comes back.
+    // If Android needs the memory it can still stop Pegasus, which then
+    // starts fresh as before.
+    m_api_private->gamepad().stop();
+    QMetaObject::invokeMethod(m_launcher, &ProcessLauncher::onTeardownComplete, Qt::QueuedConnection);
+#else
     m_frontend->teardown();
     m_api_private->gamepad().stop();
+#endif
 }
 
 void Backend::onProcessFinished()
 {
-    m_frontend->rebuild();
+    if (!m_frontend->isLoaded())
+        m_frontend->rebuild();
     m_api_private->gamepad().start(m_args);
 }
 
