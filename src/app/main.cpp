@@ -20,6 +20,7 @@
 #include "backend/platform/TerminalKbd.h"
 
 #include <QCommandLineParser>
+#include <QDebug>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
@@ -68,6 +69,12 @@ int main(int argc, char *argv[])
 
     if (!request_runtime_permissions())
         return 1;
+
+#ifdef Q_OS_ANDROID
+    // Must run before anything reads the storage roots (they are cached for
+    // the lifetime of the process), see MainActivity.waitForStorage()
+    qInfo().noquote() << "Removable storage:" << android::wait_for_storage(15000);
+#endif
 
     backend::CliArgs cli_args = handle_cli_args(app);
     cli_args.portable |= portable_txt_present();

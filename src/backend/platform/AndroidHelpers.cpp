@@ -73,6 +73,18 @@ QStringList storage_paths()
     return paths;
 }
 
+QString wait_for_storage(int timeout_ms)
+{
+    static constexpr auto JNI_METHOD = "waitForStorage";
+    static constexpr auto JNI_SIGNATURE = "(Landroid/content/Context;I)Ljava/lang/String;";
+
+    const QAndroidJniObject context = QtAndroid::androidContext();
+    const auto result_obj = QAndroidJniObject::callStaticObjectMethod(
+        jni_classname(), JNI_METHOD, JNI_SIGNATURE,
+        context.object(), static_cast<jint>(timeout_ms));
+    return result_obj.toString();
+}
+
 QStringList granted_paths()
 {
     return query_string_array("grantedPaths");

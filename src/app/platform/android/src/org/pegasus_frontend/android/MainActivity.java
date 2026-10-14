@@ -22,6 +22,7 @@ import android.content.Context;
 import android.app.Activity;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.content.UriPermission;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -35,6 +36,7 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.os.storage.StorageManager;
 import android.os.storage.StorageVolume;
 import android.provider.Settings;
@@ -178,6 +180,84 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         }
         paths.add("/"); // Always add the root
         return paths.toArray(new String[paths.size()]);
+    }
+
+
+    // Blocks until removable storage (SD card) has finished mounting, or the
+    // timeout passes. When Pegasus is the home app it starts right after boot,
+    // often before the SD card is mounted; the storage roots and config dirs are
+    // read once at startup, so anything on the card would be missed until the
+    // app is restarted. Called from main() before the backend starts.
+    //
+    // Waits while a removable volume reports "checking"/"unmounted". Right after
+    // boot it also waits for a card to appear at all, but only if one was seen
+    // on a previous run, so devices without an SD card never wait.
+    public static String waitForStorage(Context ctx, int timeoutMs) {
+        if (Build.VERSION.SDK_INT < 24)
+            return "skipped (API < 24)";
+
+        final StorageManager sm = (StorageManager) ctx.getSystemService(Context.STORAGE_SERVICE);
+        final SharedPreferences prefs = ctx.getSharedPreferences("pegasus_storage", Context.MODE_PRIVATE);
+        final boolean expectCard = prefs.getBoolean("expect_removable", false);
+        final boolean freshBoot = SystemClock.elapsedRealtime() < 120000;
+
+        final long start = SystemClock.elapsedRealtime();
+        final long deadline = start + timeoutMs;
+        int mounted = 0;
+        int pending = 0;
+        int seen = 0;
+
+        while (true) {
+            mounted = 0;
+            pending = 0;
+            seen = 0;
+            for (StorageVolume sv : sm.getStorageVolumes()) {
+                if (!sv.isRemovable())
+                    continue;
+                seen++;
+                final String state = sv.getState();
+                if (Environment.MEDIA_MOUNTED.equals(state)
+                    || Environment.MEDIA_MOUNTED_READ_ONLY.equals(state)) {
+                    boolean readable = true;
+                    if (Build.VERSION.SDK_INT >= 30) {
+                        final File dir = sv.getDirectory();
+                        readable = dir != null && dir.canRead();
+                    }
+                    if (readable)
+                        mounted++;
+                    else
+                        pending++;
+                }
+                else if (Environment.MEDIA_CHECKING.equals(state)
+                    || Environment.MEDIA_UNMOUNTED.equals(state)
+                    || Environment.MEDIA_UNKNOWN.equals(state)) {
+                    pending++;
+                }
+            }
+
+            final boolean waitForCard = expectCard && freshBoot && mounted == 0;
+            if (pending == 0 && !waitForCard)
+                break;
+            if (SystemClock.elapsedRealtime() >= deadline)
+                break;
+
+            try {
+                Thread.sleep(250);
+            } catch (InterruptedException e) {
+                break;
+            }
+        }
+
+        // Remember whether a card is normally present. A card that was taken
+        // out for good (none listed at all) stops future waits.
+        if (mounted > 0)
+            prefs.edit().putBoolean("expect_removable", true).apply();
+        else if (seen == 0)
+            prefs.edit().putBoolean("expect_removable", false).apply();
+
+        return "waited " + (SystemClock.elapsedRealtime() - start) + "ms"
+            + " (removable: " + seen + " seen, " + mounted + " mounted, " + pending + " pending;"
+            + " expected card: " + expectCard + ", fresh boot: " + freshBoot + ")";
     }
 
 

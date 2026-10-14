@@ -27,6 +27,7 @@ const char* jni_classname();
 QString primary_storage_path();
 QStringList storage_paths();
 bool has_external_storage_access();
+QString wait_for_storage(int timeout_ms);
 
 QStringList granted_paths();
 void request_saf_permission(const std::function<void()>&);
