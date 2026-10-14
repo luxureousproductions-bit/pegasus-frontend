@@ -33,6 +33,10 @@
 #include "model/gaming/GameFile.h"
 #include "model/internal/Internal.h"
 #include "utils/FolderListModel.h"
+
+#ifdef Q_OS_ANDROID
+#include "platform/AndroidHelpers.h"
+#endif
 #include "SortFilterProxyModel/qqmlsortfilterproxymodel.h"
 #include "SortFilterProxyModel/filters/filtersqmltypes.h"
 #include "SortFilterProxyModel/proxyroles/proxyrolesqmltypes.h"
@@ -59,6 +63,11 @@ void print_metainfo()
         QSysInfo::currentCpuArchitecture(),
         QGuiApplication::platformName()));
     Log::info(LOGMSG("Qt version %1").arg(qVersion()));
+#ifdef Q_OS_ANDROID
+    Log::info(LOGMSG("Removable storage wait: %1").arg(android::last_storage_wait()));
+    Log::info(LOGMSG("Storage roots: %1").arg(android::storage_paths().join(QStringLiteral(", "))));
+    Log::info(LOGMSG("Config dirs: %1").arg(paths::configDirs().join(QStringLiteral(", "))));
+#endif
 }
 
 void create_config_dirs()

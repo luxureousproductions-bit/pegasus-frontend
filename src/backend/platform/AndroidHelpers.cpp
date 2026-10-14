@@ -73,6 +73,15 @@ QStringList storage_paths()
     return paths;
 }
 
+namespace {
+QString s_last_storage_wait;  // kept for the log, which starts later
+} // namespace
+
+QString last_storage_wait()
+{
+    return s_last_storage_wait;
+}
+
 QString wait_for_storage(int timeout_ms)
 {
     static constexpr auto JNI_METHOD = "waitForStorage";
@@ -82,7 +91,8 @@ QString wait_for_storage(int timeout_ms)
     const auto result_obj = QAndroidJniObject::callStaticObjectMethod(
         jni_classname(), JNI_METHOD, JNI_SIGNATURE,
         context.object(), static_cast<jint>(timeout_ms));
-    return result_obj.toString();
+    s_last_storage_wait = result_obj.toString();
+    return s_last_storage_wait;
 }
 
 QStringList granted_paths()
