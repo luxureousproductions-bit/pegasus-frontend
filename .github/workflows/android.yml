@@ -40,6 +40,11 @@ jobs:
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: .circleci/build.sh
 
+      # Fixed debug key: every runner otherwise generates a new random one,
+      # so a newer build can't be installed over an older one
+      - name: Package (debug), signing key
+        if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
+        run: mkdir -p ~/.android && cp etc/android/debug.keystore ~/.android/debug.keystore
       - name: Package (debug)
         if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
         env:
