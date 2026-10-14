@@ -62,6 +62,9 @@ jobs:
         run: cp
           installdir/build/outputs/apk/debug/installdir-debug.apk
           dist/pegasus-fe_$(git describe --always)_${{ matrix.name }}.apk
+      - name: Package (debug), report signing key
+        if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
+        run: echo "::notice::$(git describe --always) signed with $(keytool -printcert -jarfile dist/*.apk | grep -m1 'SHA256:')"
 
       - name: Package (release), prep
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
