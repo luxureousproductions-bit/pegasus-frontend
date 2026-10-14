@@ -20,6 +20,10 @@
 #include "Log.h"
 #include "model/gaming/GameFile.h"
 
+#ifdef Q_OS_ANDROID
+#include "platform/AndroidHelpers.h"
+#endif
+
 
 namespace model {
 ApiObject::ApiObject(const backend::CliArgs&, QObject* parent)
@@ -111,6 +115,16 @@ void ApiObject::onGameProcessFinished()
 void ApiObject::onGameFavoriteChanged()
 {
     emit favoritesChanged();
+}
+
+int ApiObject::pdfPageCount(const QString& path) const
+{
+#ifdef Q_OS_ANDROID
+    return android::pdf_page_count(path);
+#else
+    Q_UNUSED(path);
+    return 0;
+#endif
 }
 
 void ApiObject::onLocaleChanged()

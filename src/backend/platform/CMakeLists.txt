@@ -11,6 +11,8 @@ if(PEGASUS_ON_ANDROID)
         AndroidAppIconProvider.h
         AndroidHelpers.cpp
         AndroidHelpers.h
+        AndroidPdfProvider.cpp
+        AndroidPdfProvider.h
     )
 endif()
 

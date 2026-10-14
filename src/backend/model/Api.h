@@ -56,6 +56,11 @@ public:
     CollectionListModel* collections() const { return m_collections; }
     GameListModel* allGames() const { return m_all_games; }
 
+    // Number of pages of a PDF file (eg. a game manual), or 0 if it can't
+    // be opened or PDFs aren't supported on this platform. The pages can be
+    // shown with `image://pdf/<page>/<encodeURIComponent(path)>`.
+    Q_INVOKABLE int pdfPageCount(const QString& path) const;
+
 signals:
     // loading
     void gamedataReady();

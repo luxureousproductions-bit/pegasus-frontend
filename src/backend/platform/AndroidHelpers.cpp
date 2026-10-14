@@ -95,6 +95,37 @@ QString wait_for_storage(int timeout_ms)
     return s_last_storage_wait;
 }
 
+QString pdf_local_path(const QString& path_or_url, bool percent_encoded)
+{
+    QString path = percent_encoded
+        ? QUrl::fromPercentEncoding(path_or_url.toUtf8())
+        : path_or_url;
+    if (path.startsWith(QLatin1String("file:")))
+        path = QUrl(path).toLocalFile();
+    return path;
+}
+
+int pdf_page_count(const QString& path_or_url)
+{
+    static constexpr auto JNI_CLASS = "org/pegasus_frontend/android/PdfHelper";
+    static constexpr auto JNI_METHOD = "pageCount";
+    static constexpr auto JNI_SIGNATURE = "(Ljava/lang/String;)I";
+
+    const QString path = pdf_local_path(path_or_url, false);
+    if (path.isEmpty())
+        return 0;
+
+    QAndroidJniEnvironment jni_env;
+    const auto jni_path = QAndroidJniObject::fromString(path);
+    const jint count = QAndroidJniObject::callStaticMethod<jint>(
+        JNI_CLASS, JNI_METHOD, JNI_SIGNATURE, jni_path.object<jstring>());
+    if (jni_env->ExceptionCheck()) {
+        jni_env->ExceptionClear();
+        return 0;
+    }
+    return count;
+}
+
 QStringList granted_paths()
 {
     return query_string_array("grantedPaths");

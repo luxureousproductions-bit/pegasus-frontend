@@ -23,6 +23,7 @@
 
 #ifdef Q_OS_ANDROID
 #include "platform/AndroidAppIconProvider.h"
+#include "platform/AndroidPdfProvider.h"
 #endif
 
 #include <QQmlApplicationEngine>
@@ -66,6 +67,7 @@ void FrontendLayer::rebuild()
     m_engine->addImageProvider(QStringLiteral("blurhash"), new BlurhashProvider);
 #ifdef Q_OS_ANDROID
     m_engine->addImageProvider(QStringLiteral("androidicons"), new AndroidAppIconProvider);
+    m_engine->addImageProvider(QStringLiteral("pdf"), new AndroidPdfProvider);
 #endif
 
     m_engine->rootContext()->setContextProperty(QStringLiteral("api"), m_api_public);

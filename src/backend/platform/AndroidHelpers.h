@@ -30,6 +30,10 @@ bool has_external_storage_access();
 QString wait_for_storage(int timeout_ms);
 QString last_storage_wait();
 
+// PDF manuals (see PdfHelper.java and AndroidPdfProvider)
+QString pdf_local_path(const QString& path_or_url, bool percent_encoded);
+int pdf_page_count(const QString& path_or_url);
+
 QStringList granted_paths();
 void request_saf_permission(const std::function<void()>&);
 

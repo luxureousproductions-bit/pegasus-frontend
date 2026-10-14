@@ -20,9 +20,11 @@ else {
 android {
     HEADERS += \
         $$PWD/AndroidAppIconProvider.h \
-        $$PWD/AndroidHelpers.h
+        $$PWD/AndroidHelpers.h \
+        $$PWD/AndroidPdfProvider.h
 
     SOURCES += \
         $$PWD/AndroidAppIconProvider.cpp \
-        $$PWD/AndroidHelpers.cpp
+        $$PWD/AndroidHelpers.cpp \
+        $$PWD/AndroidPdfProvider.cpp
 }
