@@ -11,6 +11,8 @@ env:
 jobs:
   android:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     strategy:
       matrix:
         include:
@@ -40,11 +42,6 @@ jobs:
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: .circleci/build.sh
 
-      # Fixed debug key: every runner otherwise generates a new random one,
-      # so a newer build can't be installed over an older one
-      - name: Package (debug), signing key
-        if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
-        run: mkdir -p ~/.android && cp etc/android/debug.keystore ~/.android/debug.keystore
       - name: Package (debug)
         if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
         env:
@@ -61,10 +58,51 @@ jobs:
         if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
         run: cp
           installdir/build/outputs/apk/debug/installdir-debug.apk
-          dist/pegasus-fe_$(git describe --always)_${{ matrix.name }}.apk
+          dist/pegasus-x_$(git describe --always)_${{ matrix.name }}.apk
+
+      # Pegasus X: sign every build with the private Pegasus X key, so test
+      # builds and releases all install over each other. The key lives only in
+      # the repository secrets PEGASUSX_KEYSTORE (base64 PKCS12) and
+      # PEGASUSX_KEYSTORE_PASSWORD. Without them (eg. in someone else's fork)
+      # the build keeps the runner's throwaway debug key.
+      - name: Package (debug), sign with Pegasus X key
+        id: sign
+        if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
+        env:
+          KS_B64: ${{ secrets.PEGASUSX_KEYSTORE }}
+          KS_PASS: ${{ secrets.PEGASUSX_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KS_B64" ] || [ -z "$KS_PASS" ]; then
+            echo "::warning::Pegasus X signing secrets not set, the APK keeps a throwaway debug key"
+            exit 0
+          fi
+          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/pegasusx.p12"
+          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          APKSIGNER="$(ls -d "$SDK"/build-tools/*/ | sort -V | tail -n 1)apksigner"
+          for apk in dist/*.apk; do
+            "$APKSIGNER" sign --ks "$RUNNER_TEMP/pegasusx.p12" --ks-type PKCS12 \
+              --ks-pass env:KS_PASS --ks-key-alias pegasusx "$apk"
+          done
+          rm -f "$RUNNER_TEMP/pegasusx.p12"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
       - name: Package (debug), report signing key
         if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
         run: echo "::notice::$(git describe --always) signed with $(keytool -printcert -jarfile dist/*.apk | grep -m1 'SHA256:')"
+
+      # Pegasus X: a version tag (v1.0, v1.1-beta1, ...) publishes a GitHub
+      # Release with the APKs. Tags with a dash are marked as pre-releases.
+      # Only builds signed with the Pegasus X key are ever published.
+      - name: Publish release (Pegasus X)
+        if: startsWith(github.ref, 'refs/tags/v') && steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          PRE=""
+          case "$TAG" in *-*) PRE="--prerelease" ;; esac
+          NOTES=".github/pegasus-x-release-notes.md"
+          gh release create "$TAG" $PRE --title "Pegasus X $TAG" --notes-file "$NOTES" || true
+          gh release upload "$TAG" dist/*.apk --clobber
 
       - name: Package (release), prep
         if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/master'
