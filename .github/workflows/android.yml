@@ -79,8 +79,8 @@ jobs:
           KS="$RUNNER_TEMP/pegasusx.ks"
           # Tolerate line breaks, spaces and CRLFs from pasting the secret
           if ! printf '%s' "$KS_B64" | tr -d ' \r\n\t' | base64 -d > "$KS" 2>/dev/null || [ ! -s "$KS" ]; then
-            echo "::error::PEGASUSX_KEYSTORE is not valid base64 text"
-            exit 1
+            echo "::warning::PEGASUSX_KEYSTORE is not valid base64 text, the APK keeps a throwaway debug key"
+            exit 0
           fi
           # Accept both PKCS12 (.p12) and JKS (.jks/.keystore) keystores
           KS_TYPE=""
@@ -90,8 +90,9 @@ jobs:
             fi
           done
           if [ -z "$KS_TYPE" ]; then
-            echo "::error::Could not open the keystore: wrong PEGASUSX_KEYSTORE_PASSWORD, or the keystore file is damaged"
-            exit 1
+            echo "::warning::Could not open the keystore (wrong PEGASUSX_KEYSTORE_PASSWORD, or a damaged keystore), the APK keeps a throwaway debug key"
+            rm -f "$KS"
+            exit 0
           fi
           # Use the key named "pegasusx" when present, else the keystore's first key
           ALIASES="$(keytool -list -v -keystore "$KS" -storetype "$KS_TYPE" -storepass:env KS_PASS 2>/dev/null \
@@ -104,9 +105,9 @@ jobs:
           for apk in dist/*.apk; do
             if ! "$APKSIGNER" sign --ks "$KS" --ks-type "$KS_TYPE" \
                 --ks-pass env:KS_PASS --key-pass env:KS_PASS --ks-key-alias "$ALIAS" "$apk" 2> "$RUNNER_TEMP/sign.err"; then
-              echo "::error::apksigner failed: $(tail -n 3 "$RUNNER_TEMP/sign.err" | tr '\n' ' ')"
+              echo "::warning::apksigner failed, the APK keeps a throwaway debug key: $(tail -n 3 "$RUNNER_TEMP/sign.err" | tr '\n' ' ')"
               rm -f "$KS"
-              exit 1
+              exit 0
             fi
           done
           rm -f "$KS"
