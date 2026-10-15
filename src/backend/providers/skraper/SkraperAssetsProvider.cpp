@@ -24,6 +24,7 @@
 #include "providers/SearchContext.h"
 #include "utils/PathTools.h"
 
+#include <QDir>
 #include <QDirIterator>
 #include <QStringBuilder>
 #include <array>
@@ -55,7 +56,9 @@ SkraperAssetsProvider::SkraperAssetsProvider(QObject* parent)
 
 Provider& SkraperAssetsProvider::run(SearchContext& sctx)
 {
-    // NOTE: The entries are ordered by priority
+    // NOTE: The entries are ordered by priority. Folder names are matched
+    //       case-insensitively. Besides Skraper's own folder names, the ES-DE
+    //       ones and common singular/plural variants are accepted too.
     const HashMap<AssetType, QStringList, EnumHash> ASSET_DIRS {
         { AssetType::ARCADE_MARQUEE, {
             QStringLiteral("screenmarquee"),
@@ -63,40 +66,79 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
         }},
         { AssetType::BACKGROUND, {
             QStringLiteral("fanart"),
+            QStringLiteral("fanarts"),
+            QStringLiteral("background"),
+            QStringLiteral("backgrounds"),
         }},
         { AssetType::BOX_BACK, {
             QStringLiteral("box2dback"),
+            QStringLiteral("backcover"),
+            QStringLiteral("backcovers"),
+            QStringLiteral("boxback"),
         }},
         { AssetType::BOX_FRONT, {
             QStringLiteral("box2dfront"),
+            QStringLiteral("cover"),
+            QStringLiteral("covers"),
+            QStringLiteral("boxfront"),
+            QStringLiteral("boxart"),
+            QStringLiteral("boxarts"),
             QStringLiteral("supporttexture"),
             QStringLiteral("box3d"),
+            QStringLiteral("3dbox"),
+            QStringLiteral("3dboxes"),
         }},
         { AssetType::BOX_FULL, {
             QStringLiteral("boxtexture"),
         }},
         { AssetType::BOX_SPINE, {
             QStringLiteral("box2dside"),
+            QStringLiteral("spine"),
+            QStringLiteral("spines"),
         }},
         { AssetType::CARTRIDGE, {
             QStringLiteral("support"),
+            QStringLiteral("physicalmedia"),
+            QStringLiteral("cartridge"),
+            QStringLiteral("cartridges"),
+            QStringLiteral("disc"),
+            QStringLiteral("discs"),
         }},
         { AssetType::LOGO, {
             QStringLiteral("wheel"),
+            QStringLiteral("wheels"),
             QStringLiteral("wheelcarbon"),
             QStringLiteral("wheelsteel"),
+            QStringLiteral("marquee"),
+            QStringLiteral("marquees"),
+            QStringLiteral("logo"),
+            QStringLiteral("logos"),
+        }},
+        { AssetType::POSTER, {
+            QStringLiteral("poster"),
+            QStringLiteral("posters"),
         }},
         { AssetType::SCREENSHOT, {
             QStringLiteral("screenshot"),
+            QStringLiteral("screenshots"),
+            QStringLiteral("snap"),
+            QStringLiteral("snaps"),
         }},
         { AssetType::TITLESCREEN, {
             QStringLiteral("screenshottitle"),
+            QStringLiteral("titlescreen"),
+            QStringLiteral("titlescreens"),
         }},
         { AssetType::UI_STEAMGRID, {
             QStringLiteral("steamgrid"),
+            QStringLiteral("miximage"),
+            QStringLiteral("miximages"),
+            QStringLiteral("mixrbv1"),
+            QStringLiteral("mixrbv2"),
         }},
         { AssetType::VIDEO, {
             QStringLiteral("videos"),
+            QStringLiteral("video"),
         }},
     };
 
@@ -119,11 +161,23 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
             if (!QFileInfo::exists(game_media_dir))
                 continue;
 
+            // Map the lowercase name of each folder to its actual name, so eg.
+            // both "Covers" and "covers" are found on case-sensitive storage
+            HashMap<QString, QString> existing_dirs;
+            const QStringList subdir_names = QDir(game_media_dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+            for (const QString& subdir_name : subdir_names)
+                existing_dirs.emplace(subdir_name.toLower(), subdir_name);
+
             // TODO: C++17
             for (const auto& asset_dir_entry : ASSET_DIRS) {
                 const AssetType asset_type = asset_dir_entry.first;
                 const QStringList& dir_names = asset_dir_entry.second;
-                for (const QString& dir_name : dir_names) {
+                for (const QString& dir_name_lower : dir_names) {
+                    const auto existing_it = existing_dirs.find(dir_name_lower);
+                    if (existing_it == existing_dirs.cend())
+                        continue;
+
+                    const QString& dir_name = existing_it->second;
                     const QString search_dir = game_media_dir % dir_name;
                     const int subpath_len = media_dir_subpath.length() + dir_name.length();
 

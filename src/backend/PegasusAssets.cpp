@@ -85,6 +85,14 @@ AssetType str_to_type(const QString& str)
         { QStringLiteral("video"), AssetType::VIDEO },
         { QStringLiteral("videos"), AssetType::VIDEO },
         { QStringLiteral("titlescreen"), AssetType::TITLESCREEN },
+
+        // ES-DE style names
+        { QStringLiteral("cover"), AssetType::BOX_FRONT },
+        { QStringLiteral("3dbox"), AssetType::BOX_FRONT },
+        { QStringLiteral("backcover"), AssetType::BOX_BACK },
+        { QStringLiteral("physicalmedia"), AssetType::CARTRIDGE },
+        { QStringLiteral("fanart"), AssetType::BACKGROUND },
+        { QStringLiteral("miximage"), AssetType::UI_STEAMGRID },
     };
 
     const auto it = map.find(str);
