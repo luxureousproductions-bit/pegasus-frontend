@@ -35,6 +35,7 @@ public:
     explicit EsdeProvider(QObject* parent = nullptr);
 
     Provider& run(SearchContext&) final;
+    QStringList cacheInputFiles() const final;
 };
 
 } // namespace esde

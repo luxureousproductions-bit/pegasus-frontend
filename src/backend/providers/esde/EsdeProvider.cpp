@@ -37,6 +37,7 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStringBuilder>
+#include <QVariantMap>
 #include <QXmlStreamReader>
 
 
@@ -571,6 +572,36 @@ void find_media(const QString& system_media_dir, const QString& system_dir,
             }
         }
     }
+
+    // Manuals (PDF): Pegasus has no asset type for them, so they are passed
+    // to themes the same way as an 'x-manual' metadata field
+    for (const QLatin1String dir_name_lower : { QLatin1String("manuals"), QLatin1String("manual") }) {
+        const auto dir_it = existing_dirs.find(dir_name_lower);
+        if (dir_it == existing_dirs.cend())
+            continue;
+
+        const QDir type_dir(system_media_dir % QLatin1Char('/') % dir_it->second);
+        QDirIterator file_it(type_dir.path(), DIR_FILTERS, DIR_FLAGS);
+        while (file_it.hasNext()) {
+            file_it.next();
+            const QFileInfo finfo = file_it.fileInfo();
+            if (finfo.suffix().compare(QLatin1String("pdf"), Qt::CaseInsensitive) != 0)
+                continue;
+
+            const QString rel_dir = type_dir.relativeFilePath(finfo.absolutePath());
+            const QString game_key = QDir::cleanPath(system_dir % QLatin1Char('/') % rel_dir
+                                                     % QLatin1Char('/') % finfo.completeBaseName());
+            const auto game_it = extless_path_to_game.find(game_key);
+            if (game_it == extless_path_to_game.cend())
+                continue;
+
+            QVariantMap& extra = game_it->second->extraMapMut();
+            if (!extra.contains(QStringLiteral("manual"))) {
+                extra.insert(QStringLiteral("manual"), QStringList { finfo.absoluteFilePath() });
+                found_assets++;
+            }
+        }
+    }
 }
 
 } // namespace
@@ -586,6 +617,25 @@ EsdeProvider::EsdeProvider(QObject* parent)
 
     // Off until turned on in the settings, so it doesn't duplicate an existing setup
     setEnabled(false);
+}
+
+QStringList EsdeProvider::cacheInputFiles() const
+{
+    // Rescan when ES-DE's settings, custom systems or any gamelist change (eg.
+    // after scraping), as those decide what this data source finds
+    QStringList out;
+    const QString esde_dir = find_esde_dir(*this);
+    if (esde_dir.isEmpty())
+        return out;
+
+    out << esde_dir % QStringLiteral("/settings/es_settings.xml")
+        << esde_dir % QStringLiteral("/custom_systems/es_systems.xml")
+        << esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml");
+
+    const QDir gamelists_dir(esde_dir % QStringLiteral("/gamelists"));
+    for (const QString& system : gamelists_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+        out << gamelists_dir.filePath(system % QStringLiteral("/gamelist.xml"));
+    return out;
 }
 
 Provider& EsdeProvider::run(SearchContext& sctx)

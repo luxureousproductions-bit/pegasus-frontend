@@ -21,6 +21,7 @@
 
 #include <QFileInfo>
 #include <QString>
+#include <QStringList>
 #include <QObject>
 #include <vector>
 
@@ -50,6 +51,10 @@ public:
     Provider& setEnabled(bool);
 
     virtual Provider& run(SearchContext&) { return *this; }
+
+    /// Files read by this provider whose changes should invalidate the game
+    /// list cache (in addition to the Pegasus metadata files)
+    virtual QStringList cacheInputFiles() const { return {}; }
 
     // events
     virtual void onGameFavoriteChanged(const std::vector<model::Game*>&) {}

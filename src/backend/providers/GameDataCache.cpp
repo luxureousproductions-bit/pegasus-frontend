@@ -42,7 +42,8 @@
 #include <QStringList>
 
 namespace {
-constexpr int CACHE_SCHEMA_VERSION = 1;
+// 2: games and collections keep their extra (x-) fields
+constexpr int CACHE_SCHEMA_VERSION = 2;
 
 QJsonArray string_list_to_json(const QStringList& values)
 {
@@ -175,6 +176,8 @@ QJsonObject collection_to_json(const model::Collection& collection)
     obj[QStringLiteral("common_launch_workdir")] = collection.commonLaunchWorkdir();
     obj[QStringLiteral("common_relative_basedir")] = collection.commonLaunchCmdBasedir();
     obj[QStringLiteral("assets")] = assets_to_json(collection.assets());
+    if (!collection.extraMap().isEmpty())
+        obj[QStringLiteral("extra")] = QJsonObject::fromVariantMap(collection.extraMap());
     return obj;
 }
 
@@ -197,6 +200,8 @@ QJsonObject game_to_json(const model::Game& game)
     obj[QStringLiteral("launch_workdir")] = game.launchWorkdir();
     obj[QStringLiteral("relative_basedir")] = game.launchCmdBasedir();
     obj[QStringLiteral("assets")] = assets_to_json(game.assets());
+    if (!game.extraMap().isEmpty())
+        obj[QStringLiteral("extra")] = QJsonObject::fromVariantMap(game.extraMap());
 
     QJsonArray collection_names;
     if (game.collectionsModel()) {
@@ -257,6 +262,17 @@ QString GameDataCache::buildFingerprint(
         add_metadata_fingerprints(metadata_files, dir);
     root[QStringLiteral("metadata_files")] = metadata_files;
 
+    // files of other data sources, eg. ES-DE's gamelists
+    QJsonArray provider_files;
+    for (const providers::Provider* provider : providers) {
+        if (!provider)
+            continue;
+        for (const QString& path : provider->cacheInputFiles())
+            add_file_fingerprint(provider_files, path);
+    }
+    if (!provider_files.isEmpty())
+        root[QStringLiteral("provider_files")] = provider_files;
+
     const QJsonDocument doc(root);
     const QByteArray hash = QCryptographicHash::hash(doc.toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex();
     return QString::fromLatin1(hash);
@@ -296,6 +312,8 @@ bool GameDataCache::load(
         collection->setCommonLaunchWorkdir(obj.value(QStringLiteral("common_launch_workdir")).toString());
         collection->setCommonLaunchCmdBasedir(obj.value(QStringLiteral("common_relative_basedir")).toString());
         assets_from_json(collection->assetsMut(), obj.value(QStringLiteral("assets")));
+        if (obj.contains(QStringLiteral("extra")))
+            collection->extraMapMut() = obj.value(QStringLiteral("extra")).toObject().toVariantMap();
     }
 
     const QJsonArray games = root.value(QStringLiteral("games")).toArray();
@@ -322,6 +340,8 @@ bool GameDataCache::load(
         game->setLaunchWorkdir(obj.value(QStringLiteral("launch_workdir")).toString());
         game->setLaunchCmdBasedir(obj.value(QStringLiteral("relative_basedir")).toString());
         assets_from_json(game->assetsMut(), obj.value(QStringLiteral("assets")));
+        if (obj.contains(QStringLiteral("extra")))
+            game->extraMapMut() = obj.value(QStringLiteral("extra")).toObject().toVariantMap();
 
         const QStringList collection_names = json_to_string_list(obj.value(QStringLiteral("collections")));
         for (const QString& collection_name : collection_names) {
