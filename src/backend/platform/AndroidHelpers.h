@@ -35,6 +35,7 @@ QString pdf_local_path(const QString& path_or_url, bool percent_encoded);
 int pdf_page_count(const QString& path_or_url);
 
 QStringList granted_paths();
+QStringList installed_packages();
 void request_saf_permission(const std::function<void()>&);
 
 QString run_am_call(const QStringList&);

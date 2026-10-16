@@ -50,16 +50,12 @@ HashMap<QString, model::Game*> build_gamepath_db(const HashMap<QString, model::G
 namespace providers {
 namespace skraper {
 
-SkraperAssetsProvider::SkraperAssetsProvider(QObject* parent)
-    : Provider(QLatin1String("skraper"), QStringLiteral("Skraper Assets"), PROVIDER_FLAG_CACHEABLE, parent)
-{}
-
-Provider& SkraperAssetsProvider::run(SearchContext& sctx)
+const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
 {
     // NOTE: The entries are ordered by priority. Folder names are matched
     //       case-insensitively. Besides Skraper's own folder names, the ES-DE
     //       ones and common singular/plural variants are accepted too.
-    const HashMap<AssetType, QStringList, EnumHash> ASSET_DIRS {
+    static const HashMap<AssetType, QStringList, EnumHash> ASSET_DIRS {
         { AssetType::ARCADE_MARQUEE, {
             QStringLiteral("screenmarquee"),
             QStringLiteral("screenmarqueesmall"),
@@ -141,6 +137,16 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
             QStringLiteral("video"),
         }},
     };
+    return ASSET_DIRS;
+}
+
+SkraperAssetsProvider::SkraperAssetsProvider(QObject* parent)
+    : Provider(QLatin1String("skraper"), QStringLiteral("Skraper Assets"), PROVIDER_FLAG_CACHEABLE, parent)
+{}
+
+Provider& SkraperAssetsProvider::run(SearchContext& sctx)
+{
+    const HashMap<AssetType, QStringList, EnumHash>& ASSET_DIRS = asset_dirs();
 
     const std::array<QString, 3> MEDIA_DIRS {
         QStringLiteral("/skraper/"),

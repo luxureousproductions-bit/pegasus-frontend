@@ -261,6 +261,17 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
     }
 
 
+    // Package names of all installed apps, used by the ES-DE data source
+    // to pick which of an emulator's known package names is present
+    public static String[] installedPackages() {
+        final List<ApplicationInfo> apps = m_pm.getInstalledApplications(0);
+        String[] out = new String[apps.size()];
+        for (int i = 0; i < apps.size(); i++)
+            out[i] = apps.get(i).packageName;
+        return out;
+    }
+
+
     public static String[] grantedPaths() {
         List<String> paths = new ArrayList();
         for (UriPermission uriperm : m_self.getContentResolver().getPersistedUriPermissions()) {

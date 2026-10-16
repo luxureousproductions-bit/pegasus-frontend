@@ -30,6 +30,7 @@ win32|macx|defined(pclinux,var)|defined(armlinux,var): include(es2/es2.pri)
 win32: include(launchbox/launchbox.pri)
 win32: include(playnite/playnite.pri)
 android: include(android_apps/android.pri)
+android: include(esde/esde.pri)
 defined(pclinux,var): include(lutris/lutris.pri)
 # All platforms
 include(logiqx/logiqx.pri)

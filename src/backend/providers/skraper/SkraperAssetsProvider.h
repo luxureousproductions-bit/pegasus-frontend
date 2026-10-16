@@ -18,10 +18,18 @@
 #pragma once
 
 #include "providers/Provider.h"
+#include "types/AssetType.h"
+#include "utils/HashMap.h"
+
+#include <QStringList>
 
 
 namespace providers {
 namespace skraper {
+
+/// Media folder names (lowercase) for each asset type, ordered by priority.
+/// Also used by the ES-DE data source for its downloaded_media folder.
+const HashMap<AssetType, QStringList, EnumHash>& asset_dirs();
 
 class SkraperAssetsProvider : public Provider {
     Q_OBJECT

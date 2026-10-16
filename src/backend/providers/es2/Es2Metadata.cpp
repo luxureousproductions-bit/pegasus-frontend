@@ -32,6 +32,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QStringBuilder>
+#include <QRegularExpression>
 #include <QXmlStreamReader>
 
 
@@ -144,17 +145,17 @@ HashMap<MetaType, QString, EnumHash> Metadata::parse_gamelist_game_node(QXmlStre
     return xml_props;
 }
 
-void Metadata::process_gamelist_xml(const QDir& xml_dir, QXmlStreamReader& xml, const providers::SearchContext& sctx) const
+void Metadata::process_gamelist_xml(const QDir& xml_dir, QXmlStreamReader& xml, const providers::SearchContext& sctx, const QString& xml_path) const
 {
     // find the root <gameList> element
     if (!xml.readNextStartElement()) {
         xml.raiseError(LOGMSG("could not parse `%1`")
-                       .arg(static_cast<QFile*>(xml.device())->fileName()));
+                       .arg(xml_path));
         return;
     }
     if (xml.name() != QLatin1String("gameList")) {
         xml.raiseError(LOGMSG("`%1` does not have a `<gameList>` root node!")
-                       .arg(static_cast<QFile*>(xml.device())->fileName()));
+                       .arg(xml_path));
         return;
     }
 
@@ -175,7 +176,7 @@ void Metadata::process_gamelist_xml(const QDir& xml_dir, QXmlStreamReader& xml, 
         const QString shell_filepath = xml_props[MetaType::PATH];
         if (shell_filepath.isEmpty()) {
             Log::warning(m_log_tag, LOGMSG("The `<game>` node in `%1` at line %2 has no valid `<path>` entry")
-                .arg(static_cast<QFile*>(xml.device())->fileName(), QString::number(linenum)));
+                .arg(xml_path, QString::number(linenum)));
             continue;
         }
 
@@ -223,8 +224,16 @@ void Metadata::find_metadata_for(const SystemEntry& sysentry, const providers::S
         return;
     }
 
-    QXmlStreamReader xml(&xml_file);
-    process_gamelist_xml(xml_dir, xml, sctx);
+    // NOTE: ES-DE saves a system-wide emulator choice as an <alternativeEmulator>
+    //       element next to <gameList>, which a strict XML reader rejects as a
+    //       second root element, so it's removed before parsing
+    QString xml_text = QString::fromUtf8(xml_file.readAll());
+    static const QRegularExpression rx_alt_emu(QStringLiteral("<alternativeEmulator\\b.*?</alternativeEmulator>"),
+                                               QRegularExpression::DotMatchesEverythingOption);
+    xml_text.remove(rx_alt_emu);
+
+    QXmlStreamReader xml(xml_text);
+    process_gamelist_xml(xml_dir, xml, sctx, gamelist_path);
 }
 
 void Metadata::apply_metadata(model::GameFile& gamefile, const QDir& xml_dir, HashMap<MetaType, QString, EnumHash>& xml_props) const
@@ -232,8 +241,11 @@ void Metadata::apply_metadata(model::GameFile& gamefile, const QDir& xml_dir, Ha
     model::Game& game = *gamefile.parentGame();
 
     // first, the simple strings
-    game.setTitle(xml_props[MetaType::NAME])
-        .setDescription(xml_props[MetaType::DESC]);
+    // don't blank out the file name based title when the entry has no name
+    if (!xml_props[MetaType::NAME].isEmpty())
+        game.setTitle(xml_props[MetaType::NAME]);
+    if (!xml_props[MetaType::DESC].isEmpty())
+        game.setDescription(xml_props[MetaType::DESC]);
     game.developerList().append(xml_props[MetaType::DEVELOPER]);
     game.publisherList().append(xml_props[MetaType::PUBLISHER]);
     game.genreList().append(xml_props[MetaType::GENRE]);

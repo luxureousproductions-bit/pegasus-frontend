@@ -37,6 +37,9 @@
 #ifdef WITH_COMPAT_ANDROIDAPPS
   #include "providers/android_apps/AndroidAppsProvider.h"
 #endif
+#ifdef WITH_COMPAT_ESDE
+  #include "providers/esde/EsdeProvider.h"
+#endif
 #ifdef WITH_COMPAT_SKRAPER
   #include "providers/skraper/SkraperAssetsProvider.h"
 #endif
@@ -113,6 +116,9 @@ std::vector<std::unique_ptr<providers::Provider>> create_providers()
 #endif
 #ifdef WITH_COMPAT_ANDROIDAPPS
         MKENTRY(android::AndroidAppsProvider)
+#endif
+#ifdef WITH_COMPAT_ESDE
+        MKENTRY(esde::EsdeProvider)
 #endif
 #ifdef WITH_COMPAT_LAUNCHBOX
         MKENTRY(launchbox::LaunchboxProvider)

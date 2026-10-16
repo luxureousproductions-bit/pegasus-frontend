@@ -126,6 +126,11 @@ int pdf_page_count(const QString& path_or_url)
     return count;
 }
 
+QStringList installed_packages()
+{
+    return query_string_array("installedPackages");
+}
+
 QStringList granted_paths()
 {
     return query_string_array("grantedPaths");

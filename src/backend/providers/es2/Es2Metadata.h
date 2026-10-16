@@ -49,7 +49,7 @@ private:
     const QRegularExpression m_players_regex;
     const std::vector<std::pair<MetaType, AssetType>> m_asset_type_map;
 
-    void process_gamelist_xml(const QDir&, QXmlStreamReader&, const SearchContext&) const;
+    void process_gamelist_xml(const QDir&, QXmlStreamReader&, const SearchContext&, const QString&) const;
     HashMap<MetaType, QString, EnumHash> parse_gamelist_game_node(QXmlStreamReader&) const;
     void apply_metadata(model::GameFile&, const QDir&, HashMap<MetaType, QString, EnumHash>&) const;
 };
