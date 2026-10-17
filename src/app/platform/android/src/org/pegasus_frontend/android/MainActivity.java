@@ -358,22 +358,67 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         return null;
     }
 
-    // Pegasus X: the "package/activity" entries that really exist on this
-    // device, so only emulators that can actually be launched count as installed
-    public static String[] availableComponents(String[] components) {
-        List<String> out = new ArrayList<String>();
-        for (String flat : components) {
-            final ComponentName cn = ComponentName.unflattenFromString(flat);
+    // Pegasus X: for each "package/activity" entry, the component to launch
+    // on this device: the entry itself if it exists; if only the package is
+    // installed (some builds of an emulator name their game screen
+    // differently), the screen of that app that opens files; or "" if the
+    // app isn't installed. The result has the same length as the input.
+    public static String[] resolveComponents(String[] components) {
+        String[] out = new String[components.length];
+        for (int i = 0; i < components.length; i++) {
+            out[i] = "";
+            final ComponentName cn = ComponentName.unflattenFromString(components[i]);
             if (cn == null)
                 continue;
             try {
                 m_pm.getActivityInfo(cn, 0);
-                out.add(flat);
+                out[i] = components[i];
             }
             catch (PackageManager.NameNotFoundException e) {
-                // not installed, or this version names its activity differently
+                out[i] = findGameActivity(cn.getPackageName());
             }
         }
+        return out;
+    }
+
+    // Pegasus X: the screen of an installed app that opens game files: one
+    // that handles viewing a file, or else the app's own start screen.
+    // Returns "package/activity", or "" if the app isn't installed.
+    public static String findGameActivity(String packageName) {
+        final String[] mimeTypes = { "application/octet-stream", "*/*" };
+        final String[] schemes = { "content", "file" };
+        for (String scheme : schemes) {
+            for (String mime : mimeTypes) {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(Uri.parse(scheme + "://pegasus/game.iso"), mime);
+                intent.setPackage(packageName);
+                final List<ResolveInfo> found = m_pm.queryIntentActivities(intent, 0);
+                if (found != null && !found.isEmpty() && found.get(0).activityInfo != null)
+                    return packageName + "/" + found.get(0).activityInfo.name;
+            }
+        }
+
+        final Intent launch = m_pm.getLaunchIntentForPackage(packageName);
+        if (launch != null && launch.getComponent() != null)
+            return launch.getComponent().flattenToString();
+        return "";
+    }
+
+    // Pegasus X: the installed apps that can be opened, as "label<TAB>package",
+    // for picking an emulator that isn't in the bundled list
+    public static String[] launchableApps() {
+        Intent intent = new Intent(Intent.ACTION_MAIN, null);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        final List<ResolveInfo> activities = m_pm.queryIntentActivities(intent, 0);
+
+        List<String> out = new ArrayList<String>();
+        for (ResolveInfo info : activities) {
+            final String pkg = info.activityInfo.packageName;
+            final String entry = info.loadLabel(m_pm).toString() + "\t" + pkg;
+            if (!pkg.equals(m_self.getPackageName()) && !out.contains(entry))
+                out.add(entry);
+        }
+        java.util.Collections.sort(out, String.CASE_INSENSITIVE_ORDER);
         return out.toArray(new String[out.size()]);
     }
 

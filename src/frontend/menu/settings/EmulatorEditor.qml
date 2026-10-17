@@ -46,9 +46,28 @@ FocusScope {
             root.close();
     }
 
+    // An app picked with "Other installed app" is saved as "@app:<package>:<style>:<name>"
+    function appInfo(label) {
+        if (!label || label.indexOf("@app:") !== 0)
+            return null;
+        var parts = label.split(":");
+        return { "pkg": parts[1], "style": parts[2], "name": parts.slice(3).join(":") };
+    }
+    function styleText(style) {
+        if (style === "bootpath")
+            return qsTr("boot path") + api.tr;
+        if (style === "view-uri")
+            return qsTr("shared file") + api.tr;
+        return qsTr("opens the file") + api.tr;
+    }
+    function labelText(label) {
+        var app = appInfo(label);
+        return app ? app.name + " (" + styleText(app.style) + ")" : label;
+    }
+
     function currentText(sys) {
         if (sys.current !== "")
-            return sys.current;
+            return labelText(sys.current);
         return qsTr("Default (%1)").arg(sys.defaultLabel) + api.tr;
     }
 
@@ -230,21 +249,35 @@ FocusScope {
         property int systemIndex: -1
         readonly property var sys: (systemIndex >= 0 && systemIndex < root.systems.length)
                                    ? root.systems[systemIndex] : null
-        // the first entry (empty label) is the default
-        readonly property var entries: sys
-            ? [{ "label": "", "installed": true }].concat(sys.options)
-            : []
+        property string testMessage: ""
+
+        // the default first, then a picked app, the emulators, and the two actions
+        readonly property var entries: {
+            if (!sys)
+                return [];
+            var out = [{ "label": "", "installed": true, "kind": "default" }];
+            if (root.appInfo(sys.current))
+                out.push({ "label": sys.current, "installed": true, "kind": "app" });
+            for (var i = 0; i < sys.options.length; i++) {
+                var o = sys.options[i];
+                out.push({ "label": o.label, "installed": o.installed, "retroarch": o.retroarch, "kind": "option" });
+            }
+            out.push({ "label": "@other", "kind": "other" });
+            out.push({ "label": "@test", "kind": "test" });
+            return out;
+        }
 
         anchors.fill: parent
         enabled: focus
         visible: focus
 
+        onSysChanged: testMessage = ""
         onFocusChanged: {
             if (!focus || !sys)
                 return;
             var idx = 0;
             for (var i = 1; i < entries.length; i++) {
-                if (entries[i].label === sys.current)
+                if (entries[i].kind !== "other" && entries[i].kind !== "test" && entries[i].label === sys.current)
                     idx = i;
             }
             pickerList.currentIndex = idx;
@@ -254,7 +287,23 @@ FocusScope {
         function pick(index) {
             if (index < 0 || index >= entries.length)
                 return;
-            root.choose(systemIndex, entries[index].label);
+            var entry = entries[index];
+            if (entry.kind === "other") {
+                choice.openApps();
+                return;
+            }
+            if (entry.kind === "test") {
+                // tests the saved choice for this system
+                var result = Internal.settings.testSystemEmulator(sys.name);
+                if (result.error === "")
+                    testMessage = qsTr("Started \"%1\" with %2.").arg(result.game).arg(root.currentText(sys)) + api.tr;
+                else if (result.game)
+                    testMessage = qsTr("Couldn't start \"%1\": %2").arg(result.game).arg(result.error) + api.tr;
+                else
+                    testMessage = result.error;
+                return;
+            }
+            root.choose(systemIndex, entry.label);
         }
 
         Keys.onPressed: {
@@ -286,7 +335,7 @@ FocusScope {
             id: pickerBox
 
             width: main.width * 0.75
-            height: Math.min(pickerTitle.height + pickerList.contentHeight + vpx(30), main.height)
+            height: Math.min(pickerTitle.height + pickerList.contentHeight + testText.height + vpx(30), main.height)
             anchors.centerIn: parent
 
             color: "#2c2d30"
@@ -310,11 +359,31 @@ FocusScope {
                 elide: Text.ElideRight
             }
 
+            Text {
+                id: testText
+                text: picker.testMessage
+                visible: text !== ""
+                height: visible ? implicitHeight : 0
+                color: "#ccc"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(14)
+                wrapMode: Text.WordWrap
+                maximumLineCount: 4
+                elide: Text.ElideRight
+
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                leftPadding: vpx(15)
+                rightPadding: vpx(15)
+                bottomPadding: visible ? vpx(12) : 0
+            }
+
             ListView {
                 id: pickerList
 
                 anchors.top: pickerTitle.bottom
-                anchors.bottom: parent.bottom
+                anchors.bottom: testText.top
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.margins: vpx(15)
@@ -330,7 +399,7 @@ FocusScope {
 
                 delegate: Rectangle {
                     readonly property bool highlighted: ListView.isCurrentItem || optionMouse.containsMouse
-                    readonly property bool isDefault: modelData.label === ""
+                    readonly property bool isOption: modelData.kind === "option"
 
                     width: ListView.view.width
                     height: vpx(18) * 2.4
@@ -339,9 +408,16 @@ FocusScope {
 
                     Text {
                         id: optionLabel
-                        text: parent.isDefault
-                            ? qsTr("Default (%1)").arg(picker.sys ? picker.sys.defaultLabel : "") + api.tr
-                            : modelData.label
+                        text: {
+                            switch (modelData.kind) {
+                                case "default": return qsTr("Default (%1)").arg(picker.sys ? picker.sys.defaultLabel : "") + api.tr;
+                                case "app": return root.labelText(modelData.label);
+                                case "other": return qsTr("Other installed app...") + api.tr;
+                                case "test": return qsTr("Test with a game") + api.tr;
+                                default: return modelData.label;
+                            }
+                        }
+                        font.italic: modelData.kind === "other" || modelData.kind === "test"
                         color: parent.highlighted ? "#111" : "#eee"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(18)
@@ -354,7 +430,7 @@ FocusScope {
                     }
 
                     Text {
-                        visible: !parent.isDefault
+                        visible: parent.isOption
                         text: !modelData.installed ? qsTr("not installed") + api.tr
                             : modelData.retroarch ? qsTr("RetroArch, needs the core") + api.tr
                             : qsTr("installed") + api.tr
@@ -372,6 +448,179 @@ FocusScope {
                         anchors.fill: parent
                         hoverEnabled: true
                         onClicked: picker.pick(index)
+                    }
+                }
+            }
+        }
+    }
+
+
+    // "Other installed app": first the app, then how it gets the game
+    FocusScope {
+        id: choice
+
+        property string mode: ""  // "apps" or "styles"
+        property var apps: []
+        property var pickedApp: null
+
+        readonly property var entries: {
+            if (mode === "apps") {
+                var out = [];
+                for (var i = 0; i < apps.length; i++)
+                    out.push({ "text": apps[i].label, "note": apps[i].package });
+                return out;
+            }
+            if (mode === "styles") {
+                return [
+                    { "text": qsTr("Open the game file") + api.tr, "note": qsTr("most emulators") + api.tr, "style": "view-saf" },
+                    { "text": qsTr("Boot path") + api.tr, "note": "AetherSX2, NetherSX2", "style": "bootpath" },
+                    { "text": qsTr("Share the file directly") + api.tr, "note": qsTr("if the others don't work") + api.tr, "style": "view-uri" },
+                ];
+            }
+            return [];
+        }
+
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+
+        onModeChanged: choiceList.currentIndex = 0
+
+        function openApps() {
+            apps = Internal.settings.installedApps();
+            mode = "apps";
+            choiceList.currentIndex = 0;
+            focus = true;
+        }
+        function goBack() {
+            if (mode === "styles")
+                mode = "apps";
+            else
+                picker.focus = true;
+        }
+        function chose(index) {
+            if (index < 0 || index >= entries.length)
+                return;
+            if (mode === "apps") {
+                pickedApp = apps[index];
+                mode = "styles";
+                return;
+            }
+            root.choose(picker.systemIndex,
+                        "@app:" + pickedApp["package"] + ":" + entries[index].style + ":" + pickedApp.label);
+        }
+
+        Keys.onPressed: {
+            if (event.isAutoRepeat)
+                return;
+            if (api.keys.isCancel(event)) {
+                event.accepted = true;
+                choice.goBack();
+            }
+            else if (api.keys.isAccept(event)) {
+                event.accepted = true;
+                choice.chose(choiceList.currentIndex);
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.4
+
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: choice.goBack()
+            }
+        }
+
+        Rectangle {
+            width: main.width * 0.75
+            height: Math.min(choiceTitle.height + choiceList.contentHeight + vpx(30), main.height)
+            anchors.centerIn: parent
+
+            color: "#2c2d30"
+            radius: vpx(8)
+
+            MouseArea {
+                anchors.fill: parent
+            }
+
+            Text {
+                id: choiceTitle
+                text: choice.mode === "styles" && choice.pickedApp
+                    ? qsTr("How should %1 get the game?").arg(choice.pickedApp.label) + api.tr
+                    : qsTr("Pick the emulator app") + api.tr
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(20)
+
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                padding: vpx(15)
+                elide: Text.ElideRight
+            }
+
+            ListView {
+                id: choiceList
+
+                anchors.top: choiceTitle.bottom
+                anchors.bottom: parent.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: vpx(15)
+                anchors.topMargin: 0
+                clip: true
+
+                focus: true
+                model: choice.entries
+                highlightRangeMode: ListView.ApplyRange
+                preferredHighlightBegin: height * 0.5 - vpx(18) * 1.25
+                preferredHighlightEnd: height * 0.5 + vpx(18) * 1.25
+                highlightMoveDuration: 0
+
+                delegate: Rectangle {
+                    readonly property bool highlighted: ListView.isCurrentItem || choiceMouse.containsMouse
+
+                    width: ListView.view.width
+                    height: vpx(18) * 2.4
+                    color: highlighted ? "#3aa" : "transparent"
+                    radius: vpx(4)
+
+                    Text {
+                        text: modelData.text
+                        color: parent.highlighted ? "#111" : "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(18)
+
+                        anchors.left: parent.left
+                        anchors.leftMargin: vpx(12)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width * 0.55
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        text: modelData.note
+                        color: parent.highlighted ? "#113" : "#999"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(14)
+
+                        anchors.right: parent.right
+                        anchors.rightMargin: vpx(12)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width * 0.4
+                        horizontalAlignment: Text.AlignRight
+                        elide: Text.ElideMiddle
+                    }
+
+                    MouseArea {
+                        id: choiceMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: choice.chose(index)
                     }
                 }
             }

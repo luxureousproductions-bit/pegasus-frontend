@@ -354,4 +354,35 @@ void Settings::setSystemEmulator(const QString& system_name, const QString& labe
     pegasusx::setSystemEmulator(system_name, label);
 }
 
+QVariantList Settings::installedApps() const
+{
+    QVariantList out;
+#ifdef Q_OS_ANDROID
+    for (const QString& entry : android::launchable_apps()) {
+        const int tab = entry.lastIndexOf(QLatin1Char('\t'));
+        if (tab <= 0)
+            continue;
+        out.append(QVariantMap {
+            { QStringLiteral("label"), entry.left(tab) },
+            { QStringLiteral("package"), entry.mid(tab + 1) },
+        });
+    }
+#endif
+    return out;
+}
+
+QVariantMap Settings::testSystemEmulator(const QString& system_name) const
+{
+#ifdef WITH_COMPAT_ESDE
+    const auto result = providers::esde::test_emulator(system_name);
+    return QVariantMap {
+        { QStringLiteral("game"), result.game },
+        { QStringLiteral("error"), result.error },
+    };
+#else
+    Q_UNUSED(system_name);
+    return QVariantMap { { QStringLiteral("error"), QStringLiteral("Not supported on this platform") } };
+#endif
+}
+
 } // namespace model

@@ -76,5 +76,14 @@ struct SystemEmulators {
 /// library and (if that data source is on) in the ES-DE ROMs folders
 std::vector<SystemEmulators> emulator_choices();
 
+/// The result of launching a system's first game with its chosen emulator
+struct EmulatorTest {
+    QString game;   ///< file name of the game used
+    QString error;  ///< empty if Android started the emulator
+};
+
+/// For the "Test with a game" button of the Emulators settings screen
+EmulatorTest test_emulator(const QString& system_name);
+
 } // namespace esde
 } // namespace providers

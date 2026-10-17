@@ -31,6 +31,7 @@
 #include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "providers/skraper/SkraperAssetsProvider.h"
+#include "utils/CommandTokenizer.h"
 #include "utils/HashMap.h"
 #include "utils/PathTools.h"
 
@@ -74,7 +75,12 @@ struct GamelistInfo {
 struct Context {
     QString log_tag;
     QString primary_storage;
-    QSet<QString> available_components;  // "package/activity" entries that really exist
+    // emulator entry ("package/activity") -> what to launch on this device:
+    // the entry itself, or the app's own game screen if that's named
+    // differently in the installed build; missing entries aren't installed
+    HashMap<QString, QString> resolved_components;
+    // apps picked with "Other installed app": package -> its game screen
+    mutable HashMap<QString, QString> app_components;
     HashMap<QString, QStringList> emulators;  // emulator name -> "package/activity" entries
 };
 
@@ -424,8 +430,9 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
     QString component = emu_it->second.first();
     emulator_installed = false;
     for (const QString& entry : emu_it->second) {
-        if (ctx.available_components.contains(entry)) {
-            component = entry;
+        const auto resolved_it = ctx.resolved_components.find(entry);
+        if (resolved_it != ctx.resolved_components.cend()) {
+            component = resolved_it->second;
             emulator_installed = true;
             break;
         }
@@ -487,10 +494,76 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
 /// The command for a label chosen in ES-DE (system-wide or per game), or else
 /// the system's default command; if the default emulator isn't installed, the
 /// first alternative whose emulator is installed is used instead
+/// An app picked with "Other installed app", saved as the emulator label
+/// "@app:<package>:<style>:<app name>"
+struct AppChoice {
+    QString package;
+    QString style;  ///< view-saf, view-uri or bootpath
+    QString name;
+};
+
+bool parse_app_label(const QString& label, AppChoice& out)
+{
+    if (!label.startsWith(QLatin1String("@app:")))
+        return false;
+    const QStringList parts = label.split(QLatin1Char(':'));
+    if (parts.size() < 3 || parts.at(1).isEmpty())
+        return false;
+    out.package = parts.at(1);
+    out.style = parts.at(2);
+    out.name = parts.mid(3).join(QLatin1Char(':'));
+    return true;
+}
+
+/// The launch command for a picked app, in one of the ways ES-DE launches
+/// standalone emulators
+QString app_command(const AppChoice& app, const Context& ctx, QString& error)
+{
+    auto it = ctx.app_components.find(app.package);
+    if (it == ctx.app_components.end())
+        it = ctx.app_components.emplace(app.package, ::android::find_game_activity(app.package)).first;
+    const QString& component = it->second;
+    if (component.isEmpty()) {
+        error = QStringLiteral("the app `%1` isn't installed").arg(app.package);
+        return {};
+    }
+
+    QStringList args { QStringLiteral("am"), QStringLiteral("start"), QStringLiteral("-n"), component };
+    if (app.style == QLatin1String("view-uri")) {
+        // the file shared directly by Pegasus
+        args << QStringLiteral("-a") << QStringLiteral("android.intent.action.VIEW")
+             << QStringLiteral("-d") << QStringLiteral("{file.uri}");
+    }
+    else if (app.style == QLatin1String("bootpath")) {
+        // the AetherSX2 / NetherSX2 way
+        args << QStringLiteral("--activity-clear-task") << QStringLiteral("--activity-clear-top")
+             << QStringLiteral("-a") << QStringLiteral("android.intent.action.MAIN")
+             << QStringLiteral("-e") << QStringLiteral("bootPath") << QStringLiteral("{file.documenturi}");
+    }
+    else {
+        // a storage link to the file; the emulator needs access to the system folder
+        args << QStringLiteral("-a") << QStringLiteral("android.intent.action.VIEW")
+             << QStringLiteral("-d") << QStringLiteral("{file.documenturi}");
+    }
+
+    QStringList quoted;
+    for (const QString& arg : args)
+        quoted.append(quote_arg(arg));
+    return quoted.join(QLatin1Char(' '));
+}
+
 QString pick_command(const EsdeSystem& sys, const QString& label, const Context& ctx, const QString& rom_root)
 {
     QString error;
     bool installed = false;
+
+    AppChoice app;
+    if (parse_app_label(label, app)) {
+        const QString result = app_command(app, ctx, error);
+        if (!result.isEmpty())
+            return result;
+        Log::warning(ctx.log_tag, LOGMSG("`%1`: %2, using the default emulator").arg(sys.name, error));
+    }
 
     if (!label.isEmpty()) {
         for (const EsdeCommand& cmd : sys.commands) {
@@ -636,10 +709,18 @@ void load_config(Context& ctx, const QString& esde_dir, HashMap<QString, EsdeSys
     for (const auto& entry : ctx.emulators)
         all_components.append(entry.second);
     all_components.removeDuplicates();
-    for (const QString& component : ::android::available_components(all_components))
-        ctx.available_components.insert(component);
-    Log::info(ctx.log_tag, LOGMSG("%1 of %2 known emulator activities are installed")
-        .arg(QString::number(ctx.available_components.size()), QString::number(all_components.size())));
+    const QStringList resolved = ::android::resolve_components(all_components);
+    for (int i = 0; i < all_components.size() && i < resolved.size(); i++) {
+        if (resolved.at(i).isEmpty())
+            continue;
+        ctx.resolved_components.emplace(all_components.at(i), resolved.at(i));
+        if (resolved.at(i) != all_components.at(i)) {
+            Log::info(ctx.log_tag, LOGMSG("Emulator `%1` is installed with a different game screen, using `%2`")
+                .arg(all_components.at(i), resolved.at(i)));
+        }
+    }
+    Log::info(ctx.log_tag, LOGMSG("%1 of %2 known emulator entries are installed")
+        .arg(QString::number(ctx.resolved_components.size()), QString::number(all_components.size())));
 }
 
 Context make_context(const QString& log_tag)
@@ -1323,6 +1404,92 @@ std::vector<SystemEmulators> emulator_choices()
             out.push_back(std::move(entry));
     }
     return out;
+}
+
+
+
+// -- Testing a system's emulator from the settings screen ---------------------------
+
+EmulatorTest test_emulator(const QString& system_name)
+{
+    init_esde_resources();
+    Context ctx = make_context(QStringLiteral("Pegasus X"));
+    EmulatorTest result;
+
+    QString esde_dir;
+    const providers::Provider* const esde_provider = find_provider("esde");
+    if (esde_provider && esde_provider->enabled())
+        esde_dir = find_esde_dir(esde_provider->options());
+
+    HashMap<QString, EsdeSystem> systems;
+    std::vector<QString> order;
+    load_config(ctx, esde_dir, systems, order);
+
+    const auto sys_it = systems.find(system_name);
+    if (sys_it == systems.cend()) {
+        result.error = QStringLiteral("Unknown system `%1`").arg(system_name);
+        return result;
+    }
+    const EsdeSystem& sys = sys_it->second;
+
+    // the system's folders: in the library, and in ES-DE's ROMs folders
+    std::vector<std::pair<QString, QString>> dirs;
+    const auto library_systems = find_library_systems(pegasusx::libraryRomDirs(), build_aliases(systems, order));
+    const auto lib_it = library_systems.find(system_name);
+    if (lib_it != library_systems.cend())
+        dirs = lib_it->second;
+    if (!esde_dir.isEmpty()) {
+        const QStringList rom_roots = find_rom_roots(esde_provider->options(), read_esde_settings(esde_dir), ctx.primary_storage);
+        for (const auto& entry : esde_system_dirs(sys, rom_roots))
+            dirs.push_back(entry);
+    }
+
+    // the first game found
+    const QStringList extensions = parse_extensions(sys.extensions);
+    QFileInfo game_file;
+    QString rom_root;
+    for (const auto& dir_entry : dirs) {
+        QDirIterator file_it(dir_entry.first, QDir::Files | QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot,
+                             QDirIterator::FollowSymlinks | QDirIterator::Subdirectories);
+        while (file_it.hasNext()) {
+            file_it.next();
+            if (has_extension(file_it.fileName(), extensions)) {
+                game_file = file_it.fileInfo();
+                rom_root = dir_entry.second;
+                break;
+            }
+        }
+        if (game_file.exists())
+            break;
+    }
+    if (!game_file.exists()) {
+        result.error = QStringLiteral("No game found for this system");
+        return result;
+    }
+    result.game = game_file.fileName();
+
+    const QString command = pick_command(sys, pegasusx::systemEmulator(system_name), ctx, rom_root);
+    if (command.isEmpty()) {
+        result.error = QStringLiteral("None of this system's emulators can be launched");
+        return result;
+    }
+    Log::info(ctx.log_tag, LOGMSG("Testing `%1` with: %2").arg(result.game, command));
+
+    // the same variables the launcher fills in
+    const QString abs_path = game_file.absoluteFilePath();
+    QStringList args = ::utils::tokenize_command(command);
+    for (QString& arg : args) {
+        arg.replace(QLatin1String("{file.path}"), ::pretty_path(game_file))
+           .replace(QLatin1String("{file.uri}"), ::android::to_content_uri(abs_path))
+           .replace(QLatin1String("{file.documenturi}"), ::android::to_document_uri(abs_path))
+           .replace(QLatin1String("{file.name}"), game_file.fileName())
+           .replace(QLatin1String("{file.basename}"), game_file.completeBaseName())
+           .replace(QLatin1String("{file.dir}"), ::pretty_dir(game_file));
+    }
+    if (!args.isEmpty())
+        args.removeFirst();  // "am"
+    result.error = ::android::run_am_call(args);
+    return result;
 }
 
 } // namespace esde

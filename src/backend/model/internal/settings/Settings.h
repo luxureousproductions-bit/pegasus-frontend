@@ -25,6 +25,8 @@
 #include "utils/QmlHelpers.h"
 
 #include <QObject>
+#include <QVariantList>
+#include <QVariantMap>
 
 
 namespace model {
@@ -99,6 +101,10 @@ public:
     /// [{ name, fullname, current, defaultLabel, options: [{ label, installed }] }]
     Q_INVOKABLE QVariantList emulatorSystems() const;
     Q_INVOKABLE void setSystemEmulator(const QString& system_name, const QString& label);
+    /// installed apps, for "Other installed app": [{ label, package }]
+    Q_INVOKABLE QVariantList installedApps() const;
+    /// launches the system's first game with its chosen emulator: { game, error }
+    Q_INVOKABLE QVariantMap testSystemEmulator(const QString& system_name) const;
 
 signals:
     void fullscreenChanged();
