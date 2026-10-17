@@ -924,10 +924,33 @@ static void copy_game_details(const model::Game& src, model::Game& dst)
     if (src.releaseDate().isValid())
         dst.setReleaseDate(src.releaseDate());
 
-    for (int type = static_cast<int>(AssetType::BOX_FRONT); type <= static_cast<int>(AssetType::VIDEO); type++) {
-        const AssetType asset_type = static_cast<AssetType>(type);
-        for (const QString& uri : src.assets().get(asset_type))
-            dst.assetsMut().add_uri(asset_type, uri);
+    // NOTE: Assets only has a public getter per type
+    const model::Assets& a = src.assets();
+    const std::vector<std::pair<AssetType, const QStringList*>> asset_lists {
+        { AssetType::BOX_FRONT, &a.boxFrontList() },
+        { AssetType::BOX_BACK, &a.boxBackList() },
+        { AssetType::BOX_SPINE, &a.boxSpineList() },
+        { AssetType::BOX_FULL, &a.boxFullList() },
+        { AssetType::CARTRIDGE, &a.cartridgeList() },
+        { AssetType::LOGO, &a.logoList() },
+        { AssetType::POSTER, &a.posterList() },
+        { AssetType::ARCADE_MARQUEE, &a.marqueeList() },
+        { AssetType::ARCADE_BEZEL, &a.bezelList() },
+        { AssetType::ARCADE_PANEL, &a.panelList() },
+        { AssetType::ARCADE_CABINET_L, &a.cabinetLeftList() },
+        { AssetType::ARCADE_CABINET_R, &a.cabinetRightList() },
+        { AssetType::UI_TILE, &a.tileList() },
+        { AssetType::UI_BANNER, &a.bannerList() },
+        { AssetType::UI_STEAMGRID, &a.steamList() },
+        { AssetType::BACKGROUND, &a.backgroundList() },
+        { AssetType::MUSIC, &a.musicList() },
+        { AssetType::SCREENSHOT, &a.screenshotList() },
+        { AssetType::TITLESCREEN, &a.titlescreenList() },
+        { AssetType::VIDEO, &a.videoList() },
+    };
+    for (const auto& entry : asset_lists) {
+        for (const QString& uri : *entry.second)
+            dst.assetsMut().add_uri(entry.first, uri);
     }
 
     // x- fields, eg. x-manual
