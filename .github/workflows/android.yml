@@ -40,7 +40,17 @@ jobs:
           ANDROID_NDK_ROOT: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
           ANDROID_NDK_LATEST_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
-        run: .circleci/build.sh
+        run: |
+          set -o pipefail
+          .circleci/build.sh 2>&1 | tee build.log
+      # Pegasus X: show compiler errors in the run summary, which is readable
+      # without downloading the full logs
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E "error:|Error [0-9]|undefined reference" build.log | head -n 15 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
 
       - name: Package (debug)
         if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
