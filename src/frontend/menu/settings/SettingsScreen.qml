@@ -30,12 +30,18 @@ FocusScope {
         subscreen.focus = true;
         root.state = "sub";
     }
+    // NOTE: The source is cleared first, so every opening gets a fresh screen;
+    //       a Loader keeps the old item when given the same source again, which
+    //       would show stale data (eg. the ROM folders when opening the media
+    //       folder, which uses the same file)
     function openModal(url) {
+        modal.source = "";
         modal.source = url;
         modal.focus = true;
         root.state = "modal";
     }
     function openModalWith(url, properties) {
+        modal.source = "";
         modal.setSource(url, properties);
         modal.focus = true;
         root.state = "modal";
