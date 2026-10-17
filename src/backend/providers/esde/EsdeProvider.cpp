@@ -863,6 +863,31 @@ QString find_subdir(const QString& parent, const QStringList& names)
 namespace providers {
 namespace esde {
 
+/// ES-DE's settings, custom systems and gamelists: when they change (eg. after
+/// scraping in ES-DE), the game list is scanned again
+static QStringList esde_cache_files(const QString& esde_dir)
+{
+    QStringList out;
+    if (esde_dir.isEmpty())
+        return out;
+
+    out << esde_dir % QStringLiteral("/settings/es_settings.xml")
+        << esde_dir % QStringLiteral("/custom_systems/es_systems.xml")
+        << esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml");
+
+    const QDir gamelists_dir(esde_dir % QStringLiteral("/gamelists"));
+    for (const QString& system : gamelists_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+        out << gamelists_dir.filePath(system % QStringLiteral("/gamelist.xml"));
+    return out;
+}
+
+/// The ES-DE folder, if there is one (also used when the ES-DE data source is off)
+static QString any_esde_dir()
+{
+    const providers::Provider* const esde_provider = find_provider("esde");
+    return find_esde_dir(esde_provider ? esde_provider->options() : ProviderOptions());
+}
+
 // -- ES-DE ----------------------------------------------------------------------------
 
 EsdeProvider::EsdeProvider(QObject* parent)
@@ -878,19 +903,7 @@ QStringList EsdeProvider::cacheInputFiles() const
 {
     // Rescan when ES-DE's settings, custom systems or any gamelist change (eg.
     // after scraping), or the emulator choices made in Pegasus X
-    QStringList out { pegasusx::settingsFilePath() };
-    const QString esde_dir = find_esde_dir(options());
-    if (esde_dir.isEmpty())
-        return out;
-
-    out << esde_dir % QStringLiteral("/settings/es_settings.xml")
-        << esde_dir % QStringLiteral("/custom_systems/es_systems.xml")
-        << esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml");
-
-    const QDir gamelists_dir(esde_dir % QStringLiteral("/gamelists"));
-    for (const QString& system : gamelists_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
-        out << gamelists_dir.filePath(system % QStringLiteral("/gamelist.xml"));
-    return out;
+    return QStringList { pegasusx::settingsFilePath() } + esde_cache_files(find_esde_dir(options()));
 }
 
 Provider& EsdeProvider::run(SearchContext& sctx)
@@ -991,7 +1004,9 @@ LibraryProvider::LibraryProvider(QObject* parent)
 
 QStringList LibraryProvider::cacheInputFiles() const
 {
-    return { pegasusx::settingsFilePath() };
+    if (pegasusx::libraryRomDirs().isEmpty())
+        return {};
+    return QStringList { pegasusx::settingsFilePath() } + esde_cache_files(any_esde_dir());
 }
 
 Provider& LibraryProvider::run(SearchContext& sctx)
@@ -1002,16 +1017,33 @@ Provider& LibraryProvider::run(SearchContext& sctx)
 
     Context ctx = make_context(display_name());
 
+    // If there's an ES-DE folder, its scraped metadata (gamelists), media and
+    // emulator choices are used too, even when the ES-DE data source is off
+    const QString esde_dir = any_esde_dir();
+    QString esde_media_root;
+    bool show_hidden = true;
+    if (!esde_dir.isEmpty()) {
+        Log::info(display_name(), LOGMSG("Using metadata and media from the ES-DE folder `%1`").arg(esde_dir));
+        const HashMap<QString, QString> esde_settings = read_esde_settings(esde_dir);
+        const auto media_it = esde_settings.find(QStringLiteral("MediaDirectory"));
+        esde_media_root = (media_it != esde_settings.cend() && !media_it->second.isEmpty())
+            ? media_it->second
+            : esde_dir % QStringLiteral("/downloaded_media");
+        const auto hidden_it = esde_settings.find(QStringLiteral("ShowHiddenGames"));
+        show_hidden = hidden_it == esde_settings.cend() || hidden_it->second != QLatin1String("false");
+    }
+
     HashMap<QString, EsdeSystem> systems;
     std::vector<QString> system_order;
-    load_config(ctx, QString(), systems, system_order);
+    load_config(ctx, esde_dir, systems, system_order);
 
     const HashMap<QString, QString> aliases = build_aliases(systems, system_order);
     const auto library_systems = find_library_systems(library_dirs, aliases);
     Log::info(display_name(), LOGMSG("%1 system folders recognized").arg(QString::number(library_systems.size())));
 
     const QString media_root = pegasusx::libraryMediaDir();
-    const es2::Metadata metahelper(display_name(), {});
+    const es2::Metadata metahelper(display_name(),
+        esde_dir.isEmpty() ? std::vector<QString>() : std::vector<QString> { esde_dir });
 
     size_t found_games_total = 0;
     size_t found_assets = 0;
@@ -1029,9 +1061,19 @@ Provider& LibraryProvider::run(SearchContext& sctx)
         const EsdeSystem& sys = systems.at(system_name);
         const std::vector<std::pair<QString, QString>>& dirs = lib_it->second;
 
+        QStringList system_dirs;
+        for (const auto& entry : dirs)
+            system_dirs.append(entry.first);
+        const GamelistInfo gamelist = esde_dir.isEmpty()
+            ? GamelistInfo()
+            : read_gamelist(esde_dir, sys.name, system_dirs);
+
+        QString system_label = pegasusx::systemEmulator(sys.name);
+        if (system_label.isEmpty())
+            system_label = gamelist.system_alt_label;
+
         HashMap<QString, model::Game*> extless_path_to_game;
-        const size_t found_games = scan_system(sctx, ctx, sys, dirs, GamelistInfo(),
-                                               pegasusx::systemEmulator(sys.name), true, extless_path_to_game);
+        const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden, extless_path_to_game);
         if (found_games == 0)
             continue;
         found_games_total += found_games;
@@ -1040,7 +1082,7 @@ Provider& LibraryProvider::run(SearchContext& sctx)
         for (const auto& dir_entry : dirs) {
             const QString& system_dir = dir_entry.first;
 
-            // a gamelist.xml in the system folder, if there is one
+            // a gamelist.xml in the system folder, or else ES-DE's for this system
             const es2::SystemEntry sysentry {
                 sys.fullname, sys.name, system_dir, sys.extensions, sys.platform, QString(),
             };
@@ -1051,6 +1093,13 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             const QString system_media = find_subdir(media_root, { folder_name, sys.name });
             if (!system_media.isEmpty())
                 find_media(system_media, system_dir, extless_path_to_game, found_assets);
+
+            // then ES-DE's downloaded media for anything still missing
+            if (!esde_media_root.isEmpty()) {
+                const QString esde_media = find_subdir(esde_media_root, { sys.name });
+                if (!esde_media.isEmpty() && QDir(esde_media) != QDir(system_media))
+                    find_media(esde_media, system_dir, extless_path_to_game, found_assets);
+            }
 
             // and the usual <system folder>/media/ for the Skraper-style reader
             sctx.pegasus_add_game_dir(system_dir);

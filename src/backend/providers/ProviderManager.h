@@ -32,6 +32,8 @@ public:
     explicit ProviderManager(QObject* parent = nullptr);
 
     void run(const bool force_refresh);
+    bool isRunning() const { return m_future.isRunning(); }
+    void waitForFinished() { m_future.waitForFinished(); }
 
     void onGameLaunched(model::GameFile* const) const;
     void onGameFinished(model::GameFile* const) const;

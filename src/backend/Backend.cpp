@@ -255,6 +255,16 @@ void Backend::start()
 
 void Backend::onScanRequested(const bool force_refresh)
 {
+    // Two scans at once would both work on the same game list, which could
+    // freeze or crash (eg. a reload from the settings during the first scan),
+    // so the new one waits for the current one to finish
+    if (m_providerman->isRunning()) {
+        Log::info(LOGMSG("A game scan is already running, the new one will start after it"));
+        m_scan_pending = true;
+        m_scan_pending_force = m_scan_pending_force || force_refresh;
+        return;
+    }
+
     m_api_public->clearGameData();
     m_providerman->run(force_refresh);
 }
@@ -268,6 +278,14 @@ void Backend::onScanFinished()
     std::swap(m_providerman->foundGames(), games);
 
     m_api_public->setGameData(std::move(colls), std::move(games));
+
+    if (m_scan_pending) {
+        const bool force_refresh = m_scan_pending_force;
+        m_scan_pending = false;
+        m_scan_pending_force = false;
+        m_providerman->waitForFinished();  // the scan thread is just returning
+        onScanRequested(force_refresh);
+    }
 }
 
 void Backend::onFavoritesChanged()
