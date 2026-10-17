@@ -67,6 +67,10 @@ public:
     const HashMap<QString, model::GameFile*>& current_filepath_to_entry_map() const { return m_filepath_to_gamefile; }
     std::pair<std::vector<model::Collection*>, std::vector<model::Game*>> finalize(QObject* const parent = nullptr);
 
+    /// Deletes everything found so far, without finalizing (for a temporary
+    /// context that was only used to read data)
+    void discard_all();
+
 signals:
     void downloadScheduled();
     void downloadCompleted();

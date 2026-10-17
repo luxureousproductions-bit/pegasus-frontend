@@ -17,6 +17,8 @@
 
 #include "SearchContext.h"
 
+#include <unordered_set>
+
 #include "AppSettings.h"
 #include "Log.h"
 #include "model/gaming/Collection.h"
@@ -260,6 +262,29 @@ void SearchContext::finalize_apply_lists()
         VEC_REMOVE_DUPLICATES(pair.second);
         pair.first->setGames(std::move(pair.second));
     }
+}
+
+void SearchContext::discard_all()
+{
+    // every game: those with files, those in a collection and the parentless ones
+    std::unordered_set<model::Game*> games;
+    for (const auto& pair : m_game_entries)
+        games.insert(pair.first);
+    for (const auto& pair : m_collection_games)
+        games.insert(pair.second.cbegin(), pair.second.cend());
+    games.insert(m_parentless_games.cbegin(), m_parentless_games.cend());
+
+    for (model::Game* const game : games)
+        delete game;  // also deletes its GameFiles, which are its children
+    for (const auto& pair : m_collections)
+        delete pair.second;
+
+    m_collections.clear();
+    m_collection_games.clear();
+    m_game_entries.clear();
+    m_filepath_to_gamefile.clear();
+    m_uri_to_gamefile.clear();
+    m_parentless_games.clear();
 }
 
 std::pair<std::vector<model::Collection*>, std::vector<model::Game*>> SearchContext::finalize(QObject* const parent)

@@ -28,6 +28,8 @@
 #include "providers/SearchContext.h"
 #include "providers/es2/Es2Metadata.h"
 #include "providers/es2/Es2Systems.h"
+#include "providers/pegasus_metadata/PegasusFilter.h"
+#include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "providers/skraper/SkraperAssetsProvider.h"
 #include "utils/HashMap.h"
 #include "utils/PathTools.h"
@@ -651,6 +653,7 @@ const providers::Provider* find_provider(const char* codename)
 size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const EsdeSystem& sys,
                    const std::vector<std::pair<QString, QString>>& dirs,  // (system dir, ROMs folder)
                    const GamelistInfo& gamelist, const QString& system_label, bool show_hidden,
+                   bool override_existing,
                    HashMap<QString, model::Game*>& extless_path_to_game)
 {
     const QStringList extensions = parse_extensions(sys.extensions);
@@ -690,14 +693,18 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
             }
             sctx.game_add_to(*game_ptr, collection);
 
-            // a game-specific emulator picked in ES-DE, or this folder's default
+            // A game-specific emulator picked in ES-DE, or this folder's default.
+            // Games already found by another source (eg. a Pegasus metadata file
+            // with its own launch command) keep theirs, unless an emulator was
+            // picked for this system in Pegasus X
+            const bool may_set = is_new || override_existing || game_ptr->launchCmd().isEmpty();
             const auto alt_it = gamelist.game_alt_labels.find(path);
-            if (alt_it != gamelist.game_alt_labels.cend() && (is_new || game_ptr->launchCmd().isEmpty())) {
+            if (alt_it != gamelist.game_alt_labels.cend() && may_set) {
                 const QString cmd = pick_command(sys, alt_it->second, ctx, rom_root);
                 if (!cmd.isEmpty())
                     game_ptr->setLaunchCmd(cmd);
             }
-            else if (is_new && default_cmd != collection.commonLaunchCmd()) {
+            else if (is_new ? default_cmd != collection.commonLaunchCmd() : may_set) {
                 game_ptr->setLaunchCmd(default_cmd);
             }
 
@@ -863,6 +870,101 @@ QString find_subdir(const QString& parent, const QStringList& names)
 namespace providers {
 namespace esde {
 
+/// Pegasus metadata files (metadata.pegasus.txt, metadata.txt and the
+/// *.metadata.pegasus.txt / *.metadata.txt variants) in the library folders
+/// and the folders right below them
+static QStringList find_library_metafiles(const QStringList& library_dirs)
+{
+    const auto is_metafile = [](const QString& name) {
+        return name == QLatin1String("metadata.pegasus.txt")
+            || name == QLatin1String("metadata.txt")
+            || name.endsWith(QLatin1String(".metadata.pegasus.txt"))
+            || name.endsWith(QLatin1String(".metadata.txt"));
+    };
+    const auto add_from = [&is_metafile](const QString& dir, QStringList& out) {
+        for (const QFileInfo& finfo : QDir(dir).entryInfoList(QDir::Files | QDir::Readable, QDir::Name)) {
+            const QString path = ::clean_abs_path(finfo);
+            if (is_metafile(finfo.fileName()) && !out.contains(path))
+                out.append(path);
+        }
+    };
+
+    QStringList out;
+    for (const QString& dir : library_dirs) {
+        add_from(dir, out);
+        for (const QString& sub : QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot))
+            add_from(dir % QLatin1Char('/') % sub, out);
+    }
+    return out;
+}
+
+/// Copies the details read from a metadata file to the game Pegasus X found
+static void copy_game_details(const model::Game& src, model::Game& dst)
+{
+    if (!src.title().isEmpty())
+        dst.setTitle(src.title());
+    if (!src.sortBy().isEmpty())
+        dst.setSortBy(src.sortBy());
+    if (!src.summary().isEmpty())
+        dst.setSummary(src.summary());
+    if (!src.description().isEmpty())
+        dst.setDescription(src.description());
+    if (!src.developerListConst().isEmpty())
+        dst.developerList() = src.developerListConst();
+    if (!src.publisherListConst().isEmpty())
+        dst.publisherList() = src.publisherListConst();
+    if (!src.genreListConst().isEmpty())
+        dst.genreList() = src.genreListConst();
+    if (!src.tagListConst().isEmpty())
+        dst.tagList() = src.tagListConst();
+    if (src.playerCount() > 1)
+        dst.setPlayerCount(src.playerCount());
+    if (src.rating() > 0.f)
+        dst.setRating(src.rating());
+    if (src.releaseDate().isValid())
+        dst.setReleaseDate(src.releaseDate());
+
+    for (int type = static_cast<int>(AssetType::BOX_FRONT); type <= static_cast<int>(AssetType::VIDEO); type++) {
+        const AssetType asset_type = static_cast<AssetType>(type);
+        for (const QString& uri : src.assets().get(asset_type))
+            dst.assetsMut().add_uri(asset_type, uri);
+    }
+
+    // x- fields, eg. x-manual
+    for (auto it = src.extraMap().cbegin(); it != src.extraMap().cend(); ++it)
+        dst.extraMapMut().insert(it.key(), it.value());
+}
+
+/// Reads Pegasus metadata files only for their game details (names,
+/// descriptions, ratings, art, x- fields...), applied to the games Pegasus X
+/// found by file path. Their collections and launch commands aren't used, so
+/// the games aren't listed twice and keep the emulator picked in Pegasus X.
+static size_t apply_pegasus_details(const QStringList& metafiles, providers::SearchContext& sctx, const QString& log_tag)
+{
+    if (metafiles.isEmpty())
+        return 0;
+
+    providers::SearchContext tmp_sctx(QStringList {});
+    const providers::pegasus::Metadata metahelper(log_tag);
+    for (const QString& path : metafiles) {
+        Log::info(log_tag, LOGMSG("Reading game details from `%1`").arg(::pretty_path(path)));
+        metahelper.apply_metafile(path, tmp_sctx);  // its file filters aren't needed
+    }
+
+    size_t updated = 0;
+    // TODO: C++17
+    for (const auto& entry : tmp_sctx.current_filepath_to_entry_map()) {
+        model::Game* const game = sctx.game_by_filepath(entry.first);
+        if (!game)
+            continue;
+        copy_game_details(*entry.second->parentGame(), *game);
+        updated++;
+    }
+
+    tmp_sctx.discard_all();
+    return updated;
+}
+
 /// ES-DE's settings, custom systems and gamelists: when they change (eg. after
 /// scraping in ES-DE), the game list is scanned again
 static QStringList esde_cache_files(const QString& esde_dir)
@@ -968,8 +1070,10 @@ Provider& EsdeProvider::run(SearchContext& sctx)
         if (system_label.isEmpty())
             system_label = gamelist.system_alt_label;
 
+        const bool picked_in_pegasusx = !pegasusx::systemEmulator(sys.name).isEmpty();
         HashMap<QString, model::Game*> extless_path_to_game;
-        const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden, extless_path_to_game);
+        const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden,
+                                               picked_in_pegasusx, extless_path_to_game);
         if (found_games == 0)
             continue;
         found_games_total += found_games;
@@ -1004,9 +1108,12 @@ LibraryProvider::LibraryProvider(QObject* parent)
 
 QStringList LibraryProvider::cacheInputFiles() const
 {
-    if (pegasusx::libraryRomDirs().isEmpty())
+    const QStringList library_dirs = pegasusx::libraryRomDirs();
+    if (library_dirs.isEmpty())
         return {};
-    return QStringList { pegasusx::settingsFilePath() } + esde_cache_files(any_esde_dir());
+    return QStringList { pegasusx::settingsFilePath() }
+        + esde_cache_files(any_esde_dir())
+        + find_library_metafiles(library_dirs);
 }
 
 Provider& LibraryProvider::run(SearchContext& sctx)
@@ -1069,11 +1176,13 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             : read_gamelist(esde_dir, sys.name, system_dirs);
 
         QString system_label = pegasusx::systemEmulator(sys.name);
+        const bool picked_in_pegasusx = !system_label.isEmpty();
         if (system_label.isEmpty())
             system_label = gamelist.system_alt_label;
 
         HashMap<QString, model::Game*> extless_path_to_game;
-        const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden, extless_path_to_game);
+        const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden,
+                                               picked_in_pegasusx, extless_path_to_game);
         if (found_games == 0)
             continue;
         found_games_total += found_games;
@@ -1105,6 +1214,11 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             sctx.pegasus_add_game_dir(system_dir);
         }
     }
+
+    // details from Pegasus metadata files in the library folders, if any
+    const size_t detailed = apply_pegasus_details(find_library_metafiles(library_dirs), sctx, display_name());
+    if (detailed > 0)
+        Log::info(display_name(), LOGMSG("%1 games got details from Pegasus metadata files").arg(QString::number(detailed)));
 
     Log::info(display_name(), LOGMSG("%1 games and %2 media files found")
         .arg(QString::number(found_games_total), QString::number(found_assets)));
