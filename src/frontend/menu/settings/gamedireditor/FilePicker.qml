@@ -22,8 +22,17 @@ import Pegasus.FolderListModel 1.0
 FocusScope {
     id: root
 
+    // Pegasus X: pick the folder itself (browse into it, then "Use this
+    // folder") instead of a metadata file in it
+    property bool folderMode: false
+
     signal cancel
     signal pick(string dir_path)
+
+    Component.onCompleted: {
+        if (folderMode)
+            folderModel.cd(".");  // list again without the metadata files
+    }
 
     anchors.fill: parent
 
@@ -37,14 +46,22 @@ FocusScope {
 
     FolderListModel {
         id: folderModel
-        files: [
+        files: root.folderMode ? [] : [
             "metadata.pegasus.txt",
             "metadata.txt",
         ]
-        extensions: [
+        extensions: root.folderMode ? [] : [
             ".metadata.pegasus.txt",
             ".metadata.txt",
         ]
+    }
+
+    // the root lists the drives, which are not a sensible pick
+    readonly property bool canUseFolder: folderMode && folderModel.folder !== "/" && folderModel.folder !== ""
+
+    function useFolder() {
+        if (canUseFolder)
+            root.pick(folderModel.folder);
     }
 
 
@@ -78,7 +95,9 @@ FocusScope {
 
         Text {
             id: info
-            text: qsTr("Select a collection file below (metadata.pegasus.txt or metadata.txt).\n"
+            text: root.folderMode
+                ? qsTr("Open the folder you want, then select \"Use this folder\".")
+                : qsTr("Select a collection file below (metadata.pegasus.txt or metadata.txt).\n"
                      + "The directory of the file will then be added to the list.")
             color: "#ee4"
             font.family: globalFonts.sans
@@ -122,8 +141,50 @@ FocusScope {
                 }
             }
             Rectangle {
+                id: useButton
+
+                readonly property bool highlighted: activeFocus || useMouse.containsMouse
+
+                visible: root.folderMode
                 width: parent.width
+                height: visible ? useLabel.height : 0
                 anchors.top: path.bottom
+                color: highlighted ? "#3aa" : "#2a5f5f"
+                opacity: root.canUseFolder ? 1.0 : 0.4
+
+                KeyNavigation.down: list
+                Keys.onPressed: {
+                    if (api.keys.isAccept(event) && !event.isAutoRepeat) {
+                        event.accepted = true;
+                        root.useFolder();
+                    }
+                }
+
+                Text {
+                    id: useLabel
+                    text: qsTr("Use this folder") + api.tr
+                    width: parent.width
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    lineHeight: 2.5
+
+                    color: parent.highlighted ? "#111" : "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(18)
+                    font.bold: true
+                }
+
+                MouseArea {
+                    id: useMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onClicked: root.useFolder()
+                    cursorShape: Qt.PointingHandCursor
+                }
+            }
+            Rectangle {
+                width: parent.width
+                anchors.top: useButton.bottom
                 anchors.bottom: parent.bottom
                 color: "#333"
 
@@ -134,6 +195,14 @@ FocusScope {
 
                     model: folderModel
                     delegate: fileDelegate
+
+                    // up from the first entry reaches "Use this folder"
+                    Keys.onUpPressed: {
+                        if (root.folderMode && currentIndex <= 0)
+                            useButton.focus = true;
+                        else
+                            decrementCurrentIndex();
+                    }
 
                     focus: true
                     highlightRangeMode: ListView.ApplyRange

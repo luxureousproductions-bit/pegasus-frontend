@@ -214,6 +214,34 @@ QString run_am_call(const QStringList& args)
     return result_obj.toString();
 }
 
+QStringList available_components(const QStringList& components)
+{
+    QAndroidJniEnvironment jni_env;
+
+    std::vector<QAndroidJniObject> str_objs;
+    str_objs.reserve(components.length());
+    for (const QString& component : components)
+        str_objs.emplace_back(QAndroidJniObject::fromString(component));
+
+    jobjectArray jni_arr = jni_env->NewObjectArray(components.size(), jni_env->FindClass("java/lang/String"), nullptr);
+    for (size_t i = 0; i < str_objs.size(); i++)
+        jni_env->SetObjectArrayElement(jni_arr, i, str_objs.at(i).object<jstring>());
+
+    static constexpr auto JNI_METHOD = "availableComponents";
+    static constexpr auto JNI_SIGNATURE = "([Ljava/lang/String;)[Ljava/lang/String;";
+    const auto result_raw = QAndroidJniObject::callStaticObjectMethod(jni_classname(), JNI_METHOD, JNI_SIGNATURE, jni_arr);
+    const auto result_arr = result_raw.object<jobjectArray>();
+    if (!result_arr)
+        return {};
+
+    const jsize count = jni_env->GetArrayLength(result_arr);
+    QStringList out;
+    out.reserve(count);
+    for (jsize i = 0; i < count; i++)
+        out.append(QAndroidJniObject(jni_env->GetObjectArrayElement(result_arr, i)).toString());
+    return out;
+}
+
 QString to_content_uri(const QString& path)
 {
     static constexpr auto JNI_METHOD = "toContentUri";

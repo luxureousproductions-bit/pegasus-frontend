@@ -349,13 +349,15 @@ FocusScope {
                         anchors.left: parent.left
                         anchors.leftMargin: vpx(12)
                         anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width * 0.68
+                        width: parent.width * 0.58
                         elide: Text.ElideRight
                     }
 
                     Text {
                         visible: !parent.isDefault
-                        text: modelData.installed ? qsTr("installed") + api.tr : qsTr("not installed") + api.tr
+                        text: !modelData.installed ? qsTr("not installed") + api.tr
+                            : modelData.retroarch ? qsTr("RetroArch, needs the core") + api.tr
+                            : qsTr("installed") + api.tr
                         color: parent.highlighted ? "#113" : (modelData.installed ? "#8d8" : "#d88")
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(14)

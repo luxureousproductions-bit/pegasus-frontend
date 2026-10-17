@@ -36,6 +36,7 @@ int pdf_page_count(const QString& path_or_url);
 
 QStringList granted_paths();
 QStringList installed_packages();
+QStringList available_components(const QStringList&);
 void request_saf_permission(const std::function<void()>&);
 
 QString run_am_call(const QStringList&);

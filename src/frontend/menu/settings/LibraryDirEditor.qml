@@ -224,6 +224,7 @@ FocusScope {
 
     FilePicker {
         id: filePicker
+        folderMode: true
 
         enabled: focus
 

@@ -18,6 +18,7 @@
 package org.pegasus_frontend.android;
 
 import android.app.ActivityManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.app.Activity;
 import android.content.Intent;
@@ -337,13 +338,43 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
             Intent intent = IntentHelper.parseIntentCommand(args);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            m_self.startActivity(intent);
+            try {
+                m_self.startActivity(intent);
+            }
+            catch (SecurityException e) {
+                // Pegasus X: Android refuses to pass on read access to a URI
+                // Pegasus itself has no grant for, eg. a storage document URI
+                // (as used for most standalone emulators); those emulators use
+                // their own folder access instead, so launch without the flag,
+                // the same way ES-DE does
+                intent.setFlags(intent.getFlags() & ~Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                m_self.startActivity(intent);
+            }
         }
         catch (Exception e) {
             return e.toString() + ": " + e.getMessage();
         }
 
         return null;
+    }
+
+    // Pegasus X: the "package/activity" entries that really exist on this
+    // device, so only emulators that can actually be launched count as installed
+    public static String[] availableComponents(String[] components) {
+        List<String> out = new ArrayList<String>();
+        for (String flat : components) {
+            final ComponentName cn = ComponentName.unflattenFromString(flat);
+            if (cn == null)
+                continue;
+            try {
+                m_pm.getActivityInfo(cn, 0);
+                out.add(flat);
+            }
+            catch (PackageManager.NameNotFoundException e) {
+                // not installed, or this version names its activity differently
+            }
+        }
+        return out.toArray(new String[out.size()]);
     }
 
     public static String toContentUri(String path) {

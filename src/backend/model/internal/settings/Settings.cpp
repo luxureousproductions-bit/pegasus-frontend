@@ -334,6 +334,7 @@ QVariantList Settings::emulatorSystems() const
             options.append(QVariantMap {
                 { QStringLiteral("label"), option.label },
                 { QStringLiteral("installed"), option.installed },
+                { QStringLiteral("retroarch"), option.retroarch },
             });
         }
         out.append(QVariantMap {

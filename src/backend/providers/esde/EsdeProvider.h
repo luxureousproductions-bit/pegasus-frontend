@@ -60,6 +60,7 @@ public:
 struct EmulatorOption {
     QString label;
     bool installed;
+    bool retroarch;  ///< a RetroArch core, which also has to be downloaded in RetroArch
 };
 
 /// A system that has games, with the emulators that can launch it

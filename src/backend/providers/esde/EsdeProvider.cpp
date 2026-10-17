@@ -74,7 +74,7 @@ struct GamelistInfo {
 struct Context {
     QString log_tag;
     QString primary_storage;
-    QSet<QString> installed_packages;
+    QSet<QString> available_components;  // "package/activity" entries that really exist
     HashMap<QString, QStringList> emulators;  // emulator name -> "package/activity" entries
 };
 
@@ -418,11 +418,13 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
         return {};
     }
 
-    // prefer the first of the emulator's known packages that is installed
+    // prefer the first of the emulator's known activities that exists on this
+    // device (checking the activity, not just the package, as some releases
+    // of an emulator name their activity differently)
     QString component = emu_it->second.first();
     emulator_installed = false;
     for (const QString& entry : emu_it->second) {
-        if (ctx.installed_packages.contains(entry.section(QLatin1Char('/'), 0, 0))) {
+        if (ctx.available_components.contains(entry)) {
             component = entry;
             emulator_installed = true;
             break;
@@ -628,6 +630,16 @@ void load_config(Context& ctx, const QString& esde_dir, HashMap<QString, EsdeSys
     if (!esde_dir.isEmpty())
         load_find_rules(ctx.log_tag, esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), ctx.emulators);
     load_find_rules(ctx.log_tag, QStringLiteral(":/esde/es_find_rules.xml"), ctx.emulators);
+
+    // which of the emulators' activities exist on this device, asked in one go
+    QStringList all_components;
+    for (const auto& entry : ctx.emulators)
+        all_components.append(entry.second);
+    all_components.removeDuplicates();
+    for (const QString& component : ::android::available_components(all_components))
+        ctx.available_components.insert(component);
+    Log::info(ctx.log_tag, LOGMSG("%1 of %2 known emulator activities are installed")
+        .arg(QString::number(ctx.available_components.size()), QString::number(all_components.size())));
 }
 
 Context make_context(const QString& log_tag)
@@ -635,8 +647,6 @@ Context make_context(const QString& log_tag)
     Context ctx;
     ctx.log_tag = log_tag;
     ctx.primary_storage = ::android::primary_storage_path();
-    for (const QString& package : ::android::installed_packages())
-        ctx.installed_packages.insert(package);
     return ctx;
 }
 
@@ -1199,13 +1209,15 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             : read_gamelist(esde_dir, sys.name, system_dirs);
 
         QString system_label = pegasusx::systemEmulator(sys.name);
-        const bool picked_in_pegasusx = !system_label.isEmpty();
         if (system_label.isEmpty())
             system_label = gamelist.system_alt_label;
 
+        // The library's launch commands always win for the games in its
+        // folders, also over a command from a metadata file found through
+        // 'Set game directories', which may name an emulator that isn't installed
         HashMap<QString, model::Game*> extless_path_to_game;
         const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden,
-                                               picked_in_pegasusx, extless_path_to_game);
+                                               true, extless_path_to_game);
         if (found_games == 0)
             continue;
         found_games_total += found_games;
@@ -1298,7 +1310,8 @@ std::vector<SystemEmulators> emulator_choices()
                 continue;
 
             const QString label = cmd.label.isEmpty() ? QStringLiteral("Default") : cmd.label;
-            entry.options.push_back({ label, installed });
+            const bool retroarch = cmd.raw.startsWith(QLatin1String("%EMULATOR_RETROARCH%"));
+            entry.options.push_back({ label, installed, retroarch });
             if (first_usable.isEmpty())
                 first_usable = label;
             if (installed && entry.default_label.isEmpty())
