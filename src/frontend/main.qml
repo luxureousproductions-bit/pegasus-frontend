@@ -212,8 +212,13 @@ Window {
     Connections {
         target: Internal.scanner
         function onRunningChanged() {
-            if (Internal.scanner.running)
+            if (Internal.scanner.running) {
+                // Pegasus X: remember if the menu was open (eg. a reload from
+                // the settings), to give it back the focus afterwards
+                if (!splashScreen.focus)
+                    splashScreen.restoreMenu = mainMenu.focus;
                 splashScreen.focus = true;
+            }
         }
     }
 
@@ -231,9 +236,16 @@ Window {
         progress: Internal.scanner.progress
         stage: Internal.scanner.stage
 
+        property bool restoreMenu: false
+
         function hideMaybe() {
             if (focus && !dataLoading && !skinLoading) {
                 content.focus = true;
+                // The theme reloads under the open menu and may take the focus
+                // while doing so, leaving the menu visible but deaf to the keys
+                if (restoreMenu)
+                    mainMenu.forceActiveFocus();
+                restoreMenu = false;
                 Internal.scanner.reset();
             }
         }

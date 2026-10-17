@@ -30,7 +30,11 @@ FocusScope {
         subscreen.focus = true;
         root.state = "sub";
     }
+    // NOTE: The source is cleared first, so every opening gets a fresh screen;
+    //       a Loader keeps the old item when given the same source again, which
+    //       would show stale data and keep its old focus
     function openModal(url) {
+        modal.source = "";
         modal.source = url;
         modal.focus = true;
         root.state = "modal";

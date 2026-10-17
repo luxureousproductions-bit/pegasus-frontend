@@ -47,6 +47,10 @@ private:
     model::ApiObject* m_api_public;
     model::Internal* m_api_private;
     FrontendLayer* m_frontend;
+
+    // a scan requested while another one runs is started after it
+    bool m_scan_pending = false;
+    bool m_scan_pending_force = false;
     ProcessLauncher* m_launcher;
     ProviderManager* m_providerman;
 
