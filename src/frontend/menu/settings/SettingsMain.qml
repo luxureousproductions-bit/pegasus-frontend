@@ -31,6 +31,9 @@ FocusScope {
     signal openGameDirSettings
     signal openAndroidSafSettings
     signal openProviderSettings
+    signal openLibraryRomDirs
+    signal openLibraryMediaDir
+    signal openEmulatorSettings
     signal reloadRequested
 
     width: parent.width
@@ -159,6 +162,29 @@ FocusScope {
             type: SettingsEntry.Type.Button
             buttonAction: root.reloadRequested
             section: "gaming"
+        },
+
+        SettingsEntry {
+            label: QT_TR_NOOP("ROM folders...")
+            desc: QT_TR_NOOP("Folders named after systems (snes, psx, gba, Super Nintendo...) are recognized and get launch commands, no metadata files needed.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openLibraryRomDirs
+            section: "pegasusx"
+            enabled: Internal.settings.pegasusxLibrarySupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Media folder...")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openLibraryMediaDir
+            section: "pegasusx"
+            enabled: Internal.settings.pegasusxLibrarySupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Emulators...")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openEmulatorSettings
+            section: "pegasusx"
+            enabled: Internal.settings.pegasusxLibrarySupported
         }
     ]
 
@@ -205,6 +231,7 @@ FocusScope {
                 case "general": return QT_TR_NOOP("General");
                 case "controls": return QT_TR_NOOP("Controls");
                 case "gaming": return QT_TR_NOOP("Gaming");
+                case "pegasusx": return QT_TR_NOOP("Pegasus X library");
             }
 
             text: qsTr(trText) + api.tr

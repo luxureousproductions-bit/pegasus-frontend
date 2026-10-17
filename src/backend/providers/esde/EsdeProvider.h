@@ -19,6 +19,9 @@
 
 #include "providers/Provider.h"
 
+#include <QString>
+#include <vector>
+
 
 namespace providers {
 namespace esde {
@@ -37,6 +40,40 @@ public:
     Provider& run(SearchContext&) final;
     QStringList cacheInputFiles() const final;
 };
+
+/// Pegasus X: games from the ROM folders picked in Settings > Pegasus X library.
+/// System folders are recognized by name (ES-DE's names and common variants)
+/// and get ES-DE's launch commands, so no metadata files are needed. Media is
+/// read from the picked media folder (<system>/<type>/) and <system>/media/.
+class LibraryProvider : public Provider {
+    Q_OBJECT
+
+public:
+    explicit LibraryProvider(QObject* parent = nullptr);
+
+    Provider& run(SearchContext&) final;
+    QStringList cacheInputFiles() const final;
+};
+
+
+/// One emulator that can be picked for a system
+struct EmulatorOption {
+    QString label;
+    bool installed;
+};
+
+/// A system that has games, with the emulators that can launch it
+struct SystemEmulators {
+    QString name;
+    QString fullname;
+    QString current;        ///< chosen in Pegasus X, empty for the default
+    QString default_label;  ///< what the default resolves to right now
+    std::vector<EmulatorOption> options;
+};
+
+/// For the Emulators settings screen: the systems found in the Pegasus X
+/// library and (if that data source is on) in the ES-DE ROMs folders
+std::vector<SystemEmulators> emulator_choices();
 
 } // namespace esde
 } // namespace providers

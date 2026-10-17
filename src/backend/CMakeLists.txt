@@ -18,6 +18,8 @@ add_library(pegasus-backend
     Paths.h
     PegasusAssets.cpp
     PegasusAssets.h
+    PegasusXSettings.cpp
+    PegasusXSettings.h
     ProcessLauncher.cpp
     ProcessLauncher.h
     ScriptRunner.cpp

@@ -119,6 +119,7 @@ std::vector<std::unique_ptr<providers::Provider>> create_providers()
 #endif
 #ifdef WITH_COMPAT_ESDE
         MKENTRY(esde::EsdeProvider)
+        MKENTRY(esde::LibraryProvider)
 #endif
 #ifdef WITH_COMPAT_LAUNCHBOX
         MKENTRY(launchbox::LaunchboxProvider)

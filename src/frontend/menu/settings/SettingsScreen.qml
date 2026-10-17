@@ -35,6 +35,11 @@ FocusScope {
         modal.focus = true;
         root.state = "modal";
     }
+    function openModalWith(url, properties) {
+        modal.setSource(url, properties);
+        modal.focus = true;
+        root.state = "modal";
+    }
 
     anchors.fill: parent
     enabled: focus
@@ -52,6 +57,9 @@ FocusScope {
         onOpenGameDirSettings: root.openModal("GameDirEditor.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
+        onOpenLibraryRomDirs: root.openModalWith("LibraryDirEditor.qml", { "mediaMode": false })
+        onOpenLibraryMediaDir: root.openModalWith("LibraryDirEditor.qml", { "mediaMode": true })
+        onOpenEmulatorSettings: root.openModal("EmulatorEditor.qml")
         onReloadRequested: Internal.settings.reloadProviders()
     }
 

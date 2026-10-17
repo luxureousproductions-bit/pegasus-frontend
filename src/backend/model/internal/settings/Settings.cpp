@@ -20,13 +20,19 @@
 #include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
+#include "PegasusXSettings.h"
 #include "utils/PathTools.h"
 
 #ifdef Q_OS_ANDROID
 #include "platform/AndroidHelpers.h"
 #endif
+#ifdef WITH_COMPAT_ESDE
+#include "providers/esde/EsdeProvider.h"
+#endif
 
 #include <QCursor>
+#include <QVariantMap>
+#include <algorithm>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QSet>
@@ -244,6 +250,107 @@ void Settings::reloadProviders()
 {
     Log::info(LOGMSG("Reloading..."));
     emit providerReloadingRequested();
+}
+
+
+bool Settings::pegasusxLibrarySupported() const
+{
+#ifdef WITH_COMPAT_ESDE
+    return true;
+#else
+    return false;
+#endif
+}
+
+QStringList Settings::libraryRomDirs() const
+{
+    return pegasusx::libraryRomDirs();
+}
+
+QString Settings::libraryMediaDir() const
+{
+    return pegasusx::libraryMediaDir();
+}
+
+void Settings::addLibraryRomDir(const QString& path)
+{
+    const QFileInfo finfo(path);
+    if (!finfo.exists() || !finfo.isDir()) {
+        Log::warning(LOGMSG("ROM folder `%1` not found, ignored").arg(path));
+        return;
+    }
+
+    QStringList dirs = pegasusx::libraryRomDirs();
+    const QString clean = ::pretty_path(path);
+    if (dirs.contains(clean))
+        return;
+
+    dirs.append(clean);
+    dirs.sort();
+    pegasusx::setLibraryRomDirs(dirs);
+    emit libraryChanged();
+}
+
+void Settings::removeLibraryRomDirs(const QVariantList& indices)
+{
+    QStringList dirs = pegasusx::libraryRomDirs();
+    std::vector<int> to_remove;
+    for (const QVariant& index : indices) {
+        bool ok = false;
+        const int idx = index.toInt(&ok);
+        if (ok && 0 <= idx && idx < dirs.size())
+            to_remove.push_back(idx);
+    }
+    if (to_remove.empty())
+        return;
+
+    // remove from the back, so the other indices stay valid
+    std::sort(to_remove.rbegin(), to_remove.rend());
+    to_remove.erase(std::unique(to_remove.begin(), to_remove.end()), to_remove.end());
+    for (const int idx : to_remove)
+        dirs.removeAt(idx);
+
+    pegasusx::setLibraryRomDirs(dirs);
+    emit libraryChanged();
+}
+
+void Settings::setLibraryMediaDir(const QString& path)
+{
+    if (!path.isEmpty() && !QFileInfo(path).isDir()) {
+        Log::warning(LOGMSG("Media folder `%1` not found, ignored").arg(path));
+        return;
+    }
+    pegasusx::setLibraryMediaDir(path.isEmpty() ? QString() : ::pretty_path(path));
+    emit libraryChanged();
+}
+
+QVariantList Settings::emulatorSystems() const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& system : providers::esde::emulator_choices()) {
+        QVariantList options;
+        for (const auto& option : system.options) {
+            options.append(QVariantMap {
+                { QStringLiteral("label"), option.label },
+                { QStringLiteral("installed"), option.installed },
+            });
+        }
+        out.append(QVariantMap {
+            { QStringLiteral("name"), system.name },
+            { QStringLiteral("fullname"), system.fullname },
+            { QStringLiteral("current"), system.current },
+            { QStringLiteral("defaultLabel"), system.default_label },
+            { QStringLiteral("options"), options },
+        });
+    }
+#endif
+    return out;
+}
+
+void Settings::setSystemEmulator(const QString& system_name, const QString& label)
+{
+    pegasusx::setSystemEmulator(system_name, label);
 }
 
 } // namespace model

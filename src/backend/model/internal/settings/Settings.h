@@ -51,6 +51,11 @@ class Settings : public QObject {
     Q_PROPERTY(QStringList gameDirs READ gameDirs NOTIFY gameDirsChanged)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
+    // Pegasus X library
+    Q_PROPERTY(bool pegasusxLibrarySupported READ pegasusxLibrarySupported CONSTANT)
+    Q_PROPERTY(QStringList libraryRomDirs READ libraryRomDirs NOTIFY libraryChanged)
+    Q_PROPERTY(QString libraryMediaDir READ libraryMediaDir NOTIFY libraryChanged)
+
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
     QML_CONST_PROPERTY(model::Locales, locales)
     QML_CONST_PROPERTY(model::Themes, themes)
@@ -84,6 +89,17 @@ public:
 
     Q_INVOKABLE void reloadProviders();
 
+    // Pegasus X library
+    bool pegasusxLibrarySupported() const;
+    QStringList libraryRomDirs() const;
+    QString libraryMediaDir() const;
+    Q_INVOKABLE void addLibraryRomDir(const QString&);
+    Q_INVOKABLE void removeLibraryRomDirs(const QVariantList&);
+    Q_INVOKABLE void setLibraryMediaDir(const QString&);
+    /// [{ name, fullname, current, defaultLabel, options: [{ label, installed }] }]
+    Q_INVOKABLE QVariantList emulatorSystems() const;
+    Q_INVOKABLE void setSystemEmulator(const QString& system_name, const QString& label);
+
 signals:
     void fullscreenChanged();
     void mouseSupportChanged();
@@ -93,6 +109,7 @@ signals:
     void gameDirsChanged();
     void androidDirsChanged();
     void providerReloadingRequested();
+    void libraryChanged();
 };
 
 } // namespace model

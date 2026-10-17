@@ -16,6 +16,7 @@ SOURCES += \
     Backend.cpp \
     FrontendLayer.cpp \
     PegasusAssets.cpp \
+    PegasusXSettings.cpp \
     ProcessLauncher.cpp \
     ScriptRunner.cpp \
     Paths.cpp \
@@ -27,6 +28,7 @@ HEADERS += \
     CliArgs.h \
     FrontendLayer.h \
     PegasusAssets.h \
+    PegasusXSettings.h \
     ProcessLauncher.h \
     ScriptRunner.h \
     Paths.h \
