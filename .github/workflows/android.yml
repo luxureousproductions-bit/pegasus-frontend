@@ -124,7 +124,12 @@ jobs:
           echo "signed=true" >> "$GITHUB_OUTPUT"
       - name: Package (debug), report signing key
         if: (github.event_name != 'push' && github.event_name != 'workflow_dispatch') || github.ref != 'refs/heads/master'
-        run: echo "::notice::$(git describe --always) signed with $(keytool -printcert -jarfile dist/*.apk | grep -m1 'SHA256:')"
+        run: |
+          echo "::notice::$(git describe --always) signed with $(keytool -printcert -jarfile dist/*.apk | grep -m1 'SHA256:')"
+          AAPT=$(ls -d "$ANDROID_HOME"/build-tools/*/aapt 2>/dev/null | tail -1)
+          if [ -n "$AAPT" ]; then
+            echo "::notice::$(git describe --always) $("$AAPT" dump badging dist/*.apk | grep -o "versionCode='[0-9]*'")"
+          fi
 
       # Pegasus X: a version tag (v1.0, v1.1-beta1, ...) publishes a GitHub
       # Release with the APKs. Tags with a dash are marked as pre-releases.
