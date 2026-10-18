@@ -231,6 +231,12 @@ FocusScope {
     FilePicker {
         id: filePicker
         folderMode: true
+        // besides whole folders: a metadata file (its folder is added), or
+        // a single ES-DE gamelist
+        fileNames: root.mode === "roms" ? ["metadata.pegasus.txt", "metadata.txt"]
+                 : root.mode === "esde" ? ["gamelist.xml"]
+                 : []
+        fileExtensions: root.mode === "roms" ? [".metadata.pegasus.txt", ".metadata.txt"] : []
 
         enabled: focus
 

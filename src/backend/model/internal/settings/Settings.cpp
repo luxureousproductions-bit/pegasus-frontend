@@ -297,8 +297,10 @@ QStringList remove_indices(QStringList list, const QVariantList& indices)
 }
 } // namespace
 
-void Settings::addLibraryRomDir(const QString& path)
+void Settings::addLibraryRomDir(const QString& picked)
 {
+    // a picked metadata file adds its folder
+    const QString path = QFileInfo(picked).isFile() ? QFileInfo(picked).absolutePath() : picked;
     const QFileInfo finfo(path);
     if (!finfo.exists() || !finfo.isDir()) {
         Log::warning(LOGMSG("ROM folder `%1` not found, ignored").arg(path));

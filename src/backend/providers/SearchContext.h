@@ -66,6 +66,7 @@ public:
 
     const HashMap<QString, model::GameFile*>& current_filepath_to_entry_map() const { return m_filepath_to_gamefile; }
     const HashMap<model::Collection*, std::vector<model::Game*>>& current_collection_games() const { return m_collection_games; }
+    const HashMap<QString, model::Collection*>& current_collections() const { return m_collections; }
     std::pair<std::vector<model::Collection*>, std::vector<model::Game*>> finalize(QObject* const parent = nullptr);
 
     /// Deletes everything found so far, without finalizing (for a temporary

@@ -23,15 +23,43 @@ FocusScope {
     id: root
 
     // Pegasus X: pick the folder itself (browse into it, then "Use this
-    // folder") instead of a metadata file in it
+    // folder"), or one of the files named in fileNames/fileExtensions, in
+    // which case pick() gets the file's path. Every file is shown, so you can
+    // see what a folder has, but only those files can be picked.
     property bool folderMode: false
+    property var fileNames: ["metadata.pegasus.txt", "metadata.txt"]
+    property var fileExtensions: [".metadata.pegasus.txt", ".metadata.txt"]
 
     signal cancel
     signal pick(string dir_path)
 
-    Component.onCompleted: {
-        if (folderMode)
-            folderModel.cd(".");  // list again without the metadata files
+    Component.onCompleted: root.resetPosition()
+
+    // a new folder starts at its first entry (not "..")
+    function resetPosition() {
+        list.currentIndex = list.count > 1 ? 1 : 0;
+        list.positionViewAtIndex(list.currentIndex, ListView.Center);
+    }
+
+    // into a folder: start at the top; back out: land on the folder we left
+    function enter(name) {
+        if (name === "..") {
+            const current = folderModel.folder;
+            const child = current.substring(current.lastIndexOf("/") + 1);
+            folderModel.cd(name);
+            var idx = folderModel.indexOfName(child);
+            if (idx < 0)
+                idx = folderModel.indexOfName(current);  // a drive, in the drive list
+            if (idx >= 0) {
+                list.currentIndex = idx;
+                list.positionViewAtIndex(idx, ListView.Center);
+                return;
+            }
+        }
+        else {
+            folderModel.cd(name);
+        }
+        root.resetPosition();
     }
 
     anchors.fill: parent
@@ -46,14 +74,9 @@ FocusScope {
 
     FolderListModel {
         id: folderModel
-        files: root.folderMode ? [] : [
-            "metadata.pegasus.txt",
-            "metadata.txt",
-        ]
-        extensions: root.folderMode ? [] : [
-            ".metadata.pegasus.txt",
-            ".metadata.txt",
-        ]
+        files: root.fileNames
+        extensions: root.fileExtensions
+        showAllFiles: true
     }
 
     // the root lists the drives, which are not a sensible pick
@@ -96,7 +119,10 @@ FocusScope {
         Text {
             id: info
             text: root.folderMode
-                ? qsTr("Open the folder you want, then select \"Use this folder\".")
+                ? (root.fileNames.length > 0 || root.fileExtensions.length > 0
+                    ? qsTr("Open the folder you want, then select \"Use this folder\",\n"
+                         + "or select one of the files in bold.")
+                    : qsTr("Open the folder you want, then select \"Use this folder\"."))
                 : qsTr("Select a collection file below (metadata.pegasus.txt or metadata.txt).\n"
                      + "The directory of the file will then be added to the list.")
             color: "#ee4"
@@ -225,12 +251,16 @@ FocusScope {
             height: label.height
 
             function pickItem() {
-                if (!isDir) {
-                    root.pick(folderModel.folder);
+                if (isDir) {
+                    root.enter(name);
                     return;
                 }
-
-                folderModel.cd(name);
+                if (!pickable)
+                    return;
+                if (root.folderMode)
+                    root.pick(folderModel.folder + "/" + name);
+                else
+                    root.pick(folderModel.folder);
             }
 
             Keys.onPressed: {
@@ -261,8 +291,8 @@ FocusScope {
                 verticalAlignment: Text.AlignVCenter
                 lineHeight: 2.5
 
-                color: "#eee"
-                font.bold: !isDir
+                color: (isDir || pickable) ? "#eee" : "#888"
+                font.bold: !isDir && pickable
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(18)
 

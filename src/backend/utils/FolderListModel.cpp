@@ -70,9 +70,10 @@ bool is_drive_root(const QString& path, const QStringList& drives)
 } // namespace
 
 
-FolderListEntry::FolderListEntry(QString name, bool is_dir)
+FolderListEntry::FolderListEntry(QString name, bool is_dir, bool pickable)
     : name(std::move(name))
     , is_dir(is_dir)
+    , pickable(pickable)
 {}
 
 
@@ -83,6 +84,7 @@ FolderListModel::FolderListModel(QObject* parent)
     , m_role_names({
         { EntryName, "name" },
         { EntryIsDir, "isDir" },
+        { EntryPickable, "pickable" },
     })
 {
     m_dir.setSorting(QDir::Name | QDir::DirsFirst | QDir::IgnoreCase);
@@ -110,6 +112,8 @@ QVariant FolderListModel::data(const QModelIndex& index, int role) const
             return entry.name;
         case EntryIsDir:
             return entry.is_dir;
+        case EntryPickable:
+            return entry.pickable;
     }
 
     return {};
@@ -135,29 +139,27 @@ void FolderListModel::cd(const QString& dirName)
     else {
         m_dir_path = ::pretty_path(m_dir.absolutePath());
 
-        auto filist = m_dir.entryInfoList();
-        erase_if(filist, [this](const QFileInfo& fi){
-            if (fi.isDir())
-                return false;
-
+        const auto is_match = [this](const QFileInfo& fi){
             if (m_filenames.contains(fi.fileName()))
-                return false;
-
-            const bool has_matching_ext = std::any_of(
+                return true;
+            return std::any_of(
                 m_extensions.cbegin(),
                 m_extensions.cend(),
                 [&fi](const QString& suffix){ return fi.fileName().endsWith(suffix); });
-            if (has_matching_ext)
-                return false;
+        };
 
-            return true;
-        });
+        auto filist = m_dir.entryInfoList();
+        if (!m_show_all) {
+            erase_if(filist, [&is_match](const QFileInfo& fi){
+                return !fi.isDir() && !is_match(fi);
+            });
+        }
 
         // adding dotdot manually to avoid getting stuck in the file system
         m_files.emplace_back(QStringLiteral(".."), true);
 
         for (const auto& fi : qAsConst(filist))
-            m_files.emplace_back(fi.fileName(), fi.isDir());
+            m_files.emplace_back(fi.fileName(), fi.isDir(), fi.isDir() || is_match(fi));
     }
 
     endResetModel();
@@ -176,4 +178,22 @@ void FolderListModel::setExtensions(QStringList list)
     m_extensions = std::move(list);
     emit extensionsChanged();
     cd(QStringLiteral("."));
+}
+
+void FolderListModel::setShowAllFiles(bool value)
+{
+    if (m_show_all == value)
+        return;
+    m_show_all = value;
+    emit showAllFilesChanged();
+    cd(QStringLiteral("."));
+}
+
+int FolderListModel::indexOfName(const QString& name) const
+{
+    for (size_t i = 0; i < m_files.size(); i++) {
+        if (m_files[i].name == name)
+            return static_cast<int>(i);
+    }
+    return -1;
 }
