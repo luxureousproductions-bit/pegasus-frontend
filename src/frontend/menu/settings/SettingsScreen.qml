@@ -66,6 +66,7 @@ FocusScope {
         onOpenLibraryRomDirs: root.openModalWith("LibraryDirEditor.qml", { "mode": "roms" })
         onOpenLibraryMediaDir: root.openModalWith("LibraryDirEditor.qml", { "mode": "media" })
         onOpenEsdeImport: root.openModalWith("LibraryDirEditor.qml", { "mode": "esde" })
+        onOpenIgnoredDirs: root.openModalWith("LibraryDirEditor.qml", { "mode": "ignore" })
         onOpenEmulatorSettings: root.openModal("EmulatorEditor.qml")
         onReloadRequested: Internal.settings.reloadProviders()
     }

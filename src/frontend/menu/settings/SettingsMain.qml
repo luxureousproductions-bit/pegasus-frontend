@@ -34,6 +34,7 @@ FocusScope {
     signal openLibraryRomDirs
     signal openLibraryMediaDir
     signal openEsdeImport
+    signal openIgnoredDirs
     signal openEmulatorSettings
     signal reloadRequested
 
@@ -170,6 +171,14 @@ FocusScope {
             desc: QT_TR_NOOP("Folders named after systems (snes, psx, gba, Super Nintendo...) are recognized and get launch commands, no metadata files needed.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openLibraryRomDirs
+            section: "pegasusx"
+            enabled: Internal.settings.pegasusxLibrarySupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Ignored folders...")
+            desc: QT_TR_NOOP("Folders inside your ROM and media folders to skip, eg. bios, saves or extras.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openIgnoredDirs
             section: "pegasusx"
             enabled: Internal.settings.pegasusxLibrarySupported
         },

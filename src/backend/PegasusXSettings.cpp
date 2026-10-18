@@ -28,6 +28,7 @@ const QString KEY_ROM_DIRS = QStringLiteral("library/romDirs");
 const QString KEY_MEDIA_DIR_OLD = QStringLiteral("library/mediaDir");  // single folder, before multiple
 const QString KEY_MEDIA_DIRS = QStringLiteral("library/mediaDirs");
 const QString KEY_ESDE_IMPORTS = QStringLiteral("library/esdeImports");
+const QString KEY_IGNORED_DIRS = QStringLiteral("library/ignoredDirs");
 
 void write_list(const QString& key, const QStringList& list)
 {
@@ -89,6 +90,17 @@ QStringList esdeImports()
 void setEsdeImports(const QStringList& paths)
 {
     write_list(KEY_ESDE_IMPORTS, paths);
+}
+
+QStringList ignoredDirs()
+{
+    const QSettings file(settingsFilePath(), QSettings::IniFormat);
+    return file.value(KEY_IGNORED_DIRS).toStringList();
+}
+
+void setIgnoredDirs(const QStringList& dirs)
+{
+    write_list(KEY_IGNORED_DIRS, dirs);
 }
 
 QString systemEmulator(const QString& system_name)

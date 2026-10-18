@@ -83,7 +83,19 @@ struct Context {
     // apps picked with "Other installed app": package -> its game screen
     mutable HashMap<QString, QString> app_components;
     HashMap<QString, QStringList> emulators;  // emulator name -> "package/activity" entries
+    QStringList ignored_dirs;  // folders skipped when looking for games and media
 };
+
+/// Whether the path is one of the ignored folders or inside one
+bool is_ignored(const QString& path, const QStringList& ignored_dirs)
+{
+    for (const QString& dir : ignored_dirs) {
+        if (path.compare(dir, Qt::CaseInsensitive) == 0
+            || path.startsWith(dir % QLatin1Char('/'), Qt::CaseInsensitive))
+            return true;
+    }
+    return false;
+}
 
 
 QString read_file(const QString& path)
@@ -411,6 +423,13 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
                           bool& emulator_installed, QString& error)
 {
     const QStringList tokens = split_esde_command(raw);
+
+    // ES-DE's Android apps: the game file holds the app's package name
+    if (!tokens.isEmpty() && tokens.first().startsWith(QLatin1String("%ANDROIDAPP%="))) {
+        emulator_installed = true;
+        return QStringLiteral("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER {inject-app:{file.path}}");
+    }
+
     static const QRegularExpression rx_emulator(QStringLiteral("^%EMULATOR_([^%]+)%$"));
     const auto emu_match = tokens.isEmpty() ? QRegularExpressionMatch() : rx_emulator.match(tokens.first());
     if (!emu_match.hasMatch()) {
@@ -467,10 +486,18 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
         }
 
         QString value = unquote(token.mid(key_end + 2));
+        // %INJECT%=<file>: the contents of that file (eg. a Steam app id in
+        // a .steam file), filled in for each game by resolve_injects()
+        const bool inject = value.startsWith(QLatin1String("%INJECT%="));
+        if (inject)
+            value = value.mid(9);
         if (!expand_variables(value, package, rom_root, ctx.primary_storage)) {
             error = QStringLiteral("unsupported variable in `%1`").arg(token);
             return {};
         }
+
+        if (inject)
+            value = QStringLiteral("{inject:") % value % QLatin1Char('}');
 
         if (key == QLatin1String("ACTION"))                       out << QStringLiteral("-a") << value;
         else if (key == QLatin1String("CATEGORY"))                out << QStringLiteral("-c") << value;
@@ -490,6 +517,52 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
     for (const QString& arg : out)
         quoted.append(quote_arg(arg));
     return quoted.join(QLatin1Char(' '));
+}
+
+/// Fills in the {inject:<file>} and {inject-app:<file>} parts of a command
+/// with the contents of that file, for one game
+QString resolve_injects(const QString& cmd, const QFileInfo& game_file)
+{
+    if (!cmd.contains(QLatin1String("{inject")))
+        return cmd;
+
+    const auto file_text = [&game_file](QString expr) {
+        expr.replace(QLatin1String("{file.path}"), game_file.absoluteFilePath())
+            .replace(QLatin1String("{file.basename}"), game_file.completeBaseName())
+            .replace(QLatin1String("{file.name}"), game_file.fileName())
+            .replace(QLatin1String("{file.dir}"), game_file.absolutePath());
+        const QFileInfo finfo(QDir(game_file.absolutePath()), expr);
+        if (!finfo.isFile())
+            return QString();
+        QFile file(finfo.absoluteFilePath());
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            return QString();
+        return QString::fromUtf8(file.read(4096)).trimmed();
+    };
+
+    QString out = cmd;
+    static const QRegularExpression rx(QStringLiteral("\\{inject(-app)?:((?:\\{[^}]*\\}|[^{}])*)\\}"));
+    QRegularExpressionMatch match;
+    int from = 0;
+    while ((match = rx.match(out, from)).hasMatch()) {
+        QString value = file_text(match.captured(2));
+        QString replacement;
+        if (!match.captured(1).isEmpty()) {
+            // an app: "package" or "package/activity"; an empty file means
+            // the file name is the package
+            if (value.isEmpty())
+                value = game_file.completeBaseName();
+            replacement = value.contains(QLatin1Char('/'))
+                ? QStringLiteral("-n ") % quote_arg(value)
+                : QStringLiteral("-p ") % quote_arg(value);
+        }
+        else {
+            replacement = quote_arg(value);
+        }
+        out.replace(match.capturedStart(), match.capturedLength(), replacement);
+        from = match.capturedStart() + replacement.length();
+    }
+    return out;
 }
 
 /// The command for a label chosen in ES-DE (system-wide or per game), or else
@@ -619,9 +692,9 @@ bool has_extension(const QString& filename, const QStringList& extensions)
 /// source read later wins
 void find_media(const QString& system_media_dir, const QString& system_dir,
                 const HashMap<QString, model::Game*>& extless_path_to_game, size_t& found_assets,
-                bool to_front = false)
+                bool to_front = false, const QStringList& ignored_dirs = {})
 {
-    if (!QFileInfo(system_media_dir).isDir())
+    if (!QFileInfo(system_media_dir).isDir() || is_ignored(QDir::cleanPath(system_media_dir), ignored_dirs))
         return;
 
     HashMap<QString, QString> existing_dirs;  // lowercase -> actual folder name
@@ -643,6 +716,8 @@ void find_media(const QString& system_media_dir, const QString& system_dir,
             while (file_it.hasNext()) {
                 file_it.next();
                 const QFileInfo finfo = file_it.fileInfo();
+                if (!ignored_dirs.isEmpty() && is_ignored(::clean_abs_path(finfo), ignored_dirs))
+                    continue;
 
                 // the media tree mirrors the ROM folder, eg. covers/Multidisk/Game.png
                 const QString rel_dir = type_dir.relativeFilePath(finfo.absolutePath());
@@ -894,6 +969,8 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
             const QFileInfo finfo = file_it.fileInfo();
             if (!has_extension(finfo.fileName(), extensions))
                 continue;
+            if (is_ignored(::clean_abs_path(finfo), ctx.ignored_dirs))
+                continue;
             if (!show_hidden && gamelist.hidden_paths.contains(::clean_abs_path(finfo)))
                 continue;
             candidates.push_back(finfo);
@@ -965,7 +1042,11 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
             if (alt_it != gamelist.game_alt_labels.cend() && may_set) {
                 const QString cmd = pick_command(sys, alt_it->second, ctx, rom_root);
                 if (!cmd.isEmpty())
-                    game_ptr->setLaunchCmd(cmd);
+                    game_ptr->setLaunchCmd(resolve_injects(cmd, first));
+            }
+            else if (default_cmd.contains(QLatin1String("{inject")) && may_set) {
+                // the command needs something from this game's file
+                game_ptr->setLaunchCmd(resolve_injects(default_cmd, first));
             }
             else if (is_new ? default_cmd != collection.commonLaunchCmd() : may_set) {
                 game_ptr->setLaunchCmd(default_cmd);
@@ -1100,7 +1181,8 @@ HashMap<QString, QString> build_aliases(const HashMap<QString, EsdeSystem>& syst
 
 /// ES-DE system name -> its folders in the library (system dir, ROMs folder)
 HashMap<QString, std::vector<std::pair<QString, QString>>> find_library_systems(
-    const QStringList& library_dirs, const HashMap<QString, QString>& aliases)
+    const QStringList& library_dirs, const HashMap<QString, QString>& aliases,
+    const QStringList& ignored_dirs = {})
 {
     HashMap<QString, std::vector<std::pair<QString, QString>>> out;
     const auto resolve = [&aliases](const QString& folder_name) {
@@ -1123,8 +1205,9 @@ HashMap<QString, std::vector<std::pair<QString, QString>>> find_library_systems(
         // ...or a ROMs folder with system folders in it
         for (const QString& sub : QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
             const QString system = resolve(sub);
-            if (!system.isEmpty())
-                out[system].emplace_back(QDir::cleanPath(dir % QLatin1Char('/') % sub), dir);
+            const QString sub_path = QDir::cleanPath(dir % QLatin1Char('/') % sub);
+            if (!system.isEmpty() && !is_ignored(sub_path, ignored_dirs))
+                out[system].emplace_back(sub_path, dir);
         }
     }
     return out;
@@ -1406,11 +1489,19 @@ static void copy_game_details(const model::Game& src, model::Game& dst)
         dst.extraMapMut().insert(it.key(), it.value());
 }
 
-/// Reads Pegasus metadata files only for their game details (names,
-/// descriptions, ratings, art, x- fields...), applied to the games Pegasus X
-/// found by file path. Their collections and launch commands aren't used, so
-/// the games aren't listed twice and keep the emulator picked in Pegasus X.
-static size_t apply_pegasus_details(const QStringList& metafiles, providers::SearchContext& sctx, const QString& log_tag)
+/// Reads the Pegasus metadata files in the library folders:
+/// - games the library already found (by file) get the file's details, and
+///   their own launch line if the entry has one (eg. a Windows game started
+///   through GameNative, an Android app)
+/// - games in them the library didn't find (files outside the system
+///   folders or with other extensions, apps...) are added as they are, to the
+///   library's collection of that system or else to the file's own collection
+/// Games whose own launch line was used are added to `own_cmd_games`.
+static size_t import_pegasus_metadata(const QStringList& metafiles, providers::SearchContext& sctx,
+                                      const HashMap<QString, QString>& aliases,
+                                      const HashMap<QString, EsdeSystem>& systems,
+                                      const QStringList& ignored_dirs,
+                                      QSet<model::Game*>& own_cmd_games, const QString& log_tag)
 {
     if (metafiles.isEmpty())
         return 0;
@@ -1418,18 +1509,87 @@ static size_t apply_pegasus_details(const QStringList& metafiles, providers::Sea
     providers::SearchContext tmp_sctx(QStringList {});
     const providers::pegasus::Metadata metahelper(log_tag);
     for (const QString& path : metafiles) {
-        Log::info(log_tag, LOGMSG("Reading game details from `%1`").arg(::pretty_path(path)));
+        Log::info(log_tag, LOGMSG("Reading `%1`").arg(::pretty_path(path)));
         metahelper.apply_metafile(path, tmp_sctx);  // its file filters aren't needed
     }
 
+    // the files of each game in the metadata
+    HashMap<model::Game*, std::vector<std::pair<QString, model::GameFile*>>> tmp_files;
+    for (const auto& entry : tmp_sctx.current_filepath_to_entry_map())
+        tmp_files[entry.second->parentGame()].emplace_back(entry.first, entry.second);
+
     size_t updated = 0;
-    // TODO: C++17
-    for (const auto& entry : tmp_sctx.current_filepath_to_entry_map()) {
-        model::Game* const game = sctx.game_by_filepath(entry.first);
-        if (!game)
-            continue;
-        copy_game_details(*entry.second->parentGame(), *game);
-        updated++;
+    QSet<model::Game*> seen;
+    for (const auto& coll_entry : tmp_sctx.current_collection_games()) {
+        const model::Collection& tmp_coll = *coll_entry.first;
+        QString system = system_of_folder(tmp_coll.shortName(), aliases);
+        if (system.isEmpty())
+            system = system_of_folder(tmp_coll.name(), aliases);
+
+        for (model::Game* const src : coll_entry.second) {
+            if (seen.contains(src))
+                continue;
+            seen.insert(src);
+
+            const auto files_it = tmp_files.find(src);
+            if (files_it == tmp_files.cend())
+                continue;
+            auto files = files_it->second;
+            files.erase(std::remove_if(files.begin(), files.end(), [&ignored_dirs](const std::pair<QString, model::GameFile*>& f) {
+                return !f.second->hasUri() && is_ignored(f.first, ignored_dirs);
+            }), files.end());
+            if (files.empty())
+                continue;
+
+            // an entry's own launch line, not the one it got from its collection
+            const bool own_cmd = !src->launchCmd().isEmpty() && src->launchCmd() != tmp_coll.commonLaunchCmd();
+
+            model::Game* dst = nullptr;
+            for (const auto& f : files) {
+                dst = sctx.game_by_filepath(f.first);
+                if (dst)
+                    break;
+            }
+
+            if (!dst) {
+                // not found by the library: add it as it is
+                model::Collection* coll = nullptr;
+                const auto sys_it = systems.find(system);
+                if (sys_it != systems.cend()) {
+                    const EsdeSystem& sys = sys_it->second;
+                    coll = sctx.get_or_create_collection(sys.fullname.isEmpty() ? sys.name : sys.fullname);
+                    if (coll->shortName().isEmpty() || coll->shortName() == coll->name().toLower())
+                        coll->setShortName(theme_short_name(sys.name));
+                }
+                else {
+                    coll = sctx.get_or_create_collection(tmp_coll.name());
+                    if (!tmp_coll.shortName().isEmpty())
+                        coll->setShortName(tmp_coll.shortName());
+                }
+                dst = sctx.create_game_for(*coll);
+                for (const auto& f : files) {
+                    if (f.second->hasUri())
+                        sctx.game_add_uri(*dst, f.second->uri());
+                    else
+                        sctx.game_add_filepath(*dst, f.first);
+                }
+                sctx.game_add_to(*dst, *coll);
+                if (!own_cmd && !src->launchCmd().isEmpty()) {
+                    dst->setLaunchCmd(src->launchCmd());
+                    dst->setLaunchWorkdir(src->launchWorkdir());
+                    dst->setLaunchCmdBasedir(src->launchCmdBasedir());
+                }
+            }
+
+            copy_game_details(*src, *dst);
+            if (own_cmd) {
+                dst->setLaunchCmd(src->launchCmd());
+                dst->setLaunchWorkdir(src->launchWorkdir());
+                dst->setLaunchCmdBasedir(src->launchCmdBasedir());
+                own_cmd_games.insert(dst);
+            }
+            updated++;
+        }
     }
 
     tmp_sctx.discard_all();
@@ -1682,7 +1842,8 @@ static size_t fix_other_launch_commands(providers::SearchContext& sctx, const Co
                                         const HashMap<QString, EsdeSystem>& systems,
                                         const HashMap<QString, QString>& aliases,
                                         const HashMap<QString, QString>& meta_cmds,
-                                        const QSet<model::Game*>& library_games)
+                                        const QSet<model::Game*>& library_games,
+                                        const QSet<model::Game*>& keep_cmd_games = {})
 {
     // a file of every game, for the ROMs folder some commands need
     HashMap<model::Game*, QString> game_paths;
@@ -1723,6 +1884,7 @@ static size_t fix_other_launch_commands(providers::SearchContext& sctx, const Co
             if (library_games.contains(game) || done.contains(game))
                 continue;
             done.insert(game);
+            const bool keep_own = keep_cmd_games.contains(game);
 
             const auto path_it = game_paths.find(game);
             const QString rom_root = path_it != game_paths.cend()
@@ -1731,8 +1893,10 @@ static size_t fix_other_launch_commands(providers::SearchContext& sctx, const Co
             const QString current = game->launchCmd();
 
             QString replacement;
-            if (!picked.isEmpty()) {
+            if (!picked.isEmpty() && !keep_own) {
                 replacement = pick_command(sys, picked, ctx, rom_root);
+                if (path_it != game_paths.cend())
+                    replacement = resolve_injects(replacement, QFileInfo(path_it->second));
             }
             else {
                 const QString component = command_component(current);
@@ -1784,6 +1948,8 @@ Provider& LibraryProvider::run(SearchContext& sctx)
         load_config(ctx, custom_dir, systems, system_order);
     }
     const HashMap<QString, QString> aliases = build_aliases(systems, system_order);
+    for (const QString& dir : pegasusx::ignoredDirs())
+        ctx.ignored_dirs.append(QDir::cleanPath(dir));
 
     // the emulators named in the user's metadata files are each system's default
     const HashMap<QString, QString> meta_cmds = metadata_commands(aliases, display_name());
@@ -1805,7 +1971,7 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             show_hidden = false;
     }
 
-    const auto library_systems = find_library_systems(library_dirs, aliases);
+    const auto library_systems = find_library_systems(library_dirs, aliases, ctx.ignored_dirs);
     Log::info(display_name(), LOGMSG("%1 system folders recognized").arg(QString::number(library_systems.size())));
 
     const QStringList media_dirs = pegasusx::libraryMediaDirs();
@@ -1884,9 +2050,16 @@ Provider& LibraryProvider::run(SearchContext& sctx)
         found_systems.push_back(std::move(found));
     }
 
-    const size_t detailed = apply_pegasus_details(find_library_metafiles(library_dirs), sctx, display_name());
+    QStringList metafiles = find_library_metafiles(library_dirs);
+    metafiles.erase(std::remove_if(metafiles.begin(), metafiles.end(), [&ctx](const QString& path) {
+        return is_ignored(path, ctx.ignored_dirs);
+    }), metafiles.end());
+    QSet<model::Game*> own_cmd_games;
+    const size_t detailed = import_pegasus_metadata(metafiles, sctx, aliases, systems, ctx.ignored_dirs,
+                                                    own_cmd_games, display_name());
     if (detailed > 0)
-        Log::info(display_name(), LOGMSG("%1 games got details from Pegasus metadata files").arg(QString::number(detailed)));
+        Log::info(display_name(), LOGMSG("%1 games from Pegasus metadata files (%2 with their own launch line)")
+            .arg(QString::number(detailed), QString::number(own_cmd_games.size())));
 
     // names from gamelists or metadata files may carry the first disc's tag
     clean_disc_titles(all_multi_disc_games);
@@ -1918,12 +2091,12 @@ Provider& LibraryProvider::run(SearchContext& sctx)
                     ordered.prepend(sources.at(i));
             }
             for (const QString& media_dir : ordered)
-                find_media(media_dir, system_dir, found.scan.extless_path_to_game, found_assets, true);
+                find_media(media_dir, system_dir, found.scan.extless_path_to_game, found_assets, true, ctx.ignored_dirs);
         }
     }
 
     // 3. games from other places that belong to a known system
-    const size_t fixed = fix_other_launch_commands(sctx, ctx, systems, aliases, meta_cmds, library_games);
+    const size_t fixed = fix_other_launch_commands(sctx, ctx, systems, aliases, meta_cmds, library_games, own_cmd_games);
     if (fixed > 0)
         Log::info(display_name(), LOGMSG("%1 games from other sources got a working emulator").arg(QString::number(fixed)));
 
@@ -2076,6 +2249,7 @@ EmulatorTest test_emulator(const QString& system_name)
         result.error = QStringLiteral("None of this system's emulators can be launched");
         return result;
     }
+    command = resolve_injects(command, game_file);
     Log::info(ctx.log_tag, LOGMSG("Testing `%1` with: %2").arg(result.game, command));
 
     // the same variables the launcher fills in

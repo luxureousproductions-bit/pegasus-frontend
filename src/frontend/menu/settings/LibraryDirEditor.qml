@@ -97,6 +97,9 @@ FocusScope {
             text: (root.mode === "media"
                 ? qsTr("Art in <system>/covers, <system>/screenshots, <system>/manuals and so on.\n"
                      + "These win over metadata, the ROM folders' own media and ES-DE. A folder lower in the list wins:")
+                : root.mode === "ignore"
+                ? qsTr("These folders are skipped when looking for games, metadata and media,\n"
+                     + "eg. a bios, saves or extras folder inside a system folder:")
                 : root.mode === "esde"
                 ? qsTr("Pick your whole ES-DE folder, or only parts of it: downloaded_media, gamelists,\n"
                      + "or one system's folder in them (downloaded_media/psx, gamelists/psx):")
@@ -143,6 +146,7 @@ FocusScope {
 
                     model: root.mode === "media" ? Internal.settings.libraryMediaDirs
                          : root.mode === "esde" ? Internal.settings.esdeImports
+                         : root.mode === "ignore" ? Internal.settings.ignoredDirs
                          : Internal.settings.libraryRomDirs
                     delegate: GameDirEditorEntry {
                         selected: root.isSelected(index)
@@ -201,6 +205,8 @@ FocusScope {
                             Internal.settings.removeLibraryMediaDirs(root.selectedIndices);
                         else if (root.mode === "esde")
                             Internal.settings.removeEsdeImports(root.selectedIndices);
+                        else if (root.mode === "ignore")
+                            Internal.settings.removeIgnoredDirs(root.selectedIndices);
                         else
                             Internal.settings.removeLibraryRomDirs(root.selectedIndices);
                         root.selectedIndices = [];
@@ -250,6 +256,8 @@ FocusScope {
                 Internal.settings.addLibraryMediaDir(dir_path);
             else if (root.mode === "esde")
                 Internal.settings.addEsdeImport(dir_path);
+            else if (root.mode === "ignore")
+                Internal.settings.addIgnoredDir(dir_path);
             else
                 Internal.settings.addLibraryRomDir(dir_path);
             list.focus = true;

@@ -58,6 +58,7 @@ class Settings : public QObject {
     Q_PROPERTY(QStringList libraryRomDirs READ libraryRomDirs NOTIFY libraryChanged)
     Q_PROPERTY(QStringList libraryMediaDirs READ libraryMediaDirs NOTIFY libraryChanged)
     Q_PROPERTY(QStringList esdeImports READ esdeImports NOTIFY libraryChanged)
+    Q_PROPERTY(QStringList ignoredDirs READ ignoredDirs NOTIFY libraryChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
     QML_CONST_PROPERTY(model::Locales, locales)
@@ -97,12 +98,15 @@ public:
     QStringList libraryRomDirs() const;
     QStringList libraryMediaDirs() const;
     QStringList esdeImports() const;
+    QStringList ignoredDirs() const;
     Q_INVOKABLE void addLibraryRomDir(const QString&);
     Q_INVOKABLE void removeLibraryRomDirs(const QVariantList&);
     Q_INVOKABLE void addLibraryMediaDir(const QString&);
     Q_INVOKABLE void removeLibraryMediaDirs(const QVariantList&);
     Q_INVOKABLE void addEsdeImport(const QString&);
     Q_INVOKABLE void removeEsdeImports(const QVariantList&);
+    Q_INVOKABLE void addIgnoredDir(const QString&);
+    Q_INVOKABLE void removeIgnoredDirs(const QVariantList&);
     /// [{ name, fullname, current, defaultLabel, options: [{ label, installed }] }]
     Q_INVOKABLE QVariantList emulatorSystems() const;
     Q_INVOKABLE void setSystemEmulator(const QString& system_name, const QString& label);

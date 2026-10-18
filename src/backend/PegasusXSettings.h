@@ -42,6 +42,10 @@ void setLibraryMediaDirs(const QStringList&);
 QStringList esdeImports();
 void setEsdeImports(const QStringList&);
 
+/// Folders inside the ROM and media folders that are skipped
+QStringList ignoredDirs();
+void setIgnoredDirs(const QStringList&);
+
 /// The emulator (an ES-DE command label) chosen for a system, empty for the default
 QString systemEmulator(const QString& system_name);
 void setSystemEmulator(const QString& system_name, const QString& label);

@@ -277,6 +277,13 @@ QStringList Settings::esdeImports() const
     return pegasusx::esdeImports();
 }
 
+QStringList Settings::ignoredDirs() const
+{
+    return pegasusx::ignoredDirs();
+}
+
+
+
 namespace {
 /// The list without the entries at the given indices
 QStringList remove_indices(QStringList list, const QVariantList& indices)
@@ -375,6 +382,34 @@ void Settings::removeEsdeImports(const QVariantList& indices)
     if (after.size() == before.size())
         return;
     pegasusx::setEsdeImports(after);
+    emit libraryChanged();
+}
+
+void Settings::addIgnoredDir(const QString& picked)
+{
+    // a picked file ignores its folder
+    const QString path = QFileInfo(picked).isFile() ? QFileInfo(picked).absolutePath() : picked;
+    if (!QFileInfo(path).isDir()) {
+        Log::warning(LOGMSG("Folder `%1` not found, ignored").arg(path));
+        return;
+    }
+    QStringList dirs = pegasusx::ignoredDirs();
+    const QString clean = ::pretty_path(path);
+    if (dirs.contains(clean))
+        return;
+    dirs.append(clean);
+    dirs.sort();
+    pegasusx::setIgnoredDirs(dirs);
+    emit libraryChanged();
+}
+
+void Settings::removeIgnoredDirs(const QVariantList& indices)
+{
+    const QStringList before = pegasusx::ignoredDirs();
+    const QStringList after = remove_indices(before, indices);
+    if (after.size() == before.size())
+        return;
+    pegasusx::setIgnoredDirs(after);
     emit libraryChanged();
 }
 
