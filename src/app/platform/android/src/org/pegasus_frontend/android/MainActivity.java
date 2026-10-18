@@ -337,7 +337,18 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
             Intent intent = IntentHelper.parseIntentCommand(args);
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            m_self.startActivity(intent);
+            try {
+                m_self.startActivity(intent);
+            }
+            catch (SecurityException e) {
+                // Pegasus X: Android refuses to pass on read access to a URI
+                // Pegasus itself has no grant for, eg. a storage document URI
+                // (as used for most standalone emulators); those emulators use
+                // their own folder access instead, so launch without the flag,
+                // the same way ES-DE does
+                intent.setFlags(intent.getFlags() & ~Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                m_self.startActivity(intent);
+            }
         }
         catch (Exception e) {
             return e.toString() + ": " + e.getMessage();
