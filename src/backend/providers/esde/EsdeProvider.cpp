@@ -44,6 +44,7 @@
 #include <QStringBuilder>
 #include <QVariantMap>
 #include <QXmlStreamReader>
+#include <algorithm>
 
 
 // The bundled ES-DE configuration lives in a resource file of this static library
@@ -740,17 +741,128 @@ const providers::Provider* find_provider(const char* codename)
     return nullptr;
 }
 
-/// Scans one system's folders for games and sets their launch commands
+/// What a system scan found, for the metadata and media steps after it
+struct ScanOutput {
+    HashMap<QString, model::Game*> extless_path_to_game;
+    std::vector<model::Game*> multi_disc_games;  ///< games made of several discs
+};
+
+/// The short name given to a system's collection. Themes pick system logos
+/// and art (and XboxOSv2 its RetroAchievements console) by short name; ES-DE
+/// names a few systems differently from what Pegasus themes use, or splits
+/// them into regional or hardware variants themes have no art for, so those
+/// get the name of the system themes know. The ES-DE name is still used for
+/// everything else (emulator choices, gamelists, media folders).
+QString theme_short_name(const QString& esde_name)
+{
+    static const HashMap<QString, QString> NAMES {
+        { QStringLiteral("n3ds"), QStringLiteral("3ds") },
+        { QStringLiteral("psvita"), QStringLiteral("vita") },
+        { QStringLiteral("pcfx"), QStringLiteral("pc-fx") },
+        { QStringLiteral("tg-cd"), QStringLiteral("pcenginecd") },
+        { QStringLiteral("megacd"), QStringLiteral("segacd") },
+        { QStringLiteral("megacdjp"), QStringLiteral("segacd") },
+        { QStringLiteral("famicom"), QStringLiteral("nes") },
+        { QStringLiteral("mark3"), QStringLiteral("mastersystem") },
+        { QStringLiteral("sega32xjp"), QStringLiteral("sega32x") },
+        { QStringLiteral("sega32xna"), QStringLiteral("sega32x") },
+        { QStringLiteral("neogeocdjp"), QStringLiteral("neogeocd") },
+        { QStringLiteral("satellaview"), QStringLiteral("snes") },
+        { QStringLiteral("sufami"), QStringLiteral("snes") },
+        { QStringLiteral("amiga600"), QStringLiteral("amiga") },
+        { QStringLiteral("amiga1200"), QStringLiteral("amiga") },
+        { QStringLiteral("amigacd32"), QStringLiteral("amiga") },
+        { QStringLiteral("cdtv"), QStringLiteral("amiga") },
+        { QStringLiteral("apple2gs"), QStringLiteral("apple2") },
+        { QStringLiteral("msxturbor"), QStringLiteral("msx2") },
+        { QStringLiteral("mame-advmame"), QStringLiteral("mame") },
+        { QStringLiteral("naomi"), QStringLiteral("arcade") },
+        { QStringLiteral("naomi2"), QStringLiteral("arcade") },
+        { QStringLiteral("naomigd"), QStringLiteral("arcade") },
+        { QStringLiteral("stv"), QStringLiteral("arcade") },
+        { QStringLiteral("triforce"), QStringLiteral("arcade") },
+        { QStringLiteral("type-x"), QStringLiteral("arcade") },
+        { QStringLiteral("consolearcade"), QStringLiteral("arcade") },
+        { QStringLiteral("pcarcade"), QStringLiteral("arcade") },
+        { QStringLiteral("lcdgames"), QStringLiteral("gameandwatch") },
+        { QStringLiteral("fpinball"), QStringLiteral("futurepinball") },
+        { QStringLiteral("dos"), QStringLiteral("pc") },
+        { QStringLiteral("doom"), QStringLiteral("ports") },
+        { QStringLiteral("quake"), QStringLiteral("ports") },
+    };
+    const auto it = NAMES.find(esde_name);
+    return it != NAMES.cend() ? it->second : esde_name;
+}
+
+/// Removes a disc tag like "(Disc 1)", "[CD2]", "(Disk 1 of 3)" or "(Side B)"
+QString strip_disc_tag(const QString& name)
+{
+    static const QRegularExpression rx_disc(
+        QStringLiteral("\\s*[\\(\\[]\\s*(disc|disk|cd|side)\\s*[0-9a-z]{1,2}(\\s*of\\s*[0-9]{1,2})?\\s*[\\)\\]]"),
+        QRegularExpression::CaseInsensitiveOption);
+    QString out = name;
+    out.remove(rx_disc);
+    return out.simplified();
+}
+
+bool has_disc_tag(const QString& name)
+{
+    return strip_disc_tag(name) != name.simplified();
+}
+
+/// The files a playlist or disc image file points to: the discs of an .m3u,
+/// the tracks of a .cue (FILE lines) or a .gdi (5th column)
+QStringList referenced_files(const QFileInfo& finfo)
+{
+    const QString suffix = finfo.suffix().toLower();
+    if (suffix != QLatin1String("m3u") && suffix != QLatin1String("cue") && suffix != QLatin1String("gdi"))
+        return {};
+
+    QFile file(finfo.absoluteFilePath());
+    if (file.size() > 1024 * 1024 || !file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+
+    static const QRegularExpression rx_cue_file(QStringLiteral("^\\s*FILE\\s+(\"([^\"]+)\"|(\\S+))"),
+                                                QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression rx_gdi_line(QStringLiteral("^\\s*\\d+\\s+\\d+\\s+\\d+\\s+\\d+\\s+(\"([^\"]+)\"|(\\S+))"));
+
+    const QDir dir = finfo.absoluteDir();
+    QStringList out;
+    const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+    for (QString line : lines) {
+        line = line.trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+            continue;
+
+        QString name;
+        if (suffix == QLatin1String("m3u")) {
+            name = line;
+        }
+        else {
+            const auto match = (suffix == QLatin1String("cue") ? rx_cue_file : rx_gdi_line).match(line);
+            if (match.hasMatch())
+                name = match.captured(2).isEmpty() ? match.captured(3) : match.captured(2);
+        }
+        if (!name.isEmpty())
+            out.append(::clean_abs_path(QFileInfo(dir, QDir::fromNativeSeparators(name))));
+    }
+    return out;
+}
+
+/// Scans one system's folders for games and sets their launch commands.
+/// Multi-disc games become one game: the discs and tracks listed in an
+/// .m3u, .cue or .gdi file are not listed on their own, and files that only
+/// differ in a disc tag ("Game (Disc 1)", "Game (Disc 2)") are combined.
 size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const EsdeSystem& sys,
                    const std::vector<std::pair<QString, QString>>& dirs,  // (system dir, ROMs folder)
                    const GamelistInfo& gamelist, const QString& system_label, bool show_hidden,
                    bool override_existing,
-                   HashMap<QString, model::Game*>& extless_path_to_game)
+                   ScanOutput& output)
 {
     const QStringList extensions = parse_extensions(sys.extensions);
 
     model::Collection& collection = *sctx.get_or_create_collection(sys.fullname.isEmpty() ? sys.name : sys.fullname);
-    collection.setShortName(sys.name);
+    collection.setShortName(theme_short_name(sys.name));
 
     size_t found_games = 0;
     for (const auto& dir_entry : dirs) {
@@ -763,6 +875,8 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
         if (collection.commonLaunchCmd().isEmpty())
             collection.setCommonLaunchCmd(default_cmd);
 
+        // 1. every file (or folder) with one of the system's extensions
+        std::vector<QFileInfo> candidates;
         constexpr auto entry_filters = QDir::Files | QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot;
         constexpr auto entry_flags = QDirIterator::FollowSymlinks | QDirIterator::Subdirectories;
         QDirIterator file_it(system_dir, entry_filters, entry_flags);
@@ -771,10 +885,49 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
             const QFileInfo finfo = file_it.fileInfo();
             if (!has_extension(finfo.fileName(), extensions))
                 continue;
-
-            QString path = ::clean_abs_path(finfo);
-            if (!show_hidden && gamelist.hidden_paths.contains(path))
+            if (!show_hidden && gamelist.hidden_paths.contains(::clean_abs_path(finfo)))
                 continue;
+            candidates.push_back(finfo);
+        }
+        std::sort(candidates.begin(), candidates.end(), [](const QFileInfo& a, const QFileInfo& b) {
+            return a.absoluteFilePath().compare(b.absoluteFilePath(), Qt::CaseInsensitive) < 0;
+        });
+
+        // 2. discs and tracks that an .m3u, .cue or .gdi already covers
+        QSet<QString> covered;
+        for (const QFileInfo& finfo : candidates) {
+            if (finfo.isFile()) {
+                for (const QString& path : referenced_files(finfo))
+                    covered.insert(path);
+            }
+        }
+
+        // 3. group the rest: one entry per game, discs of the same game together
+        std::vector<std::vector<QFileInfo>> groups;
+        HashMap<QString, size_t> disc_group_index;  // dir/title without disc tag/ext -> group
+        for (const QFileInfo& finfo : candidates) {
+            const QString path = ::clean_abs_path(finfo);
+            if (covered.contains(path))
+                continue;
+
+            if (finfo.isFile() && has_disc_tag(finfo.completeBaseName())) {
+                const QString key = ::clean_abs_dir(finfo) % QLatin1Char('/')
+                    % strip_disc_tag(finfo.completeBaseName()).toLower()
+                    % QLatin1Char('.') % finfo.suffix().toLower();
+                const auto it = disc_group_index.find(key);
+                if (it != disc_group_index.cend()) {
+                    groups[it->second].push_back(finfo);
+                    continue;
+                }
+                disc_group_index.emplace(key, groups.size());
+            }
+            groups.push_back({ finfo });
+        }
+
+        // 4. the games
+        for (const std::vector<QFileInfo>& group : groups) {
+            const QFileInfo& first = group.front();
+            const QString path = ::clean_abs_path(first);
 
             model::Game* game_ptr = sctx.game_by_filepath(path);
             const bool is_new = !game_ptr;
@@ -784,10 +937,20 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
             }
             sctx.game_add_to(*game_ptr, collection);
 
+            if (group.size() > 1) {
+                for (size_t i = 1; i < group.size(); i++) {
+                    const QString disc_path = ::clean_abs_path(group[i]);
+                    if (!sctx.game_by_filepath(disc_path))  // unless another source already has it
+                        sctx.game_add_filepath(*game_ptr, disc_path);
+                }
+                if (is_new)
+                    game_ptr->setTitle(strip_disc_tag(first.completeBaseName()));
+                output.multi_disc_games.push_back(game_ptr);
+            }
+
             // A game-specific emulator picked in ES-DE, or this folder's default.
             // Games already found by another source (eg. a Pegasus metadata file
-            // with its own launch command) keep theirs, unless an emulator was
-            // picked for this system in Pegasus X
+            // with its own launch command) keep theirs, unless override_existing
             const bool may_set = is_new || override_existing || game_ptr->launchCmd().isEmpty();
             const auto alt_it = gamelist.game_alt_labels.find(path);
             if (alt_it != gamelist.game_alt_labels.cend() && may_set) {
@@ -799,14 +962,32 @@ size_t scan_system(providers::SearchContext& sctx, const Context& ctx, const Esd
                 game_ptr->setLaunchCmd(default_cmd);
             }
 
-            QString extless = path;
-            if (!finfo.isDir())
-                extless = ::clean_abs_dir(finfo) % QLatin1Char('/') % finfo.completeBaseName();
-            extless_path_to_game.emplace(std::move(extless), game_ptr);
+            // media is matched by the file name of any disc, or of the playlist
+            for (const QFileInfo& finfo : group) {
+                QString extless = ::clean_abs_path(finfo);
+                if (!finfo.isDir())
+                    extless = ::clean_abs_dir(finfo) % QLatin1Char('/') % finfo.completeBaseName();
+                output.extless_path_to_game.emplace(std::move(extless), game_ptr);
+                if (group.size() > 1) {  // eg. covers/Game.png for "Game (Disc 1).chd"
+                    output.extless_path_to_game.emplace(
+                        ::clean_abs_dir(finfo) % QLatin1Char('/') % strip_disc_tag(finfo.completeBaseName()), game_ptr);
+                }
+            }
             found_games++;
         }
     }
     return found_games;
+}
+
+/// After the metadata step: names from a gamelist or metadata file may still
+/// carry the disc tag of the first disc ("Final Fantasy VII (Disc 1)")
+void clean_disc_titles(const std::vector<model::Game*>& games)
+{
+    for (model::Game* const game : games) {
+        const QString clean = strip_disc_tag(game->title());
+        if (clean != game->title() && !clean.isEmpty())
+            game->setTitle(clean);
+    }
 }
 
 /// The ES-DE system dirs (%ROMPATH% expanded for every ROMs folder that has it)
@@ -1185,9 +1366,9 @@ Provider& EsdeProvider::run(SearchContext& sctx)
             system_label = gamelist.system_alt_label;
 
         const bool picked_in_pegasusx = !pegasusx::systemEmulator(sys.name).isEmpty();
-        HashMap<QString, model::Game*> extless_path_to_game;
+        ScanOutput scan;
         const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden,
-                                               picked_in_pegasusx, extless_path_to_game);
+                                               picked_in_pegasusx, scan);
         if (found_games == 0)
             continue;
         found_games_total += found_games;
@@ -1200,10 +1381,11 @@ Provider& EsdeProvider::run(SearchContext& sctx)
             };
             metahelper.find_metadata_for(sysentry, sctx);
         }
+        clean_disc_titles(scan.multi_disc_games);
 
         // media from ES-DE/downloaded_media/<system>/<type>/
         for (const QString& system_dir : system_dirs)
-            find_media(media_root % QLatin1Char('/') % sys.name, system_dir, extless_path_to_game, found_assets);
+            find_media(media_root % QLatin1Char('/') % sys.name, system_dir, scan.extless_path_to_game, found_assets);
     }
 
     Log::info(display_name(), LOGMSG("%1 games and %2 media files found")
@@ -1271,6 +1453,8 @@ Provider& LibraryProvider::run(SearchContext& sctx)
     const float progress_step = library_systems.empty() ? 1.f : 1.f / library_systems.size();
     float progress = 0.f;
 
+    std::vector<model::Game*> all_multi_disc_games;
+
     for (const QString& system_name : system_order) {
         const auto lib_it = library_systems.find(system_name);
         if (lib_it == library_systems.cend())
@@ -1296,9 +1480,11 @@ Provider& LibraryProvider::run(SearchContext& sctx)
         // The library's launch commands always win for the games in its
         // folders, also over a command from a metadata file found through
         // 'Set game directories', which may name an emulator that isn't installed
-        HashMap<QString, model::Game*> extless_path_to_game;
+        ScanOutput scan;
         const size_t found_games = scan_system(sctx, ctx, sys, dirs, gamelist, system_label, show_hidden,
-                                               true, extless_path_to_game);
+                                               true, scan);
+        all_multi_disc_games.insert(all_multi_disc_games.end(),
+                                    scan.multi_disc_games.cbegin(), scan.multi_disc_games.cend());
         if (found_games == 0)
             continue;
         found_games_total += found_games;
@@ -1317,13 +1503,13 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             const QString folder_name = QFileInfo(system_dir).fileName();
             const QString system_media = find_subdir(media_root, { folder_name, sys.name });
             if (!system_media.isEmpty())
-                find_media(system_media, system_dir, extless_path_to_game, found_assets);
+                find_media(system_media, system_dir, scan.extless_path_to_game, found_assets);
 
             // then ES-DE's downloaded media for anything still missing
             if (!esde_media_root.isEmpty()) {
                 const QString esde_media = find_subdir(esde_media_root, { sys.name });
                 if (!esde_media.isEmpty() && QDir(esde_media) != QDir(system_media))
-                    find_media(esde_media, system_dir, extless_path_to_game, found_assets);
+                    find_media(esde_media, system_dir, scan.extless_path_to_game, found_assets);
             }
 
             // and the usual <system folder>/media/ for the Skraper-style reader
@@ -1335,6 +1521,9 @@ Provider& LibraryProvider::run(SearchContext& sctx)
     const size_t detailed = apply_pegasus_details(find_library_metafiles(library_dirs), sctx, display_name());
     if (detailed > 0)
         Log::info(display_name(), LOGMSG("%1 games got details from Pegasus metadata files").arg(QString::number(detailed)));
+
+    // names from gamelists or metadata files may carry the first disc's tag
+    clean_disc_titles(all_multi_disc_games);
 
     Log::info(display_name(), LOGMSG("%1 games and %2 media files found")
         .arg(QString::number(found_games_total), QString::number(found_assets)));
