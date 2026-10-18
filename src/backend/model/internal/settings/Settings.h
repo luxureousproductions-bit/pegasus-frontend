@@ -56,7 +56,8 @@ class Settings : public QObject {
     // Pegasus X library
     Q_PROPERTY(bool pegasusxLibrarySupported READ pegasusxLibrarySupported CONSTANT)
     Q_PROPERTY(QStringList libraryRomDirs READ libraryRomDirs NOTIFY libraryChanged)
-    Q_PROPERTY(QString libraryMediaDir READ libraryMediaDir NOTIFY libraryChanged)
+    Q_PROPERTY(QStringList libraryMediaDirs READ libraryMediaDirs NOTIFY libraryChanged)
+    Q_PROPERTY(QStringList esdeImports READ esdeImports NOTIFY libraryChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
     QML_CONST_PROPERTY(model::Locales, locales)
@@ -94,10 +95,14 @@ public:
     // Pegasus X library
     bool pegasusxLibrarySupported() const;
     QStringList libraryRomDirs() const;
-    QString libraryMediaDir() const;
+    QStringList libraryMediaDirs() const;
+    QStringList esdeImports() const;
     Q_INVOKABLE void addLibraryRomDir(const QString&);
     Q_INVOKABLE void removeLibraryRomDirs(const QVariantList&);
-    Q_INVOKABLE void setLibraryMediaDir(const QString&);
+    Q_INVOKABLE void addLibraryMediaDir(const QString&);
+    Q_INVOKABLE void removeLibraryMediaDirs(const QVariantList&);
+    Q_INVOKABLE void addEsdeImport(const QString&);
+    Q_INVOKABLE void removeEsdeImports(const QVariantList&);
     /// [{ name, fullname, current, defaultLabel, options: [{ label, installed }] }]
     Q_INVOKABLE QVariantList emulatorSystems() const;
     Q_INVOKABLE void setSystemEmulator(const QString& system_name, const QString& label);

@@ -31,8 +31,16 @@ QString settingsFilePath();
 QStringList libraryRomDirs();
 void setLibraryRomDirs(const QStringList&);
 
-QString libraryMediaDir();
-void setLibraryMediaDir(const QString&);
+/// Media folders, in the order they were added; a folder added later wins
+/// over an earlier one when both have art for the same game
+QStringList libraryMediaDirs();
+void setLibraryMediaDirs(const QStringList&);
+
+/// Folders and files picked from an ES-DE folder (the whole ES-DE folder,
+/// downloaded_media, gamelists, or a single system's folder in them); only
+/// these are used by the library, nothing from ES-DE is loaded on its own
+QStringList esdeImports();
+void setEsdeImports(const QStringList&);
 
 /// The emulator (an ES-DE command label) chosen for a system, empty for the default
 QString systemEmulator(const QString& system_name);

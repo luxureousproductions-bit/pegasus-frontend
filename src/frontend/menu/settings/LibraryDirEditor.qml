@@ -21,12 +21,13 @@ import QtQuick 2.6
 import QtQuick.Layouts 1.3
 
 
-// Pegasus X: picks the ROM folders of the Pegasus X library, or (mediaMode)
-// its single media folder. Based on GameDirEditor.
+// Pegasus X: picks the ROM folders of the Pegasus X library (mode "roms"),
+// its media folders ("media") or what to use from ES-DE ("esde").
+// Based on GameDirEditor.
 FocusScope {
     id: root
 
-    property bool mediaMode: false
+    property string mode: "roms"
     property bool mSettingsChanged: false
 
     signal close
@@ -93,9 +94,12 @@ FocusScope {
             id: info
             textFormat: Text.PlainText  // "<system>" must not be read as a tag
 
-            text: (root.mediaMode
-                ? qsTr("Pegasus X will look for game media in this folder, in\n"
-                     + "<system>/covers, <system>/screenshots, <system>/manuals and so on:")
+            text: (root.mode === "media"
+                ? qsTr("Art in <system>/covers, <system>/screenshots, <system>/manuals and so on.\n"
+                     + "Used after metadata, the ROM folders' own media and ES-DE. A folder lower in the list wins:")
+                : root.mode === "esde"
+                ? qsTr("Pick your whole ES-DE folder, or only parts of it: downloaded_media, gamelists,\n"
+                     + "or one system's folder in them (downloaded_media/psx, gamelists/psx):")
                 : qsTr("Pegasus X will look for system folders (snes, psx, gba...) in these folders.\n"
                      + "You can also add a single system folder:")) + api.tr
             color: "#eee"
@@ -137,9 +141,9 @@ FocusScope {
                     anchors.fill: parent
                     clip: true
 
-                    model: root.mediaMode
-                        ? (Internal.settings.libraryMediaDir !== "" ? [Internal.settings.libraryMediaDir] : [])
-                        : Internal.settings.libraryRomDirs
+                    model: root.mode === "media" ? Internal.settings.libraryMediaDirs
+                         : root.mode === "esde" ? Internal.settings.esdeImports
+                         : Internal.settings.libraryRomDirs
                     delegate: GameDirEditorEntry {
                         selected: root.isSelected(index)
                         onPressed: root.toggleIndex(index)
@@ -193,8 +197,10 @@ FocusScope {
                     icon: "\u2212"
                     color: "#e43"
                     onPressed: {
-                        if (root.mediaMode)
-                            Internal.settings.setLibraryMediaDir("");
+                        if (root.mode === "media")
+                            Internal.settings.removeLibraryMediaDirs(root.selectedIndices);
+                        else if (root.mode === "esde")
+                            Internal.settings.removeEsdeImports(root.selectedIndices);
                         else
                             Internal.settings.removeLibraryRomDirs(root.selectedIndices);
                         root.selectedIndices = [];
@@ -234,8 +240,10 @@ FocusScope {
 
         onCancel: list.focus = true
         onPick: {
-            if (root.mediaMode)
-                Internal.settings.setLibraryMediaDir(dir_path);
+            if (root.mode === "media")
+                Internal.settings.addLibraryMediaDir(dir_path);
+            else if (root.mode === "esde")
+                Internal.settings.addEsdeImport(dir_path);
             else
                 Internal.settings.addLibraryRomDir(dir_path);
             list.focus = true;

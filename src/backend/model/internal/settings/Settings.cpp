@@ -267,10 +267,35 @@ QStringList Settings::libraryRomDirs() const
     return pegasusx::libraryRomDirs();
 }
 
-QString Settings::libraryMediaDir() const
+QStringList Settings::libraryMediaDirs() const
 {
-    return pegasusx::libraryMediaDir();
+    return pegasusx::libraryMediaDirs();
 }
+
+QStringList Settings::esdeImports() const
+{
+    return pegasusx::esdeImports();
+}
+
+namespace {
+/// The list without the entries at the given indices
+QStringList remove_indices(QStringList list, const QVariantList& indices)
+{
+    std::vector<int> to_remove;
+    for (const QVariant& index : indices) {
+        bool ok = false;
+        const int idx = index.toInt(&ok);
+        if (ok && 0 <= idx && idx < list.size())
+            to_remove.push_back(idx);
+    }
+    // remove from the back, so the other indices stay valid
+    std::sort(to_remove.rbegin(), to_remove.rend());
+    to_remove.erase(std::unique(to_remove.begin(), to_remove.end()), to_remove.end());
+    for (const int idx : to_remove)
+        list.removeAt(idx);
+    return list;
+}
+} // namespace
 
 void Settings::addLibraryRomDir(const QString& path)
 {
@@ -293,34 +318,61 @@ void Settings::addLibraryRomDir(const QString& path)
 
 void Settings::removeLibraryRomDirs(const QVariantList& indices)
 {
-    QStringList dirs = pegasusx::libraryRomDirs();
-    std::vector<int> to_remove;
-    for (const QVariant& index : indices) {
-        bool ok = false;
-        const int idx = index.toInt(&ok);
-        if (ok && 0 <= idx && idx < dirs.size())
-            to_remove.push_back(idx);
-    }
-    if (to_remove.empty())
+    const QStringList before = pegasusx::libraryRomDirs();
+    const QStringList after = remove_indices(before, indices);
+    if (after.size() == before.size())
         return;
-
-    // remove from the back, so the other indices stay valid
-    std::sort(to_remove.rbegin(), to_remove.rend());
-    to_remove.erase(std::unique(to_remove.begin(), to_remove.end()), to_remove.end());
-    for (const int idx : to_remove)
-        dirs.removeAt(idx);
-
-    pegasusx::setLibraryRomDirs(dirs);
+    pegasusx::setLibraryRomDirs(after);
     emit libraryChanged();
 }
 
-void Settings::setLibraryMediaDir(const QString& path)
+void Settings::addLibraryMediaDir(const QString& path)
 {
-    if (!path.isEmpty() && !QFileInfo(path).isDir()) {
+    if (!QFileInfo(path).isDir()) {
         Log::warning(LOGMSG("Media folder `%1` not found, ignored").arg(path));
         return;
     }
-    pegasusx::setLibraryMediaDir(path.isEmpty() ? QString() : ::pretty_path(path));
+    // kept in the order added (not sorted): a later folder wins over an earlier one
+    QStringList dirs = pegasusx::libraryMediaDirs();
+    const QString clean = ::pretty_path(path);
+    dirs.removeAll(clean);
+    dirs.append(clean);
+    pegasusx::setLibraryMediaDirs(dirs);
+    emit libraryChanged();
+}
+
+void Settings::removeLibraryMediaDirs(const QVariantList& indices)
+{
+    const QStringList before = pegasusx::libraryMediaDirs();
+    const QStringList after = remove_indices(before, indices);
+    if (after.size() == before.size())
+        return;
+    pegasusx::setLibraryMediaDirs(after);
+    emit libraryChanged();
+}
+
+void Settings::addEsdeImport(const QString& path)
+{
+    if (!QFileInfo::exists(path)) {
+        Log::warning(LOGMSG("ES-DE folder `%1` not found, ignored").arg(path));
+        return;
+    }
+    QStringList paths = pegasusx::esdeImports();
+    const QString clean = ::pretty_path(path);
+    if (paths.contains(clean))
+        return;
+    paths.append(clean);
+    pegasusx::setEsdeImports(paths);
+    emit libraryChanged();
+}
+
+void Settings::removeEsdeImports(const QVariantList& indices)
+{
+    const QStringList before = pegasusx::esdeImports();
+    const QStringList after = remove_indices(before, indices);
+    if (after.size() == before.size())
+        return;
+    pegasusx::setEsdeImports(after);
     emit libraryChanged();
 }
 

@@ -25,7 +25,18 @@
 
 namespace {
 const QString KEY_ROM_DIRS = QStringLiteral("library/romDirs");
-const QString KEY_MEDIA_DIR = QStringLiteral("library/mediaDir");
+const QString KEY_MEDIA_DIR_OLD = QStringLiteral("library/mediaDir");  // single folder, before multiple
+const QString KEY_MEDIA_DIRS = QStringLiteral("library/mediaDirs");
+const QString KEY_ESDE_IMPORTS = QStringLiteral("library/esdeImports");
+
+void write_list(const QString& key, const QStringList& list)
+{
+    QSettings file(pegasusx::settingsFilePath(), QSettings::IniFormat);
+    if (list.isEmpty())
+        file.remove(key);
+    else
+        file.setValue(key, list);
+}
 const QString KEY_EMULATOR_PREFIX = QStringLiteral("emulators/");
 } // namespace
 
@@ -52,19 +63,32 @@ void setLibraryRomDirs(const QStringList& dirs)
         file.setValue(KEY_ROM_DIRS, dirs);
 }
 
-QString libraryMediaDir()
+QStringList libraryMediaDirs()
 {
     const QSettings file(settingsFilePath(), QSettings::IniFormat);
-    return file.value(KEY_MEDIA_DIR).toString();
+    QStringList dirs = file.value(KEY_MEDIA_DIRS).toStringList();
+    const QString old_dir = file.value(KEY_MEDIA_DIR_OLD).toString();
+    if (!old_dir.isEmpty() && !dirs.contains(old_dir))
+        dirs.prepend(old_dir);
+    return dirs;
 }
 
-void setLibraryMediaDir(const QString& dir)
+void setLibraryMediaDirs(const QStringList& dirs)
 {
+    write_list(KEY_MEDIA_DIRS, dirs);
     QSettings file(settingsFilePath(), QSettings::IniFormat);
-    if (dir.isEmpty())
-        file.remove(KEY_MEDIA_DIR);
-    else
-        file.setValue(KEY_MEDIA_DIR, dir);
+    file.remove(KEY_MEDIA_DIR_OLD);
+}
+
+QStringList esdeImports()
+{
+    const QSettings file(settingsFilePath(), QSettings::IniFormat);
+    return file.value(KEY_ESDE_IMPORTS).toStringList();
+}
+
+void setEsdeImports(const QStringList& paths)
+{
+    write_list(KEY_ESDE_IMPORTS, paths);
 }
 
 QString systemEmulator(const QString& system_name)

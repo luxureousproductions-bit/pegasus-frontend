@@ -43,8 +43,11 @@ public:
 
 /// Pegasus X: games from the ROM folders picked in Settings > Pegasus X library.
 /// System folders are recognized by name (ES-DE's names and common variants)
-/// and get ES-DE's launch commands, so no metadata files are needed. Media is
-/// read from the picked media folder (<system>/<type>/) and <system>/media/.
+/// and get ES-DE's launch commands, so no metadata files are needed.
+/// Details: ES-DE gamelists picked in "ES-DE import", a gamelist.xml in the
+/// system folder, then Pegasus metadata files (each wins over the previous).
+/// Art, first found wins: metadata files, the ROM folders' own media folders,
+/// media picked in "ES-DE import", then the picked media folders (newest first).
 class LibraryProvider : public Provider {
     Q_OBJECT
 

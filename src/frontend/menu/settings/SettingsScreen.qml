@@ -63,8 +63,9 @@ FocusScope {
         onOpenGameDirSettings: root.openModal("GameDirEditor.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
-        onOpenLibraryRomDirs: root.openModalWith("LibraryDirEditor.qml", { "mediaMode": false })
-        onOpenLibraryMediaDir: root.openModalWith("LibraryDirEditor.qml", { "mediaMode": true })
+        onOpenLibraryRomDirs: root.openModalWith("LibraryDirEditor.qml", { "mode": "roms" })
+        onOpenLibraryMediaDir: root.openModalWith("LibraryDirEditor.qml", { "mode": "media" })
+        onOpenEsdeImport: root.openModalWith("LibraryDirEditor.qml", { "mode": "esde" })
         onOpenEmulatorSettings: root.openModal("EmulatorEditor.qml")
         onReloadRequested: Internal.settings.reloadProviders()
     }
