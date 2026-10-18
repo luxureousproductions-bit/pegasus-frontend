@@ -82,14 +82,6 @@ FocusScope {
             section: "general"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Screen shape")
-            desc: QT_TR_NOOP("Fit the screen to a shape, with black bars around it. Auto uses the whole screen.")
-            type: SettingsEntry.Type.Select
-            selectBox: aspectBox
-            selectValue: Internal.settings.screenAspect === "auto" ? qsTr("Auto") + api.tr : Internal.settings.screenAspect
-            section: "general"
-        },
-        SettingsEntry {
             label: QT_TR_NOOP("Fullscreen mode")
             desc: QT_TR_NOOP("On some platforms this setting may have no effect.")
             type: SettingsEntry.Type.Bool
@@ -264,32 +256,6 @@ FocusScope {
 
         onClose: options.focus = true
         onSelect: Internal.settings.locales.currentIndex = index
-    }
-    ListModel {
-        id: aspectModel
-        ListElement { name: "Auto"; value: "auto" }
-        ListElement { name: "16:9"; value: "16:9" }
-        ListElement { name: "16:10"; value: "16:10" }
-        ListElement { name: "5:3"; value: "5:3" }
-        ListElement { name: "3:2"; value: "3:2" }
-        ListElement { name: "4:3"; value: "4:3" }
-        ListElement { name: "1:1"; value: "1:1" }
-    }
-    MultivalueBox {
-        id: aspectBox
-        z: 3
-
-        model: aspectModel
-        index: {
-            for (var i = 0; i < aspectModel.count; i++) {
-                if (aspectModel.get(i).value === Internal.settings.screenAspect)
-                    return i;
-            }
-            return 0;
-        }
-
-        onClose: options.focus = true
-        onSelect: Internal.settings.screenAspect = aspectModel.get(index).value
     }
     MultivalueBox {
         id: themeBox

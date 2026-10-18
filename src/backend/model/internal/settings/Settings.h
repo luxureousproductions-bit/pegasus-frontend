@@ -60,7 +60,6 @@ class Settings : public QObject {
     Q_PROPERTY(QStringList esdeImports READ esdeImports NOTIFY libraryChanged)
     Q_PROPERTY(QStringList ignoredDirs READ ignoredDirs NOTIFY libraryChanged)
     Q_PROPERTY(QStringList hiddenGames READ hiddenGames NOTIFY libraryChanged)
-    Q_PROPERTY(QString screenAspect READ screenAspect WRITE setScreenAspect NOTIFY screenAspectChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
     QML_CONST_PROPERTY(model::Locales, locales)
@@ -131,9 +130,6 @@ public:
     /// "package/activity" of an installed app's screen that opens game files
     Q_INVOKABLE QString appGameActivity(const QString& package_name) const;
 
-    QString screenAspect() const;
-    void setScreenAspect(const QString&);
-
 signals:
     void fullscreenChanged();
     void mouseSupportChanged();
@@ -144,7 +140,6 @@ signals:
     void androidDirsChanged();
     void providerReloadingRequested();
     void libraryChanged();
-    void screenAspectChanged();
 };
 
 } // namespace model

@@ -61,10 +61,6 @@ void setCollectionNameSource(const QString& system_name, const QString&);
 QStringList hiddenGames();
 void setHiddenGames(const QStringList&);
 
-/// The screen shape: "auto" (the whole screen) or a ratio like "16:9"
-QString screenAspect();
-void setScreenAspect(const QString&);
-
 /// The emulator (an ES-DE command label) chosen for a system, empty for the default
 QString systemEmulator(const QString& system_name);
 void setSystemEmulator(const QString& system_name, const QString& label);

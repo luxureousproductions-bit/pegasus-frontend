@@ -34,7 +34,6 @@ const QString KEY_IGNORED_DIRS = QStringLiteral("library/ignoredDirs");
 const QString KEY_HIDDEN_GAMES = QStringLiteral("library/hiddenGames");
 const QString KEY_CUSTOM_PREFIX = QStringLiteral("customEmulators/");
 const QString KEY_NAME_PREFIX = QStringLiteral("collectionNames/");
-const QString KEY_SCREEN_ASPECT = QStringLiteral("display/aspect");
 
 void write_list(const QString& key, const QStringList& list)
 {
@@ -150,28 +149,6 @@ QStringList hiddenGames()
 void setHiddenGames(const QStringList& paths)
 {
     write_list(KEY_HIDDEN_GAMES, paths);
-}
-
-// kept apart from pegasusx.ini, which is a scan input: changing the screen
-// shape must not make the game list rescan
-static QString display_settings_path()
-{
-    return paths::writableConfigDir() % QStringLiteral("/pegasusx-display.ini");
-}
-
-QString screenAspect()
-{
-    const QSettings file(display_settings_path(), QSettings::IniFormat);
-    return file.value(KEY_SCREEN_ASPECT, QStringLiteral("auto")).toString();
-}
-
-void setScreenAspect(const QString& aspect)
-{
-    QSettings file(display_settings_path(), QSettings::IniFormat);
-    if (aspect.isEmpty() || aspect == QLatin1String("auto"))
-        file.remove(KEY_SCREEN_ASPECT);
-    else
-        file.setValue(KEY_SCREEN_ASPECT, aspect);
 }
 
 QString systemEmulator(const QString& system_name)

@@ -584,19 +584,6 @@ QString Settings::appGameActivity(const QString& package_name) const
 #endif
 }
 
-QString Settings::screenAspect() const
-{
-    return pegasusx::screenAspect();
-}
-
-void Settings::setScreenAspect(const QString& aspect)
-{
-    if (aspect == pegasusx::screenAspect())
-        return;
-    pegasusx::setScreenAspect(aspect);
-    emit screenAspectChanged();
-}
-
 QVariantMap Settings::testSystemEmulator(const QString& system_name) const
 {
 #ifdef WITH_COMPAT_ESDE
