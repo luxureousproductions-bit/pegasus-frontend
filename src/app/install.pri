@@ -101,11 +101,20 @@ android {
     }
     ANDROID_MANIFEST_OUT = $${ANDROID_CFGDIR_OUT}/AndroidManifest.xml
 
+    # Pegasus X: the version code must only ever go up, or Android refuses to
+    # install an update ("App not installed"). The commit count goes down when
+    # building a branch with fewer commits, so builds made by GitHub use the
+    # workflow run number instead, which grows with every build on any branch
+    # (2000 + run, above the commit counts used before).
+    PEGASUSX_VERSION_CODE = $${GIT_COMMIT_CNT}
+    PEGASUSX_RUN_NUMBER = $$(GITHUB_RUN_NUMBER)
+    !isEmpty(PEGASUSX_RUN_NUMBER): PEGASUSX_VERSION_CODE = $$num_add(2000, $${PEGASUSX_RUN_NUMBER})
+
     # TODO: make this cross-platform
     QMAKE_POST_LINK += \
         $${QMAKE_COPY_DIR} $$shell_path($$ANDROID_CFGDIR_IN) $$shell_path($$ANDROID_CFGDIR_OUT) && \
         sed -i s/@GIT_REVISION@/$${GIT_REVISION}/ $$shell_path($$ANDROID_MANIFEST_OUT) && \
-        sed -i s/@GIT_COMMIT_CNT@/$${GIT_COMMIT_CNT}/ $$shell_path($$ANDROID_MANIFEST_OUT)
+        sed -i s/@GIT_COMMIT_CNT@/$${PEGASUSX_VERSION_CODE}/ $$shell_path($$ANDROID_MANIFEST_OUT)
 
     ANDROID_PACKAGE_SOURCE_DIR = $${ANDROID_CFGDIR_OUT}
     ANDROID_EXTRA_LIBS += \
