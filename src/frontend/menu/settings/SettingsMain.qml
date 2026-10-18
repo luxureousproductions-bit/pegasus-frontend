@@ -31,11 +31,7 @@ FocusScope {
     signal openGameDirSettings
     signal openAndroidSafSettings
     signal openProviderSettings
-    signal openLibraryRomDirs
-    signal openLibraryMediaDir
-    signal openEsdeImport
-    signal openIgnoredDirs
-    signal openEmulatorSettings
+    signal openLibraryHub
     signal reloadRequested
 
     width: parent.width
@@ -83,6 +79,14 @@ FocusScope {
             type: SettingsEntry.Type.Select
             selectBox: themeBox
             selectValue: Internal.settings.themes.currentName
+            section: "general"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Screen shape")
+            desc: QT_TR_NOOP("Fit the screen to a shape, with black bars around it. Auto uses the whole screen.")
+            type: SettingsEntry.Type.Select
+            selectBox: aspectBox
+            selectValue: Internal.settings.screenAspect === "auto" ? qsTr("Auto") + api.tr : Internal.settings.screenAspect
             section: "general"
         },
         SettingsEntry {
@@ -167,41 +171,10 @@ FocusScope {
         },
 
         SettingsEntry {
-            label: QT_TR_NOOP("ROM folders...")
-            desc: QT_TR_NOOP("Folders named after systems (snes, psx, gba, Super Nintendo...) are recognized and get launch commands, no metadata files needed.")
+            label: QT_TR_NOOP("Library...")
+            desc: QT_TR_NOOP("ROM folders, media, ES-DE import, and each system's name, emulator and hidden items.")
             type: SettingsEntry.Type.Button
-            buttonAction: root.openLibraryRomDirs
-            section: "pegasusx"
-            enabled: Internal.settings.pegasusxLibrarySupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Ignored folders...")
-            desc: QT_TR_NOOP("Folders inside your ROM and media folders to skip, eg. bios, saves or extras.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openIgnoredDirs
-            section: "pegasusx"
-            enabled: Internal.settings.pegasusxLibrarySupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Media folders...")
-            desc: QT_TR_NOOP("Art folders. These win over art from metadata, the ROM folders' own media folders and ES-DE.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openLibraryMediaDir
-            section: "pegasusx"
-            enabled: Internal.settings.pegasusxLibrarySupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("ES-DE import...")
-            desc: QT_TR_NOOP("Use gamelists or media from an ES-DE folder. Nothing from ES-DE is used unless it's picked here. ES-DE art wins over metadata and the ROM folders' own media.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openEsdeImport
-            section: "pegasusx"
-            enabled: Internal.settings.pegasusxLibrarySupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Emulators...")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openEmulatorSettings
+            buttonAction: root.openLibraryHub
             section: "pegasusx"
             enabled: Internal.settings.pegasusxLibrarySupported
         }
@@ -291,6 +264,32 @@ FocusScope {
 
         onClose: options.focus = true
         onSelect: Internal.settings.locales.currentIndex = index
+    }
+    ListModel {
+        id: aspectModel
+        ListElement { name: "Auto"; value: "auto" }
+        ListElement { name: "16:9"; value: "16:9" }
+        ListElement { name: "16:10"; value: "16:10" }
+        ListElement { name: "5:3"; value: "5:3" }
+        ListElement { name: "3:2"; value: "3:2" }
+        ListElement { name: "4:3"; value: "4:3" }
+        ListElement { name: "1:1"; value: "1:1" }
+    }
+    MultivalueBox {
+        id: aspectBox
+        z: 3
+
+        model: aspectModel
+        index: {
+            for (var i = 0; i < aspectModel.count; i++) {
+                if (aspectModel.get(i).value === Internal.settings.screenAspect)
+                    return i;
+            }
+            return 0;
+        }
+
+        onClose: options.focus = true
+        onSelect: Internal.settings.screenAspect = aspectModel.get(index).value
     }
     MultivalueBox {
         id: themeBox

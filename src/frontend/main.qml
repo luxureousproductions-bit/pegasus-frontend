@@ -47,7 +47,9 @@ Window {
     QtObject {
         id: global
 
-        readonly property real winScale: Math.min(width / 1280.0, height / 720.0)
+        // Pegasus X: measured on the content area, which can be fitted to a
+        // screen shape (Settings > Screen shape)
+        readonly property real winScale: Math.min(content.width / 1280.0, content.height / 720.0)
 
         property QtObject fonts: QtObject {
             readonly property string sans: sansFont.name
@@ -73,7 +75,21 @@ Window {
     // the main content
     FocusScope {
         id: content
-        anchors.fill: parent
+
+        // Pegasus X: "auto" fills the window, "W:H" fits that shape inside it
+        readonly property real aspect: {
+            const parts = Internal.settings.screenAspect.split(":");
+            if (parts.length !== 2)
+                return 0;
+            const w = parseFloat(parts[0]);
+            const h = parseFloat(parts[1]);
+            return (w > 0 && h > 0) ? w / h : 0;
+        }
+        readonly property bool fitted: aspect > 0
+        anchors.centerIn: parent
+        width: !fitted ? parent.width : Math.min(parent.width, parent.height * aspect)
+        height: !fitted ? parent.height : Math.min(parent.height, parent.width / aspect)
+        clip: fitted
         enabled: focus
 
         Loader {

@@ -30,6 +30,15 @@ FocusScope {
     property var fileNames: ["metadata.pegasus.txt", "metadata.txt"]
     property var fileExtensions: [".metadata.pegasus.txt", ".metadata.txt"]
 
+    // a folder to open first, eg. a system's folder
+    property string startFolder: ""
+    onStartFolderChanged: {
+        if (startFolder !== "") {
+            folderModel.cd(startFolder);
+            root.resetPosition();
+        }
+    }
+
     signal cancel
     signal pick(string dir_path)
 

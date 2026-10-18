@@ -45,7 +45,7 @@
         <file>menu/mainmenu/SecondaryMenuItem.qml</file>
         <file>menu/settings/GameDirEditor.qml</file>
         <file>menu/settings/LibraryDirEditor.qml</file>
-        <file>menu/settings/EmulatorEditor.qml</file>
+        <file>menu/settings/LibraryHub.qml</file>
         <file>menu/settings/GamepadEditor.qml</file>
         <file>menu/settings/KeyEditor.qml</file>
         <file>menu/settings/ProviderEditor.qml</file>

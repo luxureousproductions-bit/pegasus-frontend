@@ -424,6 +424,8 @@ QVariantList Settings::emulatorSystems() const
                 { QStringLiteral("label"), option.label },
                 { QStringLiteral("installed"), option.installed },
                 { QStringLiteral("retroarch"), option.retroarch },
+                { QStringLiteral("custom"), option.custom },
+                { QStringLiteral("command"), option.command },
             });
         }
         out.append(QVariantMap {
@@ -432,6 +434,14 @@ QVariantList Settings::emulatorSystems() const
             { QStringLiteral("current"), system.current },
             { QStringLiteral("defaultLabel"), system.default_label },
             { QStringLiteral("options"), options },
+            { QStringLiteral("collectionName"), system.collection_name },
+            { QStringLiteral("metadataName"), system.metadata_name },
+            { QStringLiteral("nameSource"), system.name_source },
+            { QStringLiteral("shortName"), system.short_name },
+            { QStringLiteral("status"), system.status },
+            { QStringLiteral("folders"), system.folders },
+            { QStringLiteral("artSources"), system.art_sources },
+            { QStringLiteral("ignored"), system.ignored },
         });
     }
 #endif
@@ -458,6 +468,133 @@ QVariantList Settings::installedApps() const
     }
 #endif
     return out;
+}
+
+QStringList Settings::hiddenGames() const
+{
+    return pegasusx::hiddenGames();
+}
+
+void Settings::hideGame(const QString& path)
+{
+    QStringList paths = pegasusx::hiddenGames();
+    const QString clean = ::pretty_path(path);
+    if (clean.isEmpty() || paths.contains(clean))
+        return;
+    paths.append(clean);
+    pegasusx::setHiddenGames(paths);
+    emit libraryChanged();
+}
+
+void Settings::unhideGame(const QString& path)
+{
+    QStringList paths = pegasusx::hiddenGames();
+    if (paths.removeAll(path) == 0)
+        return;
+    pegasusx::setHiddenGames(paths);
+    emit libraryChanged();
+}
+
+void Settings::removeIgnoredDir(const QString& path)
+{
+    QStringList dirs = pegasusx::ignoredDirs();
+    if (dirs.removeAll(path) == 0)
+        return;
+    pegasusx::setIgnoredDirs(dirs);
+    emit libraryChanged();
+}
+
+void Settings::saveCustomEmulator(const QString& system_name, const QString& old_name,
+                                  const QString& name, const QString& command)
+{
+    const QString clean_name = name.trimmed();
+    if (system_name.isEmpty() || clean_name.isEmpty() || command.trimmed().isEmpty())
+        return;
+
+    QVariantList list = pegasusx::customEmulators(system_name);
+    QVariantList out;
+    for (const QVariant& entry : list) {
+        const QString entry_name = entry.toMap().value(QStringLiteral("name")).toString();
+        if (entry_name != old_name && entry_name != clean_name)
+            out.append(entry);
+    }
+    out.append(QVariantMap {
+        { QStringLiteral("name"), clean_name },
+        { QStringLiteral("command"), command.trimmed() },
+    });
+    pegasusx::setCustomEmulators(system_name, out);
+
+    // a renamed emulator that was picked stays picked
+    if (!old_name.isEmpty() && pegasusx::systemEmulator(system_name) == QStringLiteral("@custom:") + old_name)
+        pegasusx::setSystemEmulator(system_name, QStringLiteral("@custom:") + clean_name);
+    emit libraryChanged();
+}
+
+void Settings::removeCustomEmulator(const QString& system_name, const QString& name)
+{
+    QVariantList out;
+    for (const QVariant& entry : pegasusx::customEmulators(system_name)) {
+        if (entry.toMap().value(QStringLiteral("name")).toString() != name)
+            out.append(entry);
+    }
+    pegasusx::setCustomEmulators(system_name, out);
+    if (pegasusx::systemEmulator(system_name) == QStringLiteral("@custom:") + name)
+        pegasusx::setSystemEmulator(system_name, QString());
+    emit libraryChanged();
+}
+
+void Settings::setCollectionNameSource(const QString& system_name, const QString& source)
+{
+    pegasusx::setCollectionNameSource(system_name, source);
+    emit libraryChanged();
+}
+
+QVariantMap Settings::testEmulatorCommand(const QString& system_name, const QString& command) const
+{
+#ifdef WITH_COMPAT_ESDE
+    const auto result = providers::esde::test_emulator(system_name, command);
+    return QVariantMap {
+        { QStringLiteral("game"), result.game },
+        { QStringLiteral("error"), result.error },
+    };
+#else
+    Q_UNUSED(system_name);
+    Q_UNUSED(command);
+    return QVariantMap { { QStringLiteral("error"), QStringLiteral("Not supported on this platform") } };
+#endif
+}
+
+QString Settings::openSystemEmulator(const QString& system_name) const
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::open_emulator(system_name);
+#else
+    Q_UNUSED(system_name);
+    return QStringLiteral("Not supported on this platform");
+#endif
+}
+
+QString Settings::appGameActivity(const QString& package_name) const
+{
+#ifdef Q_OS_ANDROID
+    return ::android::find_game_activity(package_name);
+#else
+    Q_UNUSED(package_name);
+    return QString();
+#endif
+}
+
+QString Settings::screenAspect() const
+{
+    return pegasusx::screenAspect();
+}
+
+void Settings::setScreenAspect(const QString& aspect)
+{
+    if (aspect == pegasusx::screenAspect())
+        return;
+    pegasusx::setScreenAspect(aspect);
+    emit screenAspectChanged();
 }
 
 QVariantMap Settings::testSystemEmulator(const QString& system_name) const

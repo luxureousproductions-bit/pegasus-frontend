@@ -65,6 +65,8 @@ struct EmulatorOption {
     QString label;
     bool installed;
     bool retroarch;  ///< a RetroArch core, which also has to be downloaded in RetroArch
+    bool custom;          ///< added by the user ("@custom:<name>")
+    QString command;      ///< for custom ones, the launch command
 };
 
 /// A system that has games, with the emulators that can launch it
@@ -74,6 +76,16 @@ struct SystemEmulators {
     QString current;        ///< chosen in Pegasus X, empty for the default
     QString default_label;  ///< what the default resolves to right now
     std::vector<EmulatorOption> options;
+
+    // for the library hub
+    QString collection_name;  ///< the name it's shown with
+    QString metadata_name;    ///< the collection name in the user's metadata files, if any
+    QString name_source;      ///< "metadata" or "esde"
+    QString short_name;       ///< the theme's short name (logos, RetroAchievements)
+    QString status;           ///< "ready", "missing" (emulator not installed), "none"
+    QStringList folders;      ///< its game folders
+    QStringList art_sources;  ///< its art folders, the one that wins last
+    QStringList ignored;      ///< ignored folders inside its game folders
 };
 
 /// For the Emulators settings screen: the systems found in the Pegasus X
@@ -86,8 +98,13 @@ struct EmulatorTest {
     QString error;  ///< empty if Android started the emulator
 };
 
-/// For the "Test with a game" button of the Emulators settings screen
-EmulatorTest test_emulator(const QString& system_name);
+/// For the "Test with a game" button: the system's chosen emulator, or
+/// `command` if given (an emulator being added)
+EmulatorTest test_emulator(const QString& system_name, const QString& command = QString());
+
+/// Opens the app of the system's chosen emulator (its start screen);
+/// returns an error, or empty
+QString open_emulator(const QString& system_name);
 
 } // namespace esde
 } // namespace providers

@@ -19,6 +19,7 @@
 
 #include <QString>
 #include <QStringList>
+#include <QVariantList>
 
 
 /// Pegasus X: settings of the Pegasus X library (ROM and media folders) and
@@ -45,6 +46,24 @@ void setEsdeImports(const QStringList&);
 /// Folders inside the ROM and media folders that are skipped
 QStringList ignoredDirs();
 void setIgnoredDirs(const QStringList&);
+
+/// Emulators added by the user for a system: a list of {"name", "command"}
+/// maps; picked as the emulator label "@custom:<name>"
+QVariantList customEmulators(const QString& system_name);
+void setCustomEmulators(const QString& system_name, const QVariantList&);
+
+/// Which name a system's collection gets: "metadata" (the collection name in
+/// the user's metadata files, the default) or "esde" (ES-DE's full name)
+QString collectionNameSource(const QString& system_name);
+void setCollectionNameSource(const QString& system_name, const QString&);
+
+/// Game files hidden by the user (full paths)
+QStringList hiddenGames();
+void setHiddenGames(const QStringList&);
+
+/// The screen shape: "auto" (the whole screen) or a ratio like "16:9"
+QString screenAspect();
+void setScreenAspect(const QString&);
 
 /// The emulator (an ES-DE command label) chosen for a system, empty for the default
 QString systemEmulator(const QString& system_name);

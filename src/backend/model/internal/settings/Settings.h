@@ -59,6 +59,8 @@ class Settings : public QObject {
     Q_PROPERTY(QStringList libraryMediaDirs READ libraryMediaDirs NOTIFY libraryChanged)
     Q_PROPERTY(QStringList esdeImports READ esdeImports NOTIFY libraryChanged)
     Q_PROPERTY(QStringList ignoredDirs READ ignoredDirs NOTIFY libraryChanged)
+    Q_PROPERTY(QStringList hiddenGames READ hiddenGames NOTIFY libraryChanged)
+    Q_PROPERTY(QString screenAspect READ screenAspect WRITE setScreenAspect NOTIFY screenAspectChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
     QML_CONST_PROPERTY(model::Locales, locales)
@@ -115,6 +117,23 @@ public:
     /// launches the system's first game with its chosen emulator: { game, error }
     Q_INVOKABLE QVariantMap testSystemEmulator(const QString& system_name) const;
 
+    // Pegasus X library hub
+    QStringList hiddenGames() const;
+    Q_INVOKABLE void hideGame(const QString& path);
+    Q_INVOKABLE void unhideGame(const QString& path);
+    Q_INVOKABLE void removeIgnoredDir(const QString& path);
+    Q_INVOKABLE void saveCustomEmulator(const QString& system_name, const QString& old_name,
+                                        const QString& name, const QString& command);
+    Q_INVOKABLE void removeCustomEmulator(const QString& system_name, const QString& name);
+    Q_INVOKABLE void setCollectionNameSource(const QString& system_name, const QString& source);
+    Q_INVOKABLE QVariantMap testEmulatorCommand(const QString& system_name, const QString& command) const;
+    Q_INVOKABLE QString openSystemEmulator(const QString& system_name) const;
+    /// "package/activity" of an installed app's screen that opens game files
+    Q_INVOKABLE QString appGameActivity(const QString& package_name) const;
+
+    QString screenAspect() const;
+    void setScreenAspect(const QString&);
+
 signals:
     void fullscreenChanged();
     void mouseSupportChanged();
@@ -125,6 +144,7 @@ signals:
     void androidDirsChanged();
     void providerReloadingRequested();
     void libraryChanged();
+    void screenAspectChanged();
 };
 
 } // namespace model
