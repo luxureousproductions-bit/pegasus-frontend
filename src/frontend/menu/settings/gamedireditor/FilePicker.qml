@@ -27,6 +27,35 @@ FocusScope {
 
     anchors.fill: parent
 
+    // Pegasus X: every file is listed (the ones that can't be picked greyed
+    // out); a folder opens at its first entry, and backing out lands on the
+    // folder you left instead of keeping the old row number
+    Component.onCompleted: root.resetPosition()
+
+    function resetPosition() {
+        list.currentIndex = list.count > 1 ? 1 : 0;
+        list.positionViewAtIndex(list.currentIndex, ListView.Center);
+    }
+    function enter(name) {
+        if (name === "..") {
+            const current = folderModel.folder;
+            const child = current.substring(current.lastIndexOf("/") + 1);
+            folderModel.cd(name);
+            var idx = folderModel.indexOfName(child);
+            if (idx < 0)
+                idx = folderModel.indexOfName(current);  // a drive, in the drive list
+            if (idx >= 0) {
+                list.currentIndex = idx;
+                list.positionViewAtIndex(idx, ListView.Center);
+                return;
+            }
+        }
+        else {
+            folderModel.cd(name);
+        }
+        root.resetPosition();
+    }
+
     Keys.onPressed: {
         if (api.keys.isCancel(event) && !event.isAutoRepeat) {
             event.accepted = true;
@@ -45,6 +74,7 @@ FocusScope {
             ".metadata.pegasus.txt",
             ".metadata.txt",
         ]
+        showAllFiles: true
     }
 
 
@@ -156,12 +186,12 @@ FocusScope {
             height: label.height
 
             function pickItem() {
-                if (!isDir) {
-                    root.pick(folderModel.folder);
+                if (isDir) {
+                    root.enter(name);
                     return;
                 }
-
-                folderModel.cd(name);
+                if (pickable)
+                    root.pick(folderModel.folder);
             }
 
             Keys.onPressed: {
@@ -192,8 +222,8 @@ FocusScope {
                 verticalAlignment: Text.AlignVCenter
                 lineHeight: 2.5
 
-                color: "#eee"
-                font.bold: !isDir
+                color: (isDir || pickable) ? "#eee" : "#888"
+                font.bold: !isDir && pickable
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(18)
 
