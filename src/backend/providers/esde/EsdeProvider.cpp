@@ -615,8 +615,11 @@ bool has_extension(const QString& filename, const QStringList& extensions)
     return false;
 }
 
+/// `to_front`: what's found here is put ahead of the art found before, so a
+/// source read later wins
 void find_media(const QString& system_media_dir, const QString& system_dir,
-                const HashMap<QString, model::Game*>& extless_path_to_game, size_t& found_assets)
+                const HashMap<QString, model::Game*>& extless_path_to_game, size_t& found_assets,
+                bool to_front = false)
 {
     if (!QFileInfo(system_media_dir).isDir())
         return;
@@ -649,7 +652,10 @@ void find_media(const QString& system_media_dir, const QString& system_dir,
                 if (game_it == extless_path_to_game.cend())
                     continue;
 
-                game_it->second->assetsMut().add_file(asset_entry.first, file_it.filePath());
+                if (to_front)
+                    game_it->second->assetsMut().add_file_first(asset_entry.first, file_it.filePath());
+                else
+                    game_it->second->assetsMut().add_file(asset_entry.first, file_it.filePath());
                 found_assets++;
             }
         }
@@ -678,7 +684,7 @@ void find_media(const QString& system_media_dir, const QString& system_dir,
                 continue;
 
             QVariantMap& extra = game_it->second->extraMapMut();
-            if (!extra.contains(QStringLiteral("manual"))) {
+            if (to_front || !extra.contains(QStringLiteral("manual"))) {
                 extra.insert(QStringLiteral("manual"), QStringList { finfo.absoluteFilePath() });
                 found_assets++;
             }
@@ -1159,21 +1165,21 @@ QString system_of_folder(const QString& folder_name, const HashMap<QString, QStr
 }
 
 /// What was picked in the "ES-DE import" section, sorted out by kind
+/// Each entry is (folder, system); an empty system means all systems.
+/// Kept in the order picked, as a later pick wins over an earlier one.
 struct EsdeImports {
-    QStringList roots;          ///< whole ES-DE folders (their gamelists are used for every system)
-    QStringList media_roots;    ///< folders with <system>/<type>/, eg. downloaded_media
-    HashMap<QString, QStringList> system_roots;       ///< system -> ES-DE folders, for one picked gamelist
-    HashMap<QString, QStringList> system_media_dirs;  ///< system -> folders with <type>/ in them
+    QStringList roots;  ///< whole ES-DE folders, for their settings
+    std::vector<std::pair<QString, QString>> gamelists;  ///< ES-DE folders with gamelists/
+    std::vector<std::pair<QString, QString>> media;      ///< folders with <system>/<type>/ (all systems) or <type>/
 
-    bool empty() const {
-        return roots.isEmpty() && media_roots.isEmpty() && system_roots.empty() && system_media_dirs.empty();
-    }
-    /// The ES-DE folders whose gamelist of this system should be read
+    /// The ES-DE folders whose gamelist of this system should be read, the
+    /// latest pick first
     QStringList gamelist_roots(const QString& system_name) const {
-        QStringList out = roots;
-        const auto it = system_roots.find(system_name);
-        if (it != system_roots.cend())
-            out += it->second;
+        QStringList out;
+        for (auto it = gamelists.crbegin(); it != gamelists.crend(); ++it) {
+            if (it->second.isEmpty() || it->second == system_name)
+                out.append(it->first);
+        }
         out.removeDuplicates();
         return out;
     }
@@ -1200,7 +1206,7 @@ EsdeImports read_esde_imports(const QStringList& picked, const HashMap<QString, 
                 && is_named(parent_of(dir), "gamelists")) {
                 const QString system = system_of_folder(QFileInfo(dir).fileName(), aliases);
                 if (!system.isEmpty())
-                    out.system_roots[system].append(parent_of(parent_of(dir)));
+                    out.gamelists.emplace_back(parent_of(parent_of(dir)), system);
             }
             continue;
         }
@@ -1209,38 +1215,39 @@ EsdeImports read_esde_imports(const QStringList& picked, const HashMap<QString, 
         const QString gamelists_dir = find_subdir(path, { QStringLiteral("gamelists") });
         const QString media_dir = find_subdir(path, { QStringLiteral("downloaded_media") });
         if (!gamelists_dir.isEmpty() || !media_dir.isEmpty()) {
+            out.roots.append(path);
             if (!gamelists_dir.isEmpty())
-                out.roots.append(path);
+                out.gamelists.emplace_back(path, QString());
             const HashMap<QString, QString> settings = read_esde_settings(path);
             const auto media_it = settings.find(QStringLiteral("MediaDirectory"));
             if (media_it != settings.cend() && QFileInfo(media_it->second).isDir())
-                out.media_roots.append(QDir::cleanPath(media_it->second));
+                out.media.emplace_back(QDir::cleanPath(media_it->second), QString());
             else if (!media_dir.isEmpty())
-                out.media_roots.append(media_dir);
+                out.media.emplace_back(media_dir, QString());
             continue;
         }
 
         if (is_named(path, "gamelists")) {             // ES-DE/gamelists
-            out.roots.append(parent_of(path));
+            out.gamelists.emplace_back(parent_of(path), QString());
             continue;
         }
         if (is_named(parent_of(path), "gamelists")) {  // ES-DE/gamelists/<system>
             const QString system = system_of_folder(finfo.fileName(), aliases);
             if (!system.isEmpty())
-                out.system_roots[system].append(parent_of(parent_of(path)));
+                out.gamelists.emplace_back(parent_of(parent_of(path)), system);
             continue;
         }
         if (is_named(path, "downloaded_media")) {      // ES-DE/downloaded_media
-            out.media_roots.append(path);
+            out.media.emplace_back(path, QString());
             continue;
         }
 
         // ES-DE/downloaded_media/<system>, or any folder of system folders
         const QString own_system = system_of_folder(finfo.fileName(), aliases);
         if (!own_system.isEmpty())
-            out.system_media_dirs[own_system].append(path);
+            out.media.emplace_back(path, own_system);
         else
-            out.media_roots.append(path);
+            out.media.emplace_back(path, QString());
     }
     return out;
 }
@@ -1723,9 +1730,7 @@ Provider& LibraryProvider::run(SearchContext& sctx)
     const auto library_systems = find_library_systems(library_dirs, aliases);
     Log::info(display_name(), LOGMSG("%1 system folders recognized").arg(QString::number(library_systems.size())));
 
-    // newest media folder first, as a folder added later wins
-    QStringList media_dirs = pegasusx::libraryMediaDirs();
-    std::reverse(media_dirs.begin(), media_dirs.end());
+    const QStringList media_dirs = pegasusx::libraryMediaDirs();
 
     size_t found_games_total = 0;
     size_t found_assets = 0;
@@ -1801,10 +1806,10 @@ Provider& LibraryProvider::run(SearchContext& sctx)
     // names from gamelists or metadata files may carry the first disc's tag
     clean_disc_titles(all_multi_disc_games);
 
-    // 2. media, after the art named in metadata files, in this order (for
-    //    each kind of art, the first one found is what themes show):
-    //    the ROM folders' own media folders, then what was picked from ES-DE,
-    //    then the picked media folders, the newest first
+    // 2. media, each source winning over the ones before it: art named in
+    //    metadata files (already added), the ROM folders' own media folders,
+    //    what was picked from ES-DE, then the picked media folders; within
+    //    ES-DE picks and media folders, the one added later wins
     for (const FoundSystem& found : found_systems) {
         const EsdeSystem& sys = *found.sys;
         for (const auto& dir_entry : *found.dirs) {
@@ -1812,17 +1817,23 @@ Provider& LibraryProvider::run(SearchContext& sctx)
             const QString& rom_root = dir_entry.second;
 
             QStringList sources = rom_folder_media_dirs(system_dir, rom_root, sys.name, aliases);
-            for (const QString& root : imports.media_roots)
-                sources += system_subdirs(root, sys.name, aliases);
-            const auto esde_it = imports.system_media_dirs.find(sys.name);
-            if (esde_it != imports.system_media_dirs.cend())
-                sources += esde_it->second;
+            for (const auto& pick : imports.media) {
+                if (pick.second.isEmpty())
+                    sources += system_subdirs(pick.first, sys.name, aliases);
+                else if (pick.second == sys.name)
+                    sources.append(pick.first);
+            }
             for (const QString& picked : media_dirs)
                 sources += picked_media_dirs(picked, sys.name, aliases);
-            sources.removeDuplicates();
 
-            for (const QString& media_dir : sources)
-                find_media(media_dir, system_dir, found.scan.extless_path_to_game, found_assets);
+            // the same folder twice counts where it comes last
+            QStringList ordered;
+            for (int i = sources.size() - 1; i >= 0; i--) {
+                if (!ordered.contains(sources.at(i)))
+                    ordered.prepend(sources.at(i));
+            }
+            for (const QString& media_dir : ordered)
+                find_media(media_dir, system_dir, found.scan.extless_path_to_game, found_assets, true);
         }
     }
 

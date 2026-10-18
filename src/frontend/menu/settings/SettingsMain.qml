@@ -175,7 +175,7 @@ FocusScope {
         },
         SettingsEntry {
             label: QT_TR_NOOP("Media folders...")
-            desc: QT_TR_NOOP("Extra art folders. Used after metadata, the ROM folders' own media folders and ES-DE.")
+            desc: QT_TR_NOOP("Art folders. These win over art from metadata, the ROM folders' own media folders and ES-DE.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openLibraryMediaDir
             section: "pegasusx"
@@ -183,7 +183,7 @@ FocusScope {
         },
         SettingsEntry {
             label: QT_TR_NOOP("ES-DE import...")
-            desc: QT_TR_NOOP("Use gamelists or media from an ES-DE folder. Nothing from ES-DE is used unless it's picked here.")
+            desc: QT_TR_NOOP("Use gamelists or media from an ES-DE folder. Nothing from ES-DE is used unless it's picked here. ES-DE art wins over metadata and the ROM folders' own media.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openEsdeImport
             section: "pegasusx"

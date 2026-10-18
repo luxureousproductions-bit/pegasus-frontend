@@ -75,6 +75,9 @@ public:
 
     Assets& add_file(AssetType, QString);
     Assets& add_uri(AssetType, QString);
+    /// Adds it as the first of its kind (the one themes show), ahead of the
+    /// ones added before
+    Assets& add_file_first(AssetType, QString);
 
 private:
     const QStringList& get(AssetType) const;

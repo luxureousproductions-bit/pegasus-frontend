@@ -96,7 +96,7 @@ FocusScope {
 
             text: (root.mode === "media"
                 ? qsTr("Art in <system>/covers, <system>/screenshots, <system>/manuals and so on.\n"
-                     + "Used after metadata, the ROM folders' own media and ES-DE. A folder lower in the list wins:")
+                     + "These win over metadata, the ROM folders' own media and ES-DE. A folder lower in the list wins:")
                 : root.mode === "esde"
                 ? qsTr("Pick your whole ES-DE folder, or only parts of it: downloaded_media, gamelists,\n"
                      + "or one system's folder in them (downloaded_media/psx, gamelists/psx):")

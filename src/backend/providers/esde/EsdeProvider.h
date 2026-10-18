@@ -46,8 +46,9 @@ public:
 /// and get ES-DE's launch commands, so no metadata files are needed.
 /// Details: ES-DE gamelists picked in "ES-DE import", a gamelist.xml in the
 /// system folder, then Pegasus metadata files (each wins over the previous).
-/// Art, first found wins: metadata files, the ROM folders' own media folders,
-/// media picked in "ES-DE import", then the picked media folders (newest first).
+/// Art, each source winning over the previous: metadata files, the ROM
+/// folders' own media folders, media picked in "ES-DE import", then the
+/// picked media folders (a later pick wins over an earlier one).
 class LibraryProvider : public Provider {
     Q_OBJECT
 

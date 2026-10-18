@@ -52,6 +52,18 @@ Assets& Assets::add_file(AssetType key, QString path)
     return add_uri(key, std::move(uri));
 }
 
+Assets& Assets::add_file_first(AssetType key, QString path)
+{
+    const QString uri = QUrl::fromLocalFile(std::move(path)).toString();
+    if (uri.isEmpty())
+        return *this;
+
+    QStringList& target = m_asset_lists[key];
+    target.removeAll(uri);
+    target.prepend(uri);
+    return *this;
+}
+
 Assets& Assets::add_uri(AssetType key, QString url)
 {
     QStringList& target = m_asset_lists[key];
