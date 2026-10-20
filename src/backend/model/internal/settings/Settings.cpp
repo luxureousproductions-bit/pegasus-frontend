@@ -310,11 +310,13 @@ void Settings::requestEmulatorCollections()
 QVariantList Settings::collectionGames(QObject* collections, const QString& collection_name) const
 {
     QVariantList out;
-    const auto* const list = qobject_cast<model::CollectionListModel*>(collections);
+    // CollectionListModel has no Q_OBJECT of its own: use the generic list
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
     if (!list)
         return out;
-    for (model::Collection* const coll : list->entries()) {
-        if (coll->name() != collection_name)
+    for (int i = 0; i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll || coll->name() != collection_name)
             continue;
         const std::vector<model::Game*>& games = coll->gameList()->entries();
         out.reserve(out.size() + static_cast<int>(games.size()));
