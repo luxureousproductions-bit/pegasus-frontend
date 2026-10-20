@@ -102,6 +102,7 @@ struct EmulatorCollection {
     QString command;          ///< its current launch command, empty if none
     QString current_label;    ///< the emulator that command is, empty if not one of `options`
     bool current_installed = false;
+    QString missing_app;      ///< for a hand-written command whose app isn't installed: its package
     QStringList files;        ///< the metadata files that define it
     int game_overrides = 0;   ///< games in those files with their own launch command
     std::vector<EmulatorChoice> options;

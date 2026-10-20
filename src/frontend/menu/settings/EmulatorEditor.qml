@@ -38,14 +38,23 @@ FocusScope {
     property var games: []          // [{ title, path }] of the open collection
     property var gameCommands: ({}) // game path -> its own launch command
     property string message: ""
-    property bool changed: false
+    property bool loading: true
 
+    // the collections are read in the background (it takes a moment with a
+    // big library), so the screen can show that it's loading
     Component.onCompleted: refresh()
 
     function refresh() {
-        collections = Internal.settings.emulatorCollections();
-        if (coll)
-            loadGames();
+        Internal.settings.requestEmulatorCollections();
+    }
+    Connections {
+        target: Internal.settings
+        function onEmulatorCollectionsReady(list) {
+            root.collections = list;
+            root.loading = false;
+            if (root.coll)
+                root.loadGames();
+        }
     }
 
     function loadGames() {
@@ -57,7 +66,7 @@ FocusScope {
             for (var j = 0; j < c.games.count; j++) {
                 var game = c.games.get(j);
                 if (game.files.count > 0)
-                    out.push({ "title": game.title, "path": game.files.get(0).path });
+                    out.push({ "title": game.title, "path": game.files.get(0).path, "obj": game });
             }
         }
         games = out;
@@ -81,7 +90,23 @@ FocusScope {
         if (!c.command)
             return qsTr("None yet") + api.tr;
         var text = c.currentLabel !== "" ? c.currentLabel : qsTr("Your metadata's command") + api.tr;
-        return c.currentInstalled ? text : text + qsTr(" · not installed") + api.tr;
+        if (c.currentInstalled)
+            return text;
+        return c.missingApp
+            ? text + qsTr(" · %1 not installed").arg(c.missingApp) + api.tr
+            : text + qsTr(" · not installed") + api.tr;
+    }
+
+    // the loaded games use a new command right away, no reload needed
+    function applyLive(game, command) {
+        if (game) {
+            Internal.settings.setLiveLaunchCommand(game.obj, command !== "" ? command : (coll.command || ""));
+            return;
+        }
+        for (var i = 0; i < games.length; i++) {
+            if (!gameCommands[games[i].path])
+                Internal.settings.setLiveLaunchCommand(games[i].obj, command);
+        }
     }
 
     function openCollection(index) {
@@ -98,10 +123,7 @@ FocusScope {
     }
 
     function closeMaybe() {
-        if (changed)
-            reloadDialog.focus = true;
-        else
-            root.close();
+        root.close();
     }
 
     Keys.onPressed: {
@@ -133,12 +155,54 @@ FocusScope {
     }
 
 
+    // -- Loading ------------------------------------------------------------------
+
+    Column {
+        visible: root.loading
+        anchors.centerIn: parent
+        spacing: vpx(16)
+
+        Rectangle {
+            id: spinner
+            width: vpx(48)
+            height: width
+            radius: width / 2
+            color: "transparent"
+            border.color: "#3aa"
+            border.width: vpx(4)
+            anchors.horizontalCenter: parent.horizontalCenter
+
+            Rectangle {
+                width: vpx(12)
+                height: width
+                radius: width / 2
+                color: "#eee"
+                x: parent.width / 2 - width / 2
+                y: -height / 2 + parent.border.width / 2
+            }
+            RotationAnimation on rotation {
+                running: root.loading
+                loops: Animation.Infinite
+                from: 0
+                to: 360
+                duration: 1000
+            }
+        }
+        Text {
+            text: qsTr("Looking for your collections and emulators...") + api.tr
+            color: "#ccc"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(20)
+        }
+    }
+
+
     // -- The collections ------------------------------------------------------
 
     ListView {
         id: list
 
-        visible: !root.coll
+        visible: !root.coll && !root.loading
         anchors.top: header.bottom
         anchors.bottom: parent.bottom
         anchors.horizontalCenter: parent.horizontalCenter
@@ -154,7 +218,7 @@ FocusScope {
 
         header: Text {
             width: list.width
-            text: root.collections.length > 0
+            text: root.collections.length > 0 || root.loading
                 ? qsTr("Pick the emulator of each collection, or of single games. "
                      + "It's written into the collection's metadata file.") + api.tr
                 : qsTr("No collections found. Collections come from the metadata files "
@@ -474,15 +538,38 @@ FocusScope {
                 root.message = error;
             }
             else {
-                root.changed = true;
+                root.applyLive(game, command);
                 root.message = game
-                    ? qsTr("Saved for \"%1\". Reload the games to use it.").arg(game.title) + api.tr
-                    : qsTr("Saved for %1. Reload the games to use it.").arg(c.name) + api.tr;
-                var keepIndex = page.currentIndex;
-                var keepColl = root.collIndex;
-                root.refresh();
-                root.collIndex = keepColl;
-                page.currentIndex = keepIndex;
+                    ? qsTr("Saved for \"%1\".").arg(game.title) + api.tr
+                    : qsTr("Saved for %1.").arg(c.name) + api.tr;
+
+                // show the change right away, without reading everything again
+                if (game) {
+                    var cmds = Object.assign({}, root.gameCommands);
+                    if (command !== "")
+                        cmds[game.path] = command;
+                    else
+                        delete cmds[game.path];
+                    root.gameCommands = cmds;
+                }
+                else {
+                    var list = root.collections.slice();
+                    var updated = Object.assign({}, list[root.collIndex]);
+                    updated.command = command;
+                    updated.currentLabel = "";
+                    updated.currentInstalled = true;
+                    updated.missingApp = "";
+                    for (var i = 0; i < updated.options.length; i++) {
+                        if (root.sameCommand(updated.options[i].command, command)) {
+                            updated.currentLabel = updated.options[i].label;
+                            updated.currentInstalled = updated.options[i].installed;
+                        }
+                    }
+                    var keepIndex = page.currentIndex;
+                    list[root.collIndex] = updated;
+                    root.collections = list;
+                    page.currentIndex = keepIndex;
+                }
             }
             closePicker();
         }
@@ -533,8 +620,9 @@ FocusScope {
             id: box
 
             width: Math.min(vpx(460), parent.width * 0.5)
-            height: parent.height * 0.84
-            anchors.verticalCenter: parent.verticalCenter
+            // below the screen's title, so it doesn't cover it
+            y: header.height + vpx(12)
+            height: parent.height - y - vpx(16)
             x: picker.focus ? parent.width - width - height * 0.04 : parent.width
             Behavior on x { PropertyAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
@@ -556,7 +644,6 @@ FocusScope {
 
                     width: parent.width
                     height: Math.min(contentHeight, parent.height)
-                    anchors.verticalCenter: parent.verticalCenter
 
                     focus: true
                     model: picker.entries
@@ -849,22 +936,6 @@ FocusScope {
                     }
                 }
             }
-        }
-    }
-
-
-    ReloadQuestion {
-        id: reloadDialog
-        onAccept: {
-            list.focus = true;
-            root.changed = false;
-            Internal.settings.reloadProviders();
-            root.close();
-        }
-        onCancel: {
-            list.focus = true;
-            root.changed = false;
-            root.close();
         }
     }
 }

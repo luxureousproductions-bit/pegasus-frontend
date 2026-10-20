@@ -48,9 +48,21 @@ FocusScope {
 
     Component.onCompleted: reloadSystems()
 
+    // the systems are counted in the background (it reads every ROM folder),
+    // so the screen can show that it's loading
+    property bool loadingSystems: true
     function reloadSystems() {
-        systems = Internal.settings.esdeImportSystems();
+        loadingSystems = true;
+        systems = [];
         picked = {};
+        Internal.settings.requestEsdeImportSystems();
+    }
+    Connections {
+        target: Internal.settings
+        function onEsdeImportSystemsReady(list) {
+            root.systems = list;
+            root.loadingSystems = false;
+        }
     }
 
     readonly property int pickedCount: {
@@ -346,7 +358,8 @@ FocusScope {
 
             Text {
                 visible: root.systems.length === 0
-                text: Internal.settings.esdeImportDir === ""
+                text: root.loadingSystems ? qsTr("Looking for ES-DE systems in your ROM folders...") + api.tr
+                    : Internal.settings.esdeImportDir === ""
                     ? qsTr("Pick your ES-DE folder above.") + api.tr
                     : qsTr("No ES-DE systems with games were found in your ROM folders.") + api.tr
                 color: "#ccc"

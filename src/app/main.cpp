@@ -60,6 +60,10 @@ int main(int argc, char *argv[])
     QCoreApplication::addLibraryPath(QStringLiteral("lib"));
     QSettings::setDefaultFormat(QSettings::IniFormat);
 
+#ifdef Q_OS_ANDROID
+    // Pegasus X: no accessibility events (see MainActivity.onStart)
+    qputenv("QT_ANDROID_DISABLE_ACCESSIBILITY", "1");
+#endif
     QGuiApplication app(argc, argv);
     app.setApplicationName(QStringLiteral("pegasus-frontend"));
     app.setApplicationVersion(QStringLiteral(GIT_REVISION));

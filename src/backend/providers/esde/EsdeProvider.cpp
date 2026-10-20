@@ -409,6 +409,13 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
                           bool& emulator_installed, QString& error)
 {
     const QStringList tokens = split_esde_command(raw);
+
+    // ES-DE's Android apps: the game file holds the app's package name
+    if (!tokens.isEmpty() && tokens.first().startsWith(QLatin1String("%ANDROIDAPP%="))) {
+        emulator_installed = true;
+        return QStringLiteral("am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p {file.contents}");
+    }
+
     static const QRegularExpression rx_emulator(QStringLiteral("^%EMULATOR_([^%]+)%$"));
     const auto emu_match = tokens.isEmpty() ? QRegularExpressionMatch() : rx_emulator.match(tokens.first());
     if (!emu_match.hasMatch()) {
@@ -472,6 +479,9 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
         }
 
         QString value = unquote(token.mid(key_end + 2));
+        // %INJECT%=%ROM%: the text inside the game file (eg. a Steam app ID)
+        if (value == QLatin1String("%INJECT%=%ROM%"))
+            value = QStringLiteral("{file.contents}");
         if (!expand_variables(value, package, rom_root, ctx.primary_storage)) {
             error = QStringLiteral("unsupported variable in `%1`").arg(token);
             return {};
@@ -1777,13 +1787,37 @@ struct EmulatorSetup {
         ctx.log_tag = QStringLiteral("Emulators");
         ctx.primary_storage = ::android::primary_storage_path();
 
+        // ES-DE's full lists, plus the emulators of the ES-DE folder's custom
+        // systems (which in ES-DE replace a system's whole list; here they're
+        // added to it, so no emulator goes missing)
         const QString esde_dir = esde_default_dir();
-        bool load_exclusive = false;
-        if (!esde_dir.isEmpty())
-            load_systems(ctx.log_tag, esde_dir % QStringLiteral("/custom_systems/es_systems.xml"), systems, order, load_exclusive);
-        if (!load_exclusive) {
+        {
             bool unused = false;
             load_systems(ctx.log_tag, QStringLiteral(":/esde/es_systems.xml"), systems, order, unused);
+        }
+        if (!esde_dir.isEmpty()) {
+            HashMap<QString, EsdeSystem> custom;
+            std::vector<QString> custom_order;
+            bool unused = false;
+            load_systems(ctx.log_tag, esde_dir % QStringLiteral("/custom_systems/es_systems.xml"), custom, custom_order, unused);
+            for (const QString& name : custom_order) {
+                const EsdeSystem& custom_sys = custom.at(name);
+                auto it = systems.find(name);
+                if (it == systems.end()) {
+                    systems.emplace(name, custom_sys);
+                    order.push_back(name);
+                    continue;
+                }
+                std::vector<EsdeCommand> merged = custom_sys.commands;
+                for (const EsdeCommand& cmd : it->second.commands) {
+                    const bool known = std::any_of(merged.cbegin(), merged.cend(), [&cmd](const EsdeCommand& c) {
+                        return c.label == cmd.label;
+                    });
+                    if (!known)
+                        merged.push_back(cmd);
+                }
+                it->second.commands = std::move(merged);
+            }
         }
         if (!esde_dir.isEmpty())
             load_find_rules(ctx.log_tag, esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), ctx.emulators);
@@ -1940,7 +1974,7 @@ std::vector<EmulatorCollection> emulator_collections()
     QStringList components;
     for (const EmulatorCollection& coll : out) {
         if (!coll.command.isEmpty() && coll.current_label.isEmpty()) {
-            static const QRegularExpression rx_component(QStringLiteral("(?:^|\\s)-n\\s+(\\S+)"));
+            static const QRegularExpression rx_component(QStringLiteral("(?:^|\\s)-n\\s+\"?([^\\s\"]+)"));
             const auto match = rx_component.match(coll.command);
             if (match.hasMatch())
                 components.append(match.captured(1));
@@ -1954,10 +1988,12 @@ std::vector<EmulatorCollection> emulator_collections()
         for (EmulatorCollection& coll : out) {
             if (coll.command.isEmpty() || !coll.current_label.isEmpty())
                 continue;
-            static const QRegularExpression rx_component(QStringLiteral("(?:^|\\s)-n\\s+(\\S+)"));
+            static const QRegularExpression rx_component(QStringLiteral("(?:^|\\s)-n\\s+\"?([^\\s\"]+)"));
             const auto match = rx_component.match(coll.command);
             const auto it = match.hasMatch() ? installed.find(match.captured(1)) : installed.cend();
             coll.current_installed = it == installed.cend() || it->second;
+            if (!coll.current_installed)
+                coll.missing_app = match.captured(1).section(QLatin1Char('/'), 0, 0);
         }
     }
     else {
@@ -2071,6 +2107,13 @@ QString test_emulator_command(const QString& command, const QString& game_path)
            .replace(QLatin1String("{file.name}"), game_file.fileName())
            .replace(QLatin1String("{file.basename}"), game_file.completeBaseName())
            .replace(QLatin1String("{file.dir}"), ::pretty_dir(game_file));
+        if (arg.contains(QLatin1String("{file.contents}"))) {
+            QFile file(abs_path);
+            QString contents;
+            if (game_file.isFile() && file.size() < 64 * 1024 && file.open(QIODevice::ReadOnly | QIODevice::Text))
+                contents = QString::fromUtf8(file.readAll()).trimmed().section(QLatin1Char('\n'), 0, 0).trimmed();
+            arg.replace(QLatin1String("{file.contents}"), contents);
+        }
     }
     if (args.isEmpty() || args.first() != QLatin1String("am"))
         return QStringLiteral("Only 'am start' commands can be tested here");

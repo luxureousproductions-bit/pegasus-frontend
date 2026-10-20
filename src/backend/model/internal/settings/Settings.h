@@ -96,6 +96,13 @@ public:
 
     // Pegasus X: emulators
     Q_INVOKABLE QVariantList emulatorCollections() const;
+    /// Same as emulatorCollections(), in the background: emulatorCollectionsReady
+    Q_INVOKABLE void requestEmulatorCollections();
+    /// Same as esdeImportSystems(), in the background: esdeImportSystemsReady
+    Q_INVOKABLE void requestEsdeImportSystems();
+    /// Changes the launch command of a loaded game right away (the metadata
+    /// file is changed too, so this lasts until the next scan reads it)
+    Q_INVOKABLE void setLiveLaunchCommand(QObject* game, const QString& command);
     Q_INVOKABLE QVariantMap gameEmulators(const QString& collection_name) const;
     Q_INVOKABLE QString setCollectionEmulator(const QString& collection_name, const QString& command);
     Q_INVOKABLE QString setGameEmulator(const QString& collection_name, const QString& game_path,
@@ -118,6 +125,8 @@ signals:
     void esdeImportRunningChanged();
     void esdeImportProgress(int done, int total, QString system);
     void esdeImportFinished(QVariantMap result);
+    void emulatorCollectionsReady(QVariantList collections);
+    void esdeImportSystemsReady(QVariantList systems);
     void androidDirsChanged();
     void providerReloadingRequested();
 

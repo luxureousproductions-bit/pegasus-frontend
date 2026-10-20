@@ -66,6 +66,15 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
 
         ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
         m_icon_density = am.getLauncherLargeIconDensity();
+
+        // Pegasus X: keep the screen away from accessibility services. Many
+        // handhelds run one for button mapping, and Android then draws its
+        // focus frame around a text on screen and leaves it there (the "blue
+        // box"); Pegasus has no screen reader support to lose.
+        final android.view.View content = getWindow().getDecorView();
+        content.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        if (Build.VERSION.SDK_INT >= 26)
+            content.setDefaultFocusHighlightEnabled(false);
     }
 
 

@@ -20,6 +20,7 @@
 #include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
+#include "model/gaming/Game.h"
 #include "utils/PathTools.h"
 
 #ifdef Q_OS_ANDROID
@@ -247,6 +248,7 @@ QVariantList Settings::emulatorCollections() const
             { QStringLiteral("command"), coll.command },
             { QStringLiteral("currentLabel"), coll.current_label },
             { QStringLiteral("currentInstalled"), coll.current_installed },
+            { QStringLiteral("missingApp"), coll.missing_app },
             { QStringLiteral("files"), coll.files },
             { QStringLiteral("gameOverrides"), coll.game_overrides },
             { QStringLiteral("options"), options },
@@ -254,6 +256,29 @@ QVariantList Settings::emulatorCollections() const
     }
 #endif
     return out;
+}
+
+void Settings::requestEmulatorCollections()
+{
+    QtConcurrent::run([this]{
+        const QVariantList list = emulatorCollections();
+        emit emulatorCollectionsReady(list);  // queued to the screen
+    });
+}
+
+void Settings::requestEsdeImportSystems()
+{
+    QtConcurrent::run([this]{
+        const QVariantList list = esdeImportSystems();
+        emit esdeImportSystemsReady(list);
+    });
+}
+
+void Settings::setLiveLaunchCommand(QObject* game, const QString& command)
+{
+    auto* const game_ptr = qobject_cast<model::Game*>(game);
+    if (game_ptr)
+        game_ptr->setLaunchCmd(command);
 }
 
 QVariantMap Settings::gameEmulators(const QString& collection_name) const
