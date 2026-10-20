@@ -1844,6 +1844,18 @@ struct EmulatorSetup {
             load_find_rules(ctx.log_tag, esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), ctx.emulators);
         load_find_rules(ctx.log_tag, esde_list_file(QStringLiteral("es_find_rules.xml")), ctx.emulators);
 
+        // Pegasus X: builds ES-DE doesn't know yet, added to its emulators
+        // (the screen name doesn't have to be exact: if it's named
+        // differently, the app's own game screen is found)
+        static const std::vector<std::pair<const char*, const char*>> EXTRA_BUILDS {
+            { "VITA3K", "org.vita3kplus.emulator/org.vita3k.emulator.Emulator" },
+        };
+        for (const auto& extra : EXTRA_BUILDS) {
+            auto it = ctx.emulators.find(QLatin1String(extra.first));
+            if (it != ctx.emulators.end() && !it->second.contains(QLatin1String(extra.second)))
+                it->second.append(QLatin1String(extra.second));
+        }
+
         // which emulator screens exist on this device, asked in one go
         QStringList components;
         for (const auto& entry : ctx.emulators)
