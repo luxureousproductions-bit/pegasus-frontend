@@ -43,6 +43,8 @@ QStringList resolve_components(const QStringList&);
 QString find_game_activity(const QString& package_name);
 /// The name an installed app is shown with, or empty
 QString app_label(const QString& package_name);
+/// Installed apps that can be opened: "label<TAB>package<TAB>component<TAB>1/0 (a game)"
+QStringList android_app_list();
 void request_saf_permission(const std::function<void()>&);
 
 QString run_am_call(const QStringList&);

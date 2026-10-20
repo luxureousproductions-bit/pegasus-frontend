@@ -117,6 +117,13 @@ public:
     /// Downloads ES-DE's latest Android emulator lists (emulatorListUpdated
     /// when done); they're used instead of the copy built into the app
     Q_INVOKABLE void updateEmulatorList();
+
+    // Pegasus X: Android collections
+    Q_INVOKABLE QVariantList androidApps() const;
+    Q_INVOKABLE QVariantMap androidGameApps(const QString& collection_name) const;
+    Q_INVOKABLE QString androidAppCommand(const QString& component) const;
+    Q_INVOKABLE int matchAndroidGames(const QString& collection_name);
+    Q_INVOKABLE int addAndroidGames(const QString& collection_name);
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"
     Q_INVOKABLE QString emulatorListInfo() const;
 

@@ -269,6 +269,7 @@ QVariantList Settings::emulatorCollections() const
             { QStringLiteral("missingApp"), coll.missing_app },
             { QStringLiteral("files"), coll.files },
             { QStringLiteral("gameOverrides"), coll.game_overrides },
+            { QStringLiteral("isAndroid"), coll.is_android },
             { QStringLiteral("options"), options },
         });
     }
@@ -309,6 +310,64 @@ QString esde_lists_dir()
     return paths::writableConfigDir() + QStringLiteral("/esde-lists");
 }
 } // namespace
+
+QVariantList Settings::androidApps() const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& app : providers::esde::android_apps()) {
+        out.append(QVariantMap {
+            { QStringLiteral("label"), app.label },
+            { QStringLiteral("package"), app.package },
+            { QStringLiteral("component"), app.component },
+            { QStringLiteral("game"), app.game },
+        });
+    }
+#endif
+    return out;
+}
+
+QVariantMap Settings::androidGameApps(const QString& collection_name) const
+{
+    QVariantMap out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& entry : providers::esde::android_game_apps(collection_name))
+        out.insert(entry.first, entry.second);
+#else
+    Q_UNUSED(collection_name);
+#endif
+    return out;
+}
+
+QString Settings::androidAppCommand(const QString& component) const
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::android_app_command(component);
+#else
+    Q_UNUSED(component);
+    return {};
+#endif
+}
+
+int Settings::matchAndroidGames(const QString& collection_name)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::match_android_games(collection_name);
+#else
+    Q_UNUSED(collection_name);
+    return 0;
+#endif
+}
+
+int Settings::addAndroidGames(const QString& collection_name)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::add_android_games(collection_name);
+#else
+    Q_UNUSED(collection_name);
+    return 0;
+#endif
+}
 
 QString Settings::emulatorListInfo() const
 {

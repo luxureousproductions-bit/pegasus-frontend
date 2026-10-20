@@ -1701,7 +1701,8 @@ struct MetaFile {
         }
     }
 
-    /// The files of a game block, as absolute paths
+    /// The files of a game block, as absolute paths (URIs like
+    /// android:<package> as they are)
     QStringList game_files(const MetaBlock& block) const {
         QStringList out;
         const QDir base(dir);
@@ -1709,9 +1710,14 @@ struct MetaFile {
             if (e.key != QLatin1String("file") && e.key != QLatin1String("files"))
                 continue;
             for (const QString& value : e.values)
-                out.append(::clean_abs_path(QFileInfo(base, value)));
+                out.append(is_uri(value) ? value : ::clean_abs_path(QFileInfo(base, value)));
         }
         return out;
+    }
+
+    static bool is_uri(const QString& value) {
+        static const QRegularExpression rx_uri(QStringLiteral("^[a-zA-Z][a-zA-Z0-9+\\-.]+:.+"));
+        return rx_uri.match(value).hasMatch() && !QFileInfo(value).isAbsolute();
     }
 
     /// Sets (or removes, if `command` is empty) the launch entry of a block
@@ -1770,7 +1776,7 @@ struct MetaFile {
         const QStringList block_lines {
             QString(),
             QStringLiteral("game: ") % title,
-            QStringLiteral("file: ") % QDir(dir).relativeFilePath(game_path),
+            QStringLiteral("file: ") % (is_uri(game_path) ? game_path : QDir(dir).relativeFilePath(game_path)),
             QStringLiteral("launch: ") % command.simplified(),
         };
         for (int i = 0; i < block_lines.size(); i++)
@@ -1875,14 +1881,11 @@ struct EmulatorSetup {
                     order.push_back(name);
                     continue;
                 }
+                // custom ones first; ES-DE's after them, also those of the
+                // same name, which are used if the custom one can't be
+                // (the list keeps the first usable one of each name)
                 std::vector<EsdeCommand> merged = custom_sys.commands;
-                for (const EsdeCommand& cmd : it->second.commands) {
-                    const bool known = std::any_of(merged.cbegin(), merged.cend(), [&cmd](const EsdeCommand& c) {
-                        return c.label == cmd.label;
-                    });
-                    if (!known)
-                        merged.push_back(cmd);
-                }
+                merged.insert(merged.end(), it->second.commands.cbegin(), it->second.commands.cend());
                 it->second.commands = std::move(merged);
             }
         }
@@ -1991,10 +1994,12 @@ struct EmulatorSetup {
                 continue;
             seen.append(label);
             EmulatorChoice choice;
-            choice.label = label;
+            choice.retroarch = cmd.raw.startsWith(QLatin1String("%EMULATOR_RETROARCH%"));
+            // ES-DE names RetroArch cores by the core alone ("Flycast")
+            choice.label = choice.retroarch && !label.startsWith(QLatin1String("RetroArch"))
+                ? QStringLiteral("RetroArch · ") % label : label;
             choice.command = command;
             choice.installed = installed;
-            choice.retroarch = cmd.raw.startsWith(QLatin1String("%EMULATOR_RETROARCH%"));
             const auto rec_it = recommended.find(system_name);
             choice.recommended = rec_it != recommended.cend() && rec_it->second == label;
             out.push_back(choice);
@@ -2024,7 +2029,7 @@ struct EmulatorSetup {
                     if (app_name.isEmpty())
                         app_name = package_name;
                     EmulatorChoice extra = choice;
-                    extra.label = label % QStringLiteral(" · ") % app_name;
+                    extra.label = choice.label % QStringLiteral(" · ") % app_name;
                     extra.command = build_command;
                     extra.installed = true;
                     extra.recommended = false;
@@ -2113,6 +2118,8 @@ std::vector<EmulatorCollection> emulator_collections()
         if (coll.system.isEmpty())
             continue;
         const EsdeSystem& sys = setup.systems.at(coll.system);
+        coll.is_android = coll.system == QLatin1String("androidapps") || coll.system == QLatin1String("androidgames")
+            || coll.system == QLatin1String("android") || coll.short_name.toLower() == QLatin1String("android");
         coll.system_fullname = sys.fullname.isEmpty() ? sys.name : sys.fullname;
 
         const QString rom_root = coll.files.isEmpty() ? QString()
@@ -2214,7 +2221,7 @@ QString set_collection_emulator(const QString& collection_name, const QString& c
 QString set_game_emulator(const QString& collection_name, const QString& game_path,
                           const QString& game_title, const QString& command)
 {
-    const QString wanted = ::clean_abs_path(QFileInfo(game_path));
+    const QString wanted = MetaFile::is_uri(game_path) ? game_path : ::clean_abs_path(QFileInfo(game_path));
     std::vector<MetaFile> files = files_defining(collection_name);
     if (files.empty())
         return QStringLiteral("No metadata file defines the collection `%1`").arg(collection_name);
@@ -2272,6 +2279,197 @@ QString test_emulator_command(const QString& command, const QString& game_path)
         return QStringLiteral("Only 'am start' commands can be tested here");
     args.removeFirst();  // "am"
     return ::android::run_am_call(args);
+}
+
+
+
+// -- Android collections ------------------------------------------------------------
+
+namespace {
+QString package_of_command(const QString& command)
+{
+    static const QRegularExpression rx(QStringLiteral("(?:^|\\s)-[np]\\s+\"?([A-Za-z0-9_.]+)"));
+    const auto match = rx.match(command);
+    return match.hasMatch() ? match.captured(1) : QString();
+}
+
+/// The package a game of an Android collection opens, from its files
+QString package_of_files(const QStringList& files)
+{
+    for (const QString& file : files) {
+        if (file.startsWith(QLatin1String("android:")))
+            return file.mid(8);
+        if (file.endsWith(QLatin1String(".app"), Qt::CaseInsensitive)) {
+            const QString text = game_file_text::first_line(file);
+            if (!text.isEmpty())
+                return text.section(QLatin1Char('/'), 0, 0);
+            return QFileInfo(file).completeBaseName();
+        }
+    }
+    return {};
+}
+} // namespace
+
+
+std::vector<AndroidApp> android_apps()
+{
+    std::vector<AndroidApp> out;
+    for (const QString& line : ::android::android_app_list()) {
+        const QStringList parts = line.split(QLatin1Char('\t'));
+        if (parts.size() < 4)
+            continue;
+        AndroidApp app;
+        app.label = parts.at(0);
+        app.package = parts.at(1);
+        app.component = parts.at(2);
+        app.game = parts.at(3) == QLatin1String("1");
+        out.push_back(std::move(app));
+    }
+    std::sort(out.begin(), out.end(), [](const AndroidApp& a, const AndroidApp& b) {
+        if (a.game != b.game)
+            return a.game;
+        return a.label.compare(b.label, Qt::CaseInsensitive) < 0;
+    });
+    return out;
+}
+
+
+QString android_app_command(const QString& component)
+{
+    return QStringLiteral("am start --user 0 -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -n ") % component;
+}
+
+
+std::vector<std::pair<QString, QString>> android_game_apps(const QString& collection_name)
+{
+    std::vector<std::pair<QString, QString>> out;
+    for (const MetaFile& file : files_defining(collection_name)) {
+        for (const MetaBlock& block : file.blocks) {
+            if (block.is_collection || block.collection_index < 0
+                || file.blocks[static_cast<size_t>(block.collection_index)].name != collection_name)
+                continue;
+            const QStringList files = file.game_files(block);
+            if (files.isEmpty())
+                continue;
+            const MetaEntry* launch = block.entry(QStringLiteral("launch"));
+            QString package = launch ? package_of_command(launch->values.join(QLatin1Char(' '))) : QString();
+            if (package.isEmpty())
+                package = package_of_files(files);
+            if (!package.isEmpty())
+                out.emplace_back(files.first(), package);
+        }
+    }
+    return out;
+}
+
+
+int match_android_games(const QString& collection_name)
+{
+    const std::vector<AndroidApp> apps = android_apps();
+    HashMap<QString, const AndroidApp*> by_package;
+    HashMap<QString, const AndroidApp*> by_name;
+    for (const AndroidApp& app : apps) {
+        by_package.emplace(app.package, &app);
+        by_name.emplace(normalize_name(app.label), &app);
+    }
+
+    int matched = 0;
+    for (MetaFile& file : files_defining(collection_name)) {
+        bool changed = false;
+        for (size_t b = 0; b < file.blocks.size(); b++) {
+            const MetaBlock& block = file.blocks[b];
+            if (block.is_collection || block.collection_index < 0
+                || file.blocks[static_cast<size_t>(block.collection_index)].name != collection_name)
+                continue;
+            if (block.entry(QStringLiteral("launch")) || block.entry(QStringLiteral("command")))
+                continue;
+
+            // by package first, then by name
+            const AndroidApp* app = nullptr;
+            const QString package = package_of_files(file.game_files(block));
+            if (!package.isEmpty()) {
+                const auto it = by_package.find(package);
+                if (it != by_package.cend())
+                    app = it->second;
+            }
+            if (!app) {
+                const QString title = normalize_name(block.name);
+                const auto it = by_name.find(title);
+                if (it != by_name.cend()) {
+                    app = it->second;
+                }
+                else if (title.length() >= 5) {
+                    for (const AndroidApp& candidate : apps) {
+                        const QString name = normalize_name(candidate.label);
+                        if (name.length() >= 5 && (name.startsWith(title) || title.startsWith(name))) {
+                            app = &candidate;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!app)
+                continue;
+
+            file.set_launch(static_cast<int>(b), android_app_command(app->component));
+            changed = true;
+            matched++;
+        }
+        if (changed && !file.save().isEmpty())
+            break;
+    }
+    return matched;
+}
+
+
+int add_android_games(const QString& collection_name)
+{
+    std::vector<MetaFile> files = files_defining(collection_name);
+    if (files.empty())
+        return 0;
+
+    // the apps the collection already has
+    QSet<QString> present;
+    for (const MetaFile& file : files) {
+        for (const MetaBlock& block : file.blocks) {
+            if (block.is_collection)
+                continue;
+            const MetaEntry* launch = block.entry(QStringLiteral("launch"));
+            const QString from_launch = launch ? package_of_command(launch->values.join(QLatin1Char(' '))) : QString();
+            if (!from_launch.isEmpty())
+                present.insert(from_launch);
+            const QString from_files = package_of_files(file.game_files(block));
+            if (!from_files.isEmpty())
+                present.insert(from_files);
+        }
+    }
+
+    // the user's own file, not the ES-DE import's
+    std::stable_sort(files.begin(), files.end(), [](const MetaFile& a, const MetaFile& b) {
+        const bool a_import = QFileInfo(a.path).fileName() == IMPORT_FILE_NAME;
+        const bool b_import = QFileInfo(b.path).fileName() == IMPORT_FILE_NAME;
+        return !a_import && b_import;
+    });
+    MetaFile& target = files.front();
+    int collection_index = -1;
+    for (size_t b = 0; b < target.blocks.size(); b++) {
+        if (target.blocks[b].is_collection && target.blocks[b].name == collection_name)
+            collection_index = static_cast<int>(b);
+    }
+    if (collection_index < 0)
+        return 0;
+
+    int added = 0;
+    for (const AndroidApp& app : android_apps()) {
+        if (!app.game || present.contains(app.package))
+            continue;
+        target.add_game(collection_index, app.label, QStringLiteral("android:") % app.package,
+                        android_app_command(app.component));
+        added++;
+    }
+    if (added > 0 && !target.save().isEmpty())
+        return 0;
+    return added;
 }
 
 } // namespace esde

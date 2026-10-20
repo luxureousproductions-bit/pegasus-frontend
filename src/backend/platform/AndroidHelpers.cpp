@@ -158,6 +158,11 @@ QStringList resolve_components(const QStringList& components)
     return out;
 }
 
+QStringList android_app_list()
+{
+    return query_string_array("androidAppList");
+}
+
 QString app_label(const QString& package_name)
 {
     static constexpr auto JNI_METHOD = "appLabel";

@@ -107,6 +107,7 @@ struct EmulatorCollection {
     QString missing_app;      ///< for a hand-written command whose app isn't installed: its package
     QStringList files;        ///< the metadata files that define it
     int game_overrides = 0;   ///< games in those files with their own launch command
+    bool is_android = false;  ///< Android apps and games: each game opens its own app
     std::vector<EmulatorChoice> options;
 };
 
@@ -136,6 +137,37 @@ QString set_game_emulator(const QString& collection_name, const QString& game_pa
 
 /// Starts `command` with a game file. Returns an error, or empty.
 QString test_emulator_command(const QString& command, const QString& game_path);
+
+
+// -- Android collections: each game opens its own app ------------------------------
+
+struct AndroidApp {
+    QString label;
+    QString package;
+    QString component;  ///< its start screen
+    bool game = false;  ///< Android knows it's a game
+};
+
+/// The installed apps that can be opened, games first, then by name
+std::vector<AndroidApp> android_apps();
+
+/// The command that opens an app
+QString android_app_command(const QString& component);
+
+/// For each game of an Android collection: the package of the app it opens
+/// (from its own launch line, an android:<package> file or the package
+/// name inside an ES-DE .app file), keyed by the game's file
+std::vector<std::pair<QString, QString>> android_game_apps(const QString& collection_name);
+
+/// Gives every game of an Android collection that opens no app yet the
+/// launch line of its app: found by package (android:<package> files, ES-DE
+/// .app files) or by name. Returns how many games got one.
+int match_android_games(const QString& collection_name);
+
+/// Adds the installed apps Android knows are games, and aren't in the
+/// collection yet, as games of it (file android:<package>, with their
+/// launch line). Returns how many were added.
+int add_android_games(const QString& collection_name);
 
 } // namespace esde
 } // namespace providers

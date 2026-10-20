@@ -441,6 +441,30 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         return "";
     }
 
+    // Pegasus X: the apps that can be opened, as "label<TAB>package<TAB>
+    // component<TAB>1 if Android knows it's a game, else 0"
+    public static String[] androidAppList() {
+        Intent intent = new Intent(Intent.ACTION_MAIN, null);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        final List<ResolveInfo> activities = m_pm.queryIntentActivities(intent, 0);
+
+        List<String> out = new ArrayList<String>();
+        List<String> seen = new ArrayList<String>();
+        for (ResolveInfo info : activities) {
+            final String pkg = info.activityInfo.packageName;
+            if (pkg.equals(m_self.getPackageName()) || seen.contains(pkg))
+                continue;
+            seen.add(pkg);
+            final ApplicationInfo appinfo = info.activityInfo.applicationInfo;
+            boolean game = (appinfo.flags & ApplicationInfo.FLAG_IS_GAME) != 0;
+            if (Build.VERSION.SDK_INT >= 26 && appinfo.category == ApplicationInfo.CATEGORY_GAME)
+                game = true;
+            out.add(info.loadLabel(m_pm).toString() + "\t" + pkg + "\t"
+                    + pkg + "/" + info.activityInfo.name + "\t" + (game ? "1" : "0"));
+        }
+        return out.toArray(new String[0]);
+    }
+
     // Pegasus X: the name an installed app is shown with, or "" if not installed
     public static String appLabel(String packageName) {
         try {
