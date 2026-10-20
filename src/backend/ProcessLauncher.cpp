@@ -23,6 +23,7 @@
 #include "model/gaming/GameFile.h"
 #include "platform/TerminalKbd.h"
 #include "utils/CommandTokenizer.h"
+#include "utils/GameFileText.h"
 #include "utils/PathTools.h"
 
 #ifdef Q_OS_ANDROID
@@ -71,15 +72,9 @@ void replace_variables(QString& param, const QFileInfo& finfo)
         .replace(QLatin1String("{file.basename}"), finfo.completeBaseName())
         .replace(QLatin1String("{file.dir}"), ::pretty_dir(finfo));
 
-    // Pegasus X: the text inside the game file, eg. the Steam app ID of a
-    // .steam file (GameNative, GameHub Lite) or the package of an Android app
-    if (param.contains(QLatin1String("{file.contents}"))) {
-        QString contents;
-        QFile file(abs_path);
-        if (finfo.isFile() && file.size() < 64 * 1024 && file.open(QIODevice::ReadOnly | QIODevice::Text))
-            contents = QString::fromUtf8(file.readAll()).trimmed().section(QLatin1Char('\n'), 0, 0).trimmed();
-        param.replace(QLatin1String("{file.contents}"), contents);
-    }
+    // Pegasus X: text read from the game file ({file.contents}, {file.inject:<ext>}),
+    // eg. the Steam app ID of a .steam file or the title ID of a .psvita file
+    game_file_text::fill_in(param, finfo);
 
 #ifdef Q_OS_ANDROID
     const QString document_uri_str = android::to_document_uri(abs_path);

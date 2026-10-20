@@ -27,6 +27,8 @@
 #include <QObject>
 
 
+class QNetworkAccessManager;
+
 namespace model {
 
 /// Provides a settings interface for the frontend layer
@@ -109,6 +111,12 @@ public:
                                         const QString& game_title, const QString& command);
     Q_INVOKABLE QString testEmulatorCommand(const QString& command, const QString& game_path) const;
 
+    /// Downloads ES-DE's latest Android emulator lists (emulatorListUpdated
+    /// when done); they're used instead of the copy built into the app
+    Q_INVOKABLE void updateEmulatorList();
+    /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"
+    Q_INVOKABLE QString emulatorListInfo() const;
+
     QStringList androidGrantedDirs() const;
     Q_INVOKABLE void requestAndroidDir();
 
@@ -126,12 +134,14 @@ signals:
     void esdeImportProgress(int done, int total, QString system);
     void esdeImportFinished(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
+    void emulatorListUpdated(bool ok, QString message);
     void esdeImportSystemsReady(QVariantList systems);
     void androidDirsChanged();
     void providerReloadingRequested();
 
 private:
     bool m_esde_import_running = false;
+    QNetworkAccessManager* m_netman = nullptr;
 };
 
 } // namespace model

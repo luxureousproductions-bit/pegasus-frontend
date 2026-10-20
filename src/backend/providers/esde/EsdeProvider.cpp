@@ -31,6 +31,7 @@
 #include "providers/skraper/SkraperAssetsProvider.h"
 #include "Paths.h"
 #include "utils/CommandTokenizer.h"
+#include "utils/GameFileText.h"
 #include "utils/HashMap.h"
 #include "utils/PathTools.h"
 
@@ -50,6 +51,16 @@
 
 // The bundled ES-DE configuration lives in a resource file of this static library
 static void init_esde_resources() { Q_INIT_RESOURCE(esde); }
+
+/// ES-DE's emulator list file: the one downloaded by "Update emulator list"
+/// (in the config folder) if there is one, else the copy built into the app
+static QString esde_list_file(const QString& name)
+{
+    const QString downloaded = paths::writableConfigDir() % QStringLiteral("/esde-lists/") % name;
+    if (QFileInfo::exists(downloaded))
+        return downloaded;
+    return QStringLiteral(":/esde/") % name;
+}
 
 
 namespace {
@@ -479,9 +490,13 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
         }
 
         QString value = unquote(token.mid(key_end + 2));
-        // %INJECT%=%ROM%: the text inside the game file (eg. a Steam app ID)
-        if (value == QLatin1String("%INJECT%=%ROM%"))
-            value = QStringLiteral("{file.contents}");
+        // %INJECT%=<file>: the text inside a file. %ROM% is the game file
+        // itself (eg. a Steam app ID in a .steam file); %BASENAME%.<ext> is
+        // the file of that name next to the game, or inside a game folder
+        // (eg. a PS Vita title ID in a .psvita file)
+        value.replace(QLatin1String("%INJECT%=%ROM%"), QLatin1String("{file.contents}"));
+        static const QRegularExpression rx_inject(QStringLiteral("%INJECT%=%BASENAME%\\.(\\w+)"));
+        value.replace(rx_inject, QStringLiteral("{file.inject:\\1}"));
         if (!expand_variables(value, package, rom_root, ctx.primary_storage)) {
             error = QStringLiteral("unsupported variable in `%1`").arg(token);
             return {};
@@ -868,10 +883,10 @@ Provider& EsdeProvider::run(SearchContext& sctx)
     load_systems(display_name(), esde_dir % QStringLiteral("/custom_systems/es_systems.xml"), systems, system_order, load_exclusive);
     if (!load_exclusive) {
         bool unused = false;
-        load_systems(display_name(), QStringLiteral(":/esde/es_systems.xml"), systems, system_order, unused);
+        load_systems(display_name(), esde_list_file(QStringLiteral("es_systems.xml")), systems, system_order, unused);
     }
     load_find_rules(display_name(), esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), ctx.emulators);
-    load_find_rules(display_name(), QStringLiteral(":/esde/es_find_rules.xml"), ctx.emulators);
+    load_find_rules(display_name(), esde_list_file(QStringLiteral("es_find_rules.xml")), ctx.emulators);
     Log::info(display_name(), LOGMSG("%1 systems and %2 emulators defined")
         .arg(QString::number(systems.size()), QString::number(ctx.emulators.size())));
 
@@ -1046,7 +1061,7 @@ ImportSetup load_import_setup(const QString& esde_dir)
     load_systems(log_tag, out.esde_dir % QStringLiteral("/custom_systems/es_systems.xml"), out.systems, out.order, load_exclusive);
     if (!load_exclusive) {
         bool unused = false;
-        load_systems(log_tag, QStringLiteral(":/esde/es_systems.xml"), out.systems, out.order, unused);
+        load_systems(log_tag, esde_list_file(QStringLiteral("es_systems.xml")), out.systems, out.order, unused);
     }
 
     // the ROMs folders: ES-DE's setting, the usual "ROMs" folders, and the
@@ -1781,6 +1796,7 @@ struct EmulatorSetup {
     HashMap<QString, EsdeSystem> systems;
     std::vector<QString> order;
     HashMap<QString, QString> name_to_system;  ///< normalized name -> ES-DE system
+    HashMap<QString, QString> recommended;     ///< ES-DE system -> label of ES-DE's default emulator
 
     EmulatorSetup() {
         init_esde_resources();
@@ -1793,7 +1809,12 @@ struct EmulatorSetup {
         const QString esde_dir = esde_default_dir();
         {
             bool unused = false;
-            load_systems(ctx.log_tag, QStringLiteral(":/esde/es_systems.xml"), systems, order, unused);
+            load_systems(ctx.log_tag, esde_list_file(QStringLiteral("es_systems.xml")), systems, order, unused);
+        }
+        for (const QString& name : order) {
+            const EsdeSystem& sys = systems.at(name);
+            if (!sys.commands.empty())
+                recommended.emplace(name, sys.commands.front().label.isEmpty() ? QStringLiteral("Default") : sys.commands.front().label);
         }
         if (!esde_dir.isEmpty()) {
             HashMap<QString, EsdeSystem> custom;
@@ -1821,14 +1842,32 @@ struct EmulatorSetup {
         }
         if (!esde_dir.isEmpty())
             load_find_rules(ctx.log_tag, esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), ctx.emulators);
-        load_find_rules(ctx.log_tag, QStringLiteral(":/esde/es_find_rules.xml"), ctx.emulators);
+        load_find_rules(ctx.log_tag, esde_list_file(QStringLiteral("es_find_rules.xml")), ctx.emulators);
 
         // which emulator screens exist on this device, asked in one go
         QStringList components;
         for (const auto& entry : ctx.emulators)
             components.append(entry.second);
         components.removeDuplicates();
-        const QStringList resolved = ::android::resolve_components(components);
+        QStringList resolved = ::android::resolve_components(components);
+
+        // builds of an emulator under their own package name (eg. a fork
+        // named org.vita3k.emulator.plus) count as that emulator too
+        const QStringList installed = ::android::installed_packages();
+        for (int i = 0; i < components.size() && i < resolved.size(); i++) {
+            if (!resolved.at(i).isEmpty())
+                continue;
+            const QString package = components.at(i).section(QLatin1Char('/'), 0, 0);
+            for (const QString& other : installed) {
+                if (!other.startsWith(package % QLatin1Char('.')))
+                    continue;
+                const QString activity = ::android::find_game_activity(other);
+                if (!activity.isEmpty()) {
+                    resolved[i] = activity;
+                    break;
+                }
+            }
+        }
         for (int i = 0; i < components.size() && i < resolved.size(); i++)
             ctx.resolved_components.emplace(components.at(i), resolved.at(i));
 
@@ -1839,6 +1878,30 @@ struct EmulatorSetup {
         for (const QString& name : order)
             name_to_system.emplace(normalize_name(pegasus_short_name(name)), name);
         name_to_system.emplace(QStringLiteral("android"), QStringLiteral("androidapps"));
+
+        // names people often give their collections
+        static const std::vector<std::pair<const char*, const char*>> COMMON {
+            {"supernintendo", "snes"}, {"supernes", "snes"}, {"superfamicom", "sfc"},
+            {"nintendoentertainmentsystem", "nes"}, {"famicom", "famicom"},
+            {"nintendo64", "n64"}, {"gamecube", "gc"}, {"ngc", "gc"}, {"nintendogamecube", "gc"},
+            {"nintendowii", "wii"}, {"nintendowiiu", "wiiu"}, {"nintendoswitch", "switch"}, {"ns", "switch"},
+            {"gameboy", "gb"}, {"gameboycolor", "gbc"}, {"gameboyadvance", "gba"},
+            {"ds", "nds"}, {"nintendods", "nds"}, {"3ds", "n3ds"}, {"nintendo3ds", "n3ds"},
+            {"ps1", "psx"}, {"psone", "psx"}, {"playstation", "psx"}, {"playstation1", "psx"},
+            {"playstation2", "ps2"}, {"playstation3", "ps3"}, {"playstation4", "ps4"},
+            {"playstationportable", "psp"}, {"vita", "psvita"}, {"psv", "psvita"}, {"playstationvita", "psvita"},
+            {"genesis", "genesis"}, {"md", "megadrive"}, {"segamegadrive", "megadrive"}, {"segagenesis", "genesis"},
+            {"sms", "mastersystem"}, {"gg", "gamegear"}, {"segacd", "segacd"}, {"32x", "sega32x"},
+            {"dc", "dreamcast"}, {"turbografx16", "tg16"}, {"pce", "pcengine"},
+            {"neogeopocket", "ngp"}, {"neogeopocketcolor", "ngpc"}, {"lynx", "atarilynx"}, {"jaguar", "atarijaguar"},
+            {"ws", "wonderswan"}, {"wsc", "wonderswancolor"}, {"msdos", "dos"}, {"pc", "windows"},
+            {"steam", "steam"}, {"x360", "xbox360"}, {"microsoftxbox", "xbox"}, {"switch", "switch"},
+        };
+        for (const auto& entry : COMMON) {
+            const QString target = QLatin1String(entry.second);
+            if (systems.count(target))
+                name_to_system.emplace(QLatin1String(entry.first), target);
+        }
         for (const QString& name : order) {
             const EsdeSystem& sys = systems.at(name);
             if (!sys.fullname.isEmpty())
@@ -1874,6 +1937,8 @@ struct EmulatorSetup {
             choice.command = command;
             choice.installed = installed;
             choice.retroarch = cmd.raw.startsWith(QLatin1String("%EMULATOR_RETROARCH%"));
+            const auto rec_it = recommended.find(system_name);
+            choice.recommended = rec_it != recommended.cend() && rec_it->second == label;
             out.push_back(std::move(choice));
         }
         // installed ones first, keeping ES-DE's order otherwise
@@ -2107,13 +2172,7 @@ QString test_emulator_command(const QString& command, const QString& game_path)
            .replace(QLatin1String("{file.name}"), game_file.fileName())
            .replace(QLatin1String("{file.basename}"), game_file.completeBaseName())
            .replace(QLatin1String("{file.dir}"), ::pretty_dir(game_file));
-        if (arg.contains(QLatin1String("{file.contents}"))) {
-            QFile file(abs_path);
-            QString contents;
-            if (game_file.isFile() && file.size() < 64 * 1024 && file.open(QIODevice::ReadOnly | QIODevice::Text))
-                contents = QString::fromUtf8(file.readAll()).trimmed().section(QLatin1Char('\n'), 0, 0).trimmed();
-            arg.replace(QLatin1String("{file.contents}"), contents);
-        }
+        game_file_text::fill_in(arg, game_file);
     }
     if (args.isEmpty() || args.first() != QLatin1String("am"))
         return QStringLiteral("Only 'am start' commands can be tested here");

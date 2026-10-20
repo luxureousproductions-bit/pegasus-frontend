@@ -32,6 +32,10 @@
 #endif
 
 #include <QCursor>
+#include <QLocale>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QSettings>
 #include <QtConcurrent/QtConcurrent>
 #include <QFileInfo>
@@ -238,6 +242,7 @@ QVariantList Settings::emulatorCollections() const
                 { QStringLiteral("command"), option.command },
                 { QStringLiteral("installed"), option.installed },
                 { QStringLiteral("retroarch"), option.retroarch },
+                { QStringLiteral("recommended"), option.recommended },
             });
         }
         out.append(QVariantMap {
@@ -279,6 +284,79 @@ void Settings::setLiveLaunchCommand(QObject* game, const QString& command)
     auto* const game_ptr = qobject_cast<model::Game*>(game);
     if (game_ptr)
         game_ptr->setLaunchCmd(command);
+}
+
+namespace {
+// ES-DE's Android configuration, from its repository
+const QString ESDE_LISTS_URL = QStringLiteral(
+    "https://gitlab.com/es-de/emulationstation-de/-/raw/master/resources/systems/android/");
+
+QString esde_lists_dir()
+{
+    return paths::writableConfigDir() + QStringLiteral("/esde-lists");
+}
+} // namespace
+
+QString Settings::emulatorListInfo() const
+{
+    const QFileInfo finfo(esde_lists_dir() + QStringLiteral("/es_systems.xml"));
+    if (!finfo.exists())
+        return tr("Built into this version of Pegasus X");
+    return tr("Downloaded %1").arg(QLocale().toString(finfo.lastModified().date(), QLocale::ShortFormat));
+}
+
+void Settings::updateEmulatorList()
+{
+    if (!m_netman)
+        m_netman = new QNetworkAccessManager(this);
+
+    // both files are checked before either is kept, so a failed or partial
+    // download never replaces a working list
+    auto* const results = new QHash<QString, QByteArray>();
+    auto* const pending = new int(2);
+    const QStringList names { QStringLiteral("es_systems.xml"), QStringLiteral("es_find_rules.xml") };
+    for (const QString& name : names) {
+        QNetworkRequest request(QUrl(ESDE_LISTS_URL + name));
+        request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+        QNetworkReply* const reply = m_netman->get(request);
+        connect(reply, &QNetworkReply::finished, this, [this, reply, name, results, pending]{
+            if (reply->error() == QNetworkReply::NoError)
+                results->insert(name, reply->readAll());
+            else
+                Log::warning(LOGMSG("Emulator list: could not download %1: %2").arg(name, reply->errorString()));
+            reply->deleteLater();
+
+            if (--(*pending) > 0)
+                return;
+
+            const QByteArray systems = results->value(QStringLiteral("es_systems.xml"));
+            const QByteArray rules = results->value(QStringLiteral("es_find_rules.xml"));
+            delete results;
+            delete pending;
+
+            if (systems.isEmpty() || rules.isEmpty()) {
+                emit emulatorListUpdated(false, tr("Couldn't download the list. Check the internet connection."));
+                return;
+            }
+            if (!systems.contains("<systemList") || systems.count("<system>") < 100 || !rules.contains("<ruleList")) {
+                emit emulatorListUpdated(false, tr("The downloaded list doesn't look right, kept the current one."));
+                return;
+            }
+
+            QDir().mkpath(esde_lists_dir());
+            for (const auto& entry : { qMakePair(QStringLiteral("es_systems.xml"), systems),
+                                       qMakePair(QStringLiteral("es_find_rules.xml"), rules) }) {
+                QFile file(esde_lists_dir() + QLatin1Char('/') + entry.first);
+                if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                    emit emulatorListUpdated(false, tr("Couldn't save the list."));
+                    return;
+                }
+                file.write(entry.second);
+            }
+            Log::info(LOGMSG("Emulator list updated from ES-DE (%1 systems)").arg(systems.count("<system>")));
+            emit emulatorListUpdated(true, tr("Updated: %1 systems.").arg(systems.count("<system>")));
+        });
+    }
 }
 
 QVariantMap Settings::gameEmulators(const QString& collection_name) const

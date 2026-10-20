@@ -91,6 +91,7 @@ struct EmulatorChoice {
     QString command;  ///< the launch command for a Pegasus metadata file
     bool installed = false;
     bool retroarch = false;  ///< a RetroArch core, which also has to be downloaded in RetroArch
+    bool recommended = false;  ///< ES-DE's default for the system
 };
 
 /// A collection defined in the user's metadata files

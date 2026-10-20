@@ -1,5 +1,6 @@
 HEADERS += \
     $$PWD/CommandTokenizer.h \
+    $$PWD/GameFileText.h \
     $$PWD/DiskCachedNAM.h \
     $$PWD/FakeQKeyEvent.h \
     $$PWD/FolderListModel.h \

@@ -33,6 +33,23 @@ jobs:
         run: |
           .circleci/prepare.sh
           curl -L ${TOOLS_URL}/openssl-111t_android.tar.xz | tar xJf - -C /opt/
+      # Pegasus X: the emulator lists are ES-DE's, refreshed from its
+      # repository on every build so new emulators are always included; the
+      # copy in this repository is kept if the download fails or looks wrong
+      - name: Refresh ES-DE emulator lists
+        continue-on-error: true
+        run: |
+          BASE=https://gitlab.com/es-de/emulationstation-de/-/raw/master/resources/systems/android
+          DEST=src/backend/providers/esde/resources
+          if curl -fsSL "$BASE/es_systems.xml" -o /tmp/es_systems.xml && curl -fsSL "$BASE/es_find_rules.xml" -o /tmp/es_find_rules.xml \
+             && grep -q '<systemList' /tmp/es_systems.xml && [ "$(grep -c '<system>' /tmp/es_systems.xml)" -ge 100 ] \
+             && grep -q '<ruleList' /tmp/es_find_rules.xml; then
+            cp /tmp/es_systems.xml /tmp/es_find_rules.xml "$DEST/"
+            echo "::notice::ES-DE emulator lists refreshed: $(grep -c '<system>' $DEST/es_systems.xml) systems, $(grep -c '<emulator ' $DEST/es_find_rules.xml) emulators"
+          else
+            echo "::warning::Could not refresh the ES-DE emulator lists, using the copy in the repository"
+          fi
+
       - name: Build
         env:
           BUILDOPTS: ANDROID_ABIS=${{ matrix.abi }} FORCE_QT_PNG=1

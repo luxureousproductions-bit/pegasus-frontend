@@ -49,9 +49,12 @@ FocusScope {
     }
     Connections {
         target: Internal.settings
-        function onEmulatorCollectionsReady(list) {
-            root.collections = list;
+        function onEmulatorCollectionsReady(collections) {
+            const first = root.loading;
+            root.collections = collections;
             root.loading = false;
+            if (first && collections.length > 0)
+                list.currentIndex = 1;  // the first collection, below the emulator list row
             if (root.coll)
                 root.loadGames();
         }
@@ -107,6 +110,26 @@ FocusScope {
             if (!gameCommands[games[i].path])
                 Internal.settings.setLiveLaunchCommand(games[i].obj, command);
         }
+    }
+
+    // the first row of the list is the emulator list itself
+    property string listInfo: Internal.settings.emulatorListInfo()
+    property bool listUpdating: false
+    Connections {
+        target: Internal.settings
+        function onEmulatorListUpdated(ok, text) {
+            root.listUpdating = false;
+            root.listInfo = text;
+            if (ok)
+                root.refresh();
+        }
+    }
+    function updateList() {
+        if (listUpdating)
+            return;
+        listUpdating = true;
+        listInfo = qsTr("Downloading the latest from ES-DE...") + api.tr;
+        Internal.settings.updateEmulatorList();
     }
 
     function openCollection(index) {
@@ -210,7 +233,7 @@ FocusScope {
         clip: true
 
         focus: true
-        model: root.collections
+        model: [{ "kind": "update" }].concat(root.collections)
         highlightRangeMode: ListView.ApplyRange
         preferredHighlightBegin: height * 0.3
         preferredHighlightEnd: height * 0.7
@@ -236,7 +259,10 @@ FocusScope {
         Keys.onPressed: {
             if (api.keys.isAccept(event) && !event.isAutoRepeat) {
                 event.accepted = true;
-                root.openCollection(currentIndex);
+                if (currentIndex === 0)
+                    root.updateList();
+                else
+                    root.openCollection(currentIndex - 1);
             }
         }
 
@@ -255,7 +281,7 @@ FocusScope {
             }
             Text {
                 id: collName
-                text: modelData.name
+                text: modelData.kind === "update" ? qsTr("Emulator list") + api.tr : modelData.name
                 color: "#eee"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(22)
@@ -266,8 +292,11 @@ FocusScope {
                 elide: Text.ElideRight
             }
             Text {
-                text: modelData.system === "" ? qsTr("Unknown system") + api.tr : root.collectionText(modelData)
-                color: (modelData.command && !modelData.currentInstalled) || modelData.system === "" ? "#e8b06a" : "#c0c0c0"
+                text: modelData.kind === "update"
+                    ? root.listInfo + (root.listUpdating ? "" : qsTr("  ·  A: update") + api.tr)
+                    : modelData.system === "" ? qsTr("Unknown system") + api.tr : root.collectionText(modelData)
+                color: modelData.kind === "update" ? "#5cc"
+                     : (modelData.command && !modelData.currentInstalled) || modelData.system === "" ? "#e8b06a" : "#c0c0c0"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(22)
                 anchors.left: collName.right
@@ -284,7 +313,10 @@ FocusScope {
                 hoverEnabled: true
                 onClicked: {
                     list.currentIndex = index;
-                    root.openCollection(index);
+                    if (index === 0)
+                        root.updateList();
+                    else
+                        root.openCollection(index - 1);
                 }
             }
         }
@@ -492,7 +524,8 @@ FocusScope {
             for (var i = 0; i < c.options.length; i++) {
                 var o = c.options[i];
                 var entry = { "kind": "option", "text": o.label, "command": o.command, "installed": o.installed,
-                              "note": o.retroarch && o.installed ? qsTr("needs the core") + api.tr : "",
+                              "note": o.recommended ? qsTr("recommended") + api.tr
+                                    : (o.retroarch && o.installed ? qsTr("needs the core") + api.tr : ""),
                               "current": current !== "" && root.sameCommand(o.command, current) };
                 (o.installed ? installed : missing).push(entry);
             }
