@@ -21,6 +21,7 @@ import android.app.ActivityManager;
 import android.content.Context;
 import android.app.Activity;
 import android.content.Intent;
+import android.content.ComponentName;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.UriPermission;
@@ -355,6 +356,52 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         }
 
         return null;
+    }
+
+    // Pegasus X: for each "package/activity" entry, the component to launch
+    // on this device: the entry itself if it exists; if only the package is
+    // installed (some builds of an emulator name their game screen
+    // differently), the screen of that app that opens files; or "" if the
+    // app isn't installed. The result has the same length as the input.
+    public static String[] resolveComponents(String[] components) {
+        String[] out = new String[components.length];
+        for (int i = 0; i < components.length; i++) {
+            out[i] = "";
+            final ComponentName cn = ComponentName.unflattenFromString(components[i]);
+            if (cn == null)
+                continue;
+            try {
+                m_pm.getActivityInfo(cn, 0);
+                out[i] = components[i];
+            }
+            catch (PackageManager.NameNotFoundException e) {
+                out[i] = findGameActivity(cn.getPackageName());
+            }
+        }
+        return out;
+    }
+
+    // Pegasus X: the screen of an installed app that opens game files: one
+    // that handles viewing a file, or else the app's own start screen.
+    // Returns "package/activity", or "" if the app isn't installed.
+    public static String findGameActivity(String packageName) {
+        final String[] mimeTypes = { "application/octet-stream", "*/*" };
+        final String[] schemes = { "content", "file" };
+        for (String scheme : schemes) {
+            for (String mime : mimeTypes) {
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(Uri.parse(scheme + "://pegasus/game.iso"), mime);
+                intent.setPackage(packageName);
+                final List<ResolveInfo> found = m_pm.queryIntentActivities(intent, 0);
+                if (found != null && !found.isEmpty() && found.get(0).activityInfo != null)
+                    return packageName + "/" + found.get(0).activityInfo.name;
+            }
+        }
+
+        final Intent launch = m_pm.getLaunchIntentForPackage(packageName);
+        if (launch != null && launch.getComponent() != null)
+            return launch.getComponent().flattenToString();
+        return "";
     }
 
     public static String toContentUri(String path) {

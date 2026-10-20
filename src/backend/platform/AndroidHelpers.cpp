@@ -131,6 +131,43 @@ QStringList installed_packages()
     return query_string_array("installedPackages");
 }
 
+QStringList resolve_components(const QStringList& components)
+{
+    QAndroidJniEnvironment jni_env;
+
+    std::vector<QAndroidJniObject> str_objs;
+    str_objs.reserve(components.length());
+    for (const QString& component : components)
+        str_objs.emplace_back(QAndroidJniObject::fromString(component));
+
+    jobjectArray jni_arr = jni_env->NewObjectArray(components.size(), jni_env->FindClass("java/lang/String"), nullptr);
+    for (size_t i = 0; i < str_objs.size(); i++)
+        jni_env->SetObjectArrayElement(jni_arr, i, str_objs.at(i).object<jstring>());
+
+    static constexpr auto JNI_METHOD = "resolveComponents";
+    static constexpr auto JNI_SIGNATURE = "([Ljava/lang/String;)[Ljava/lang/String;";
+    const auto result_raw = QAndroidJniObject::callStaticObjectMethod(jni_classname(), JNI_METHOD, JNI_SIGNATURE, jni_arr);
+    const auto result_arr = result_raw.object<jobjectArray>();
+
+    QStringList out;
+    const jsize count = result_arr ? jni_env->GetArrayLength(result_arr) : 0;
+    for (jsize i = 0; i < count; i++)
+        out.append(QAndroidJniObject(jni_env->GetObjectArrayElement(result_arr, i)).toString());
+    while (out.size() < components.size())
+        out.append(QString());
+    return out;
+}
+
+QString find_game_activity(const QString& package_name)
+{
+    static constexpr auto JNI_METHOD = "findGameActivity";
+    static constexpr auto JNI_SIGNATURE = "(Ljava/lang/String;)Ljava/lang/String;";
+    const QAndroidJniObject jni_pkg = QAndroidJniObject::fromString(package_name);
+    const auto result = QAndroidJniObject::callStaticObjectMethod(
+        jni_classname(), JNI_METHOD, JNI_SIGNATURE, jni_pkg.object<jstring>());
+    return result.toString();
+}
+
 QStringList granted_paths()
 {
     return query_string_array("grantedPaths");

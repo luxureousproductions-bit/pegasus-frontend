@@ -94,6 +94,14 @@ public:
     /// Runs in the background: esdeImportProgress while it works, then esdeImportFinished
     Q_INVOKABLE void startEsdeImport(const QStringList& system_names);
 
+    // Pegasus X: emulators
+    Q_INVOKABLE QVariantList emulatorCollections() const;
+    Q_INVOKABLE QVariantMap gameEmulators(const QString& collection_name) const;
+    Q_INVOKABLE QString setCollectionEmulator(const QString& collection_name, const QString& command);
+    Q_INVOKABLE QString setGameEmulator(const QString& collection_name, const QString& game_path,
+                                        const QString& game_title, const QString& command);
+    Q_INVOKABLE QString testEmulatorCommand(const QString& command, const QString& game_path) const;
+
     QStringList androidGrantedDirs() const;
     Q_INVOKABLE void requestAndroidDir();
 

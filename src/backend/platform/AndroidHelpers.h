@@ -36,6 +36,11 @@ int pdf_page_count(const QString& path_or_url);
 
 QStringList granted_paths();
 QStringList installed_packages();
+/// For each "package/activity": itself if it exists, else a screen of that
+/// app that opens files (if installed), else empty; same length as the input
+QStringList resolve_components(const QStringList&);
+/// "package/activity" of an app's screen that opens game files, or empty
+QString find_game_activity(const QString& package_name);
 void request_saf_permission(const std::function<void()>&);
 
 QString run_am_call(const QStringList&);

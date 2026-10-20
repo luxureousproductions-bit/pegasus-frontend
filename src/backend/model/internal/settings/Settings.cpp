@@ -225,6 +225,85 @@ void Settings::setEsdeCombineAndroid(bool value)
     emit esdeImportDirChanged();
 }
 
+QVariantList Settings::emulatorCollections() const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& coll : providers::esde::emulator_collections()) {
+        QVariantList options;
+        for (const auto& option : coll.options) {
+            options.append(QVariantMap {
+                { QStringLiteral("label"), option.label },
+                { QStringLiteral("command"), option.command },
+                { QStringLiteral("installed"), option.installed },
+                { QStringLiteral("retroarch"), option.retroarch },
+            });
+        }
+        out.append(QVariantMap {
+            { QStringLiteral("name"), coll.name },
+            { QStringLiteral("shortName"), coll.short_name },
+            { QStringLiteral("system"), coll.system },
+            { QStringLiteral("systemName"), coll.system_fullname },
+            { QStringLiteral("command"), coll.command },
+            { QStringLiteral("currentLabel"), coll.current_label },
+            { QStringLiteral("currentInstalled"), coll.current_installed },
+            { QStringLiteral("files"), coll.files },
+            { QStringLiteral("gameOverrides"), coll.game_overrides },
+            { QStringLiteral("options"), options },
+        });
+    }
+#endif
+    return out;
+}
+
+QVariantMap Settings::gameEmulators(const QString& collection_name) const
+{
+    QVariantMap out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& entry : providers::esde::game_emulators(collection_name))
+        out.insert(entry.path, entry.command);
+#else
+    Q_UNUSED(collection_name);
+#endif
+    return out;
+}
+
+QString Settings::setCollectionEmulator(const QString& collection_name, const QString& command)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::set_collection_emulator(collection_name, command);
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(command);
+    return QStringLiteral("Not supported on this platform");
+#endif
+}
+
+QString Settings::setGameEmulator(const QString& collection_name, const QString& game_path,
+                                  const QString& game_title, const QString& command)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::set_game_emulator(collection_name, game_path, game_title, command);
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(game_path);
+    Q_UNUSED(game_title);
+    Q_UNUSED(command);
+    return QStringLiteral("Not supported on this platform");
+#endif
+}
+
+QString Settings::testEmulatorCommand(const QString& command, const QString& game_path) const
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::test_emulator_command(command, game_path);
+#else
+    Q_UNUSED(command);
+    Q_UNUSED(game_path);
+    return QStringLiteral("Not supported on this platform");
+#endif
+}
+
 void Settings::startEsdeImport(const QStringList& system_names)
 {
 #ifdef WITH_COMPAT_ESDE
