@@ -53,7 +53,8 @@ class Settings : public QObject {
     Q_PROPERTY(QStringList gameDirs READ gameDirs NOTIFY gameDirsChanged)
     Q_PROPERTY(bool esdeImportSupported READ esdeImportSupported CONSTANT)
     Q_PROPERTY(QString esdeImportDir READ esdeImportDir WRITE setEsdeImportDir NOTIFY esdeImportDirChanged)
-    Q_PROPERTY(bool esdeCombineAndroid READ esdeCombineAndroid WRITE setEsdeCombineAndroid NOTIFY esdeImportDirChanged)
+    Q_PROPERTY(bool esdeAppsAsAndroid READ esdeAppsAsAndroid WRITE setEsdeAppsAsAndroid NOTIFY esdeImportDirChanged)
+    Q_PROPERTY(bool esdeGamesAsAndroid READ esdeGamesAsAndroid WRITE setEsdeGamesAsAndroid NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeImportRunning READ esdeImportRunning NOTIFY esdeImportRunningChanged)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
@@ -90,8 +91,10 @@ public:
     QString esdeImportDir() const;
     void setEsdeImportDir(const QString&);
     Q_INVOKABLE QVariantList esdeImportSystems() const;
-    bool esdeCombineAndroid() const;
-    void setEsdeCombineAndroid(bool);
+    bool esdeAppsAsAndroid() const;
+    void setEsdeAppsAsAndroid(bool);
+    bool esdeGamesAsAndroid() const;
+    void setEsdeGamesAsAndroid(bool);
     bool esdeImportRunning() const { return m_esde_import_running; }
     /// Runs in the background: esdeImportProgress while it works, then esdeImportFinished
     Q_INVOKABLE void startEsdeImport(const QStringList& system_names);

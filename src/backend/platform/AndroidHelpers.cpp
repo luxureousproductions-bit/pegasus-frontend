@@ -158,6 +158,16 @@ QStringList resolve_components(const QStringList& components)
     return out;
 }
 
+QString app_label(const QString& package_name)
+{
+    static constexpr auto JNI_METHOD = "appLabel";
+    static constexpr auto JNI_SIGNATURE = "(Ljava/lang/String;)Ljava/lang/String;";
+    const QAndroidJniObject jni_pkg = QAndroidJniObject::fromString(package_name);
+    const auto result = QAndroidJniObject::callStaticObjectMethod(
+        jni_classname(), JNI_METHOD, JNI_SIGNATURE, jni_pkg.object<jstring>());
+    return result.toString();
+}
+
 QString find_game_activity(const QString& package_name)
 {
     static constexpr auto JNI_METHOD = "findGameActivity";

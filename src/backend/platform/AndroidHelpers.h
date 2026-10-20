@@ -41,6 +41,8 @@ QStringList installed_packages();
 QStringList resolve_components(const QStringList&);
 /// "package/activity" of an app's screen that opens game files, or empty
 QString find_game_activity(const QString& package_name);
+/// The name an installed app is shown with, or empty
+QString app_label(const QString& package_name);
 void request_saf_permission(const std::function<void()>&);
 
 QString run_am_call(const QStringList&);

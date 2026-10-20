@@ -441,6 +441,16 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         return "";
     }
 
+    // Pegasus X: the name an installed app is shown with, or "" if not installed
+    public static String appLabel(String packageName) {
+        try {
+            return m_pm.getApplicationLabel(m_pm.getApplicationInfo(packageName, 0)).toString();
+        }
+        catch (Exception e) {
+            return "";
+        }
+    }
+
     public static String toContentUri(String path) {
         final Uri uri = FileProvider.getUriForFile(
             m_self,

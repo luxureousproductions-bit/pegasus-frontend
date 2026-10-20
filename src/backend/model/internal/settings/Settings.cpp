@@ -217,16 +217,29 @@ QVariantList Settings::esdeImportSystems() const
     return out;
 }
 
-bool Settings::esdeCombineAndroid() const
+bool Settings::esdeAppsAsAndroid() const
 {
     const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
-    return file.value(QStringLiteral("esdeImport/combineAndroid"), true).toBool();
+    return file.value(QStringLiteral("esdeImport/appsAsAndroid"), true).toBool();
 }
 
-void Settings::setEsdeCombineAndroid(bool value)
+void Settings::setEsdeAppsAsAndroid(bool value)
 {
     QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
-    file.setValue(QStringLiteral("esdeImport/combineAndroid"), value);
+    file.setValue(QStringLiteral("esdeImport/appsAsAndroid"), value);
+    emit esdeImportDirChanged();
+}
+
+bool Settings::esdeGamesAsAndroid() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return file.value(QStringLiteral("esdeImport/gamesAsAndroid"), true).toBool();
+}
+
+void Settings::setEsdeGamesAsAndroid(bool value)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("esdeImport/gamesAsAndroid"), value);
     emit esdeImportDirChanged();
 }
 
@@ -416,11 +429,15 @@ void Settings::startEsdeImport(const QStringList& system_names)
     emit esdeImportRunningChanged();
 
     const QString esde_dir = esdeImportDir();
-    const bool combine_android = esdeCombineAndroid();
+    QStringList android_systems;
+    if (esdeAppsAsAndroid())
+        android_systems.append(QStringLiteral("androidapps"));
+    if (esdeGamesAsAndroid())
+        android_systems.append(QStringLiteral("androidgames"));
 
     // the work runs in the background, so the screen can show its progress
-    QtConcurrent::run([this, esde_dir, system_names, combine_android]{
-        const auto result = providers::esde::esde_import(esde_dir, system_names, combine_android,
+    QtConcurrent::run([this, esde_dir, system_names, android_systems]{
+        const auto result = providers::esde::esde_import(esde_dir, system_names, android_systems,
             [this](int done, int total, const QString& system) {
                 emit esdeImportProgress(done, total, system);  // queued to the screen
             });

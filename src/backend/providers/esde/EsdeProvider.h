@@ -76,10 +76,11 @@ std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir);
 /// folder. Multi-disc games are one entry with all their discs. No launch
 /// commands are written; the folder's other metadata files or the emulator
 /// settings provide those. Running it again replaces the file.
-/// `combine_android`: Android Apps and Android Games go into one "Android"
-/// collection. `progress` is called before each system (done, total, name)
-/// and once more at the end; it may be called from a worker thread.
-EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, bool combine_android,
+/// `android_systems`: of "androidapps" and "androidgames", the ones that go
+/// into one "Android" collection. `progress` is called before each system
+/// (done, total, name) and once more at the end; it may be called from a
+/// worker thread.
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, const QStringList& android_systems,
                              const std::function<void(int, int, const QString&)>& progress);
 
 

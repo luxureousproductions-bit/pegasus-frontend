@@ -48,6 +48,10 @@
 #include <QXmlStreamReader>
 #include <algorithm>
 
+#ifdef Q_OS_UNIX
+#include <dirent.h>
+#endif
+
 
 // The bundled ES-DE configuration lives in a resource file of this static library
 static void init_esde_resources() { Q_INIT_RESOURCE(esde); }
@@ -417,7 +421,8 @@ QString quote_arg(const QString& arg)
 /// Translates one ES-DE command into an 'am start' command, or returns an empty
 /// string (with the reason in `error`) if it uses something Pegasus can't do
 QString translate_command(const QString& raw, const Context& ctx, const QString& rom_root,
-                          bool& emulator_installed, QString& error)
+                          bool& emulator_installed, QString& error,
+                          const QString& force_component = QString())  // a specific build to use
 {
     const QStringList tokens = split_esde_command(raw);
 
@@ -460,6 +465,10 @@ QString translate_command(const QString& raw, const Context& ctx, const QString&
             emulator_installed = true;
             break;
         }
+    }
+    if (!force_component.isEmpty()) {
+        component = force_component;
+        emulator_installed = true;
     }
     const QString package = component.section(QLatin1Char('/'), 0, 0);
 
@@ -1345,6 +1354,44 @@ QString esde_default_dir()
 }
 
 
+namespace {
+/// A quick count of a folder's game files for the system list: the folder
+/// is read directly (no details asked per file, which is slow on Android's
+/// shared storage) and playlists aren't opened, so discs of a multi-disc
+/// game count separately here; the import itself groups them
+int quick_game_count(const QString& dir, const QStringList& extensions, int depth = 0)
+{
+    if (depth > 8)
+        return 0;
+    int count = 0;
+#ifdef Q_OS_UNIX
+    const QByteArray encoded = QFile::encodeName(dir);
+    DIR* const handle = opendir(encoded.constData());
+    if (!handle)
+        return 0;
+    QStringList subdirs;
+    while (const dirent* const entry = readdir(handle)) {
+        if (entry->d_name[0] == '.')
+            continue;
+        const QString name = QFile::decodeName(entry->d_name);
+        bool is_dir = entry->d_type == DT_DIR;
+        if (entry->d_type == DT_UNKNOWN || entry->d_type == DT_LNK)
+            is_dir = QFileInfo(dir % QLatin1Char('/') % name).isDir();
+        if (has_extension(name, extensions))
+            count++;  // a game file, or a folder that is one game
+        else if (is_dir)
+            subdirs.append(dir % QLatin1Char('/') % name);
+    }
+    closedir(handle);
+    for (const QString& subdir : subdirs)
+        count += quick_game_count(subdir, extensions, depth + 1);
+#else
+    count = static_cast<int>(find_game_groups(dir, extensions, {}).size());
+#endif
+    return count;
+}
+} // namespace
+
 std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir)
 {
     std::vector<EsdeImportSystem> out;
@@ -1368,7 +1415,7 @@ std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir)
 
         const QStringList extensions = parse_extensions(sys.extensions);
         for (const QString& folder : folders)
-            entry.games += static_cast<int>(find_game_groups(folder, extensions, {}).size());
+            entry.games += quick_game_count(folder, extensions);
         if (entry.games > 0)
             out.push_back(std::move(entry));
     }
@@ -1376,7 +1423,7 @@ std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir)
 }
 
 
-EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, bool combine_android,
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, const QStringList& android_systems,
                              const std::function<void(int, int, const QString&)>& progress)
 {
     EsdeImportResult result;
@@ -1407,8 +1454,7 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
             continue;
 
         // Android Apps and Android Games can share one "Android" collection
-        const bool as_android = combine_android
-            && (name == QLatin1String("androidapps") || name == QLatin1String("androidgames"));
+        const bool as_android = android_systems.contains(name);
         const QString short_name = as_android ? QStringLiteral("android") : pegasus_short_name(sys.name);
 
         const QStringList extensions = parse_extensions(sys.extensions);
@@ -1951,7 +1997,43 @@ struct EmulatorSetup {
             choice.retroarch = cmd.raw.startsWith(QLatin1String("%EMULATOR_RETROARCH%"));
             const auto rec_it = recommended.find(system_name);
             choice.recommended = rec_it != recommended.cend() && rec_it->second == label;
-            out.push_back(std::move(choice));
+            out.push_back(choice);
+
+            // more installed builds of the same emulator (eg. Vita3K and
+            // Vita3K Plus) each get their own entry, named after the app
+            static const QRegularExpression rx_emulator(QStringLiteral("^%EMULATOR_([^%]+)%"));
+            const auto emu_match = rx_emulator.match(cmd.raw);
+            const auto emu_it = emu_match.hasMatch() ? ctx.emulators.find(emu_match.captured(1)) : ctx.emulators.cend();
+            if (emu_it == ctx.emulators.cend())
+                continue;
+            QStringList builds;
+            for (const QString& entry : emu_it->second) {
+                const auto res_it = ctx.resolved_components.find(entry);
+                if (res_it == ctx.resolved_components.cend() || res_it->second.isEmpty())
+                    continue;
+                const QString package_name = res_it->second.section(QLatin1Char('/'), 0, 0);
+                if (!builds.contains(package_name))
+                    builds.append(package_name);
+                if (builds.size() > 1 && builds.last() == package_name && !choice.command.contains(package_name % QLatin1Char('/'))) {
+                    bool unused = false;
+                    QString build_error;
+                    const QString build_command = translate_command(cmd.raw, ctx, rom_root, unused, build_error, res_it->second);
+                    if (build_command.isEmpty())
+                        continue;
+                    QString app_name = ::android::app_label(package_name);
+                    if (app_name.isEmpty())
+                        app_name = package_name;
+                    EmulatorChoice extra = choice;
+                    extra.label = label % QStringLiteral(" · ") % app_name;
+                    extra.command = build_command;
+                    extra.installed = true;
+                    extra.recommended = false;
+                    if (!seen.contains(extra.label)) {
+                        seen.append(extra.label);
+                        out.push_back(std::move(extra));
+                    }
+                }
+            }
         }
         // installed ones first, keeping ES-DE's order otherwise
         std::stable_sort(out.begin(), out.end(), [](const EmulatorChoice& a, const EmulatorChoice& b) {

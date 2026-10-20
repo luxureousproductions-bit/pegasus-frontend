@@ -79,13 +79,15 @@ FocusScope {
     // the Android option, "all systems", each system, then Import
     readonly property var rows: {
         var out = [{ "kind": "folder" }];
-        var hasAndroid = false;
+        // one option each for Android Apps and Android Games
         for (var j = 0; j < systems.length; j++) {
-            if (systems[j].name === "androidapps" || systems[j].name === "androidgames")
-                hasAndroid = true;
+            if (systems[j].name === "androidapps")
+                out.push({ "kind": "androidapps" });
         }
-        if (hasAndroid)
-            out.push({ "kind": "android" });
+        for (var k = 0; k < systems.length; k++) {
+            if (systems[k].name === "androidgames")
+                out.push({ "kind": "androidgames" });
+        }
         if (systems.length > 0)
             out.push({ "kind": "all" });
         for (var i = 0; i < systems.length; i++)
@@ -149,8 +151,10 @@ FocusScope {
         var row = rows[index];
         if (row.kind === "folder")
             filePicker.focus = true;
-        else if (row.kind === "android")
-            Internal.settings.esdeCombineAndroid = !Internal.settings.esdeCombineAndroid;
+        else if (row.kind === "androidapps")
+            Internal.settings.esdeAppsAsAndroid = !Internal.settings.esdeAppsAsAndroid;
+        else if (row.kind === "androidgames")
+            Internal.settings.esdeGamesAsAndroid = !Internal.settings.esdeGamesAsAndroid;
         else if (row.kind === "all")
             toggleAll();
         else if (row.kind === "system")
@@ -262,7 +266,8 @@ FocusScope {
                                                         && (ListView.isCurrentItem || rowMouse.containsMouse)
                     readonly property bool isSystem: modelData.kind === "system"
                     readonly property bool checked: modelData.kind === "all" ? root.allPicked
-                                                  : modelData.kind === "android" ? Internal.settings.esdeCombineAndroid
+                                                  : modelData.kind === "androidapps" ? Internal.settings.esdeAppsAsAndroid
+                                                  : modelData.kind === "androidgames" ? Internal.settings.esdeGamesAsAndroid
                                                   : isSystem ? !!root.picked[modelData.sys.name] : false
 
                     width: ListView.view.width
@@ -274,7 +279,8 @@ FocusScope {
                     // check box
                     Rectangle {
                         id: box
-                        visible: modelData.kind === "all" || modelData.kind === "android" || parent.isSystem
+                        visible: modelData.kind === "all" || modelData.kind === "androidapps"
+                                 || modelData.kind === "androidgames" || parent.isSystem
                         width: vpx(20)
                         height: width
                         radius: vpx(3)
@@ -296,7 +302,8 @@ FocusScope {
                                         ? qsTr("ES-DE folder: %1").arg(Internal.settings.esdeImportDir) + api.tr
                                         : qsTr("ES-DE folder not found, select to pick it") + api.tr;
                                 case "all": return qsTr("All systems") + api.tr;
-                                case "android": return qsTr("Put Android Apps and Android Games in one \"Android\" collection") + api.tr;
+                                case "androidapps": return qsTr("Put Android Apps in the \"Android\" collection") + api.tr;
+                                case "androidgames": return qsTr("Put Android Games in the \"Android\" collection") + api.tr;
                                 case "import": return root.pickedCount > 0
                                     ? qsTr("Import %1 systems").arg(root.pickedCount) + api.tr
                                     : qsTr("Import") + api.tr;
@@ -329,8 +336,8 @@ FocusScope {
                                 parts.push(qsTr("details"));
                             if (modelData.sys.hasMedia)
                                 parts.push(qsTr("art"));
-                            var shortName = Internal.settings.esdeCombineAndroid
-                                && (modelData.sys.name === "androidapps" || modelData.sys.name === "androidgames")
+                            var shortName = (modelData.sys.name === "androidapps" && Internal.settings.esdeAppsAsAndroid)
+                                || (modelData.sys.name === "androidgames" && Internal.settings.esdeGamesAsAndroid)
                                 ? "android" : modelData.sys.shortName;
                             return modelData.sys.name + " → " + shortName + " · " + parts.join(" · ") + api.tr;
                         }

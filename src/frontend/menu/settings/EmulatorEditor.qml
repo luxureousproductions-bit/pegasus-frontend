@@ -281,7 +281,7 @@ FocusScope {
             }
             Text {
                 id: collName
-                text: modelData.kind === "update" ? qsTr("Emulator list") + api.tr : modelData.name
+                text: modelData.kind === "update" ? qsTr("Update emulator list") + api.tr : modelData.name
                 color: "#eee"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(22)
@@ -293,7 +293,7 @@ FocusScope {
             }
             Text {
                 text: modelData.kind === "update"
-                    ? root.listInfo + (root.listUpdating ? "" : qsTr("  ·  A: update") + api.tr)
+                    ? root.listInfo
                     : modelData.system === "" ? qsTr("Unknown system") + api.tr : root.collectionText(modelData)
                 color: modelData.kind === "update" ? "#5cc"
                      : (modelData.command && !modelData.currentInstalled) || modelData.system === "" ? "#e8b06a" : "#c0c0c0"
