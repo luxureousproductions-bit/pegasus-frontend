@@ -26,6 +26,7 @@
 #include "providers/SearchContext.h"
 #include "providers/es2/Es2Metadata.h"
 #include "providers/es2/Es2Systems.h"
+#include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "providers/skraper/SkraperAssetsProvider.h"
 #include "utils/HashMap.h"
