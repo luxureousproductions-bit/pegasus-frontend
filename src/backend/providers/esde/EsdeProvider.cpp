@@ -2258,6 +2258,43 @@ QString set_game_emulator(const QString& collection_name, const QString& game_pa
 }
 
 
+OriginalLaunch original_launch(const QString& collection_name, const QString& game_path)
+{
+    OriginalLaunch out;
+    const QString wanted = game_path.isEmpty() || MetaFile::is_uri(game_path)
+        ? game_path : ::clean_abs_path(QFileInfo(game_path));
+    for (const MetaFile& current : files_defining(collection_name)) {
+        MetaFile backup;
+        if (!backup.load(current.path % QStringLiteral(".bak")))
+            continue;
+        for (const MetaBlock& block : backup.blocks) {
+            if (wanted.isEmpty()) {
+                if (!block.is_collection || block.name != collection_name)
+                    continue;
+            }
+            else {
+                if (block.is_collection || block.collection_index < 0)
+                    continue;
+                if (backup.blocks[static_cast<size_t>(block.collection_index)].name != collection_name)
+                    continue;
+                if (!backup.game_files(block).contains(wanted))
+                    continue;
+            }
+            const MetaEntry* launch = block.entry(QStringLiteral("launch"));
+            if (!launch)
+                launch = block.entry(QStringLiteral("command"));
+            out.known = true;
+            out.command = launch ? launch->values.join(QLatin1Char(' ')) : QString();
+            return out;
+        }
+        // a backup without the game: the game had no launch line of its own
+        if (!wanted.isEmpty())
+            out.known = true;
+    }
+    return out;
+}
+
+
 QString test_emulator_command(const QString& command, const QString& game_path)
 {
     const QFileInfo game_file(game_path);

@@ -109,6 +109,9 @@ public:
     /// file is changed too, so this lasts until the next scan reads it)
     Q_INVOKABLE void setLiveLaunchCommand(QObject* game, const QString& command);
     Q_INVOKABLE QVariantMap gameEmulators(const QString& collection_name) const;
+    /// The command the metadata had before Pegasus X changed it:
+    /// { known: bool, command: string }; game_path empty for the collection
+    Q_INVOKABLE QVariantMap originalLaunch(const QString& collection_name, const QString& game_path) const;
     Q_INVOKABLE QString setCollectionEmulator(const QString& collection_name, const QString& command);
     Q_INVOKABLE QString setGameEmulator(const QString& collection_name, const QString& game_path,
                                         const QString& game_title, const QString& command);

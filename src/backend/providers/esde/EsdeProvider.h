@@ -135,6 +135,15 @@ QString set_collection_emulator(const QString& collection_name, const QString& c
 QString set_game_emulator(const QString& collection_name, const QString& game_path,
                           const QString& game_title, const QString& command);
 
+/// The launch command the user's metadata had before Pegasus X first changed
+/// it, read from the <file>.bak copy kept then. `known` is false if nothing
+/// was changed yet. With an empty `game_path`, the collection's command.
+struct OriginalLaunch {
+    bool known = false;
+    QString command;
+};
+OriginalLaunch original_launch(const QString& collection_name, const QString& game_path);
+
 /// Starts `command` with a game file. Returns an error, or empty.
 QString test_emulator_command(const QString& command, const QString& game_path);
 

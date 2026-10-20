@@ -573,6 +573,18 @@ FocusScope {
         id: picker
 
         property var game: null  // null: the collection
+        // the command in the metadata before Pegasus X changed it
+        property var original: ({ "known": false, "command": "" })
+        function originalEntry(current) {
+            if (!original.known || (game && original.command === ""))
+                return null;
+            var label = original.command === ""
+                ? qsTr("no launch line") + api.tr
+                : root.labelOf(root.coll, original.command);
+            return { "kind": "original", "text": qsTr("Your metadata's command") + api.tr,
+                     "command": original.command, "note": label,
+                     "current": root.sameCommand(original.command, current) };
+        }
         readonly property var entries: {
             var c = root.coll;
             if (!c)
@@ -580,6 +592,9 @@ FocusScope {
             var out = [];
             if (c.isAndroid && game) {
                 var currentPkg = root.gameApps[game.path] || "";
+                var appOriginal = originalEntry(root.gameCommands[game.path] || "");
+                if (appOriginal)
+                    out.push(appOriginal);
                 out.push({ "kind": "inherit", "text": qsTr("No app") + api.tr, "current": currentPkg === "" });
                 var gamesList = [], others = [];
                 for (var a = 0; a < root.androidApps.length; a++) {
@@ -598,9 +613,12 @@ FocusScope {
                 return out;
             }
             var current = game ? (root.gameCommands[game.path] || "") : (c.command || "");
+            var orig = originalEntry(current);
+            if (orig)
+                out.push(orig);
             if (game)
-                out.push({ "kind": "inherit", "text": qsTr("Collection's emulator") + api.tr, "current": current === "" });
-            else if (c.command && c.currentLabel === "")
+                out.push({ "kind": "inherit", "text": qsTr("Collection's emulator") + api.tr, "current": current === "" && !(orig && orig.current) });
+            else if (!orig && c.command && c.currentLabel === "")
                 out.push({ "kind": "keep", "text": qsTr("Your metadata's command") + api.tr, "current": true });
 
             var installed = [], missing = [];
@@ -627,6 +645,7 @@ FocusScope {
         visible: box.x < parent.width
 
         function openFor(g) {
+            original = Internal.settings.originalLaunch(root.coll.name, g ? g.path : "");
             game = g;
             var idx = 0;
             for (var i = 0; i < entries.length; i++) {
@@ -714,6 +733,8 @@ FocusScope {
                 return closePicker();
             if (entry.kind === "inherit")
                 return apply("");
+            if (entry.kind === "original")
+                return apply(entry.command);
             if (entry.kind === "app")
                 return apply(Internal.settings.androidAppCommand(entry.component));
             if (entry.kind === "custom") {

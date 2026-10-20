@@ -443,6 +443,21 @@ QVariantMap Settings::gameEmulators(const QString& collection_name) const
     return out;
 }
 
+QVariantMap Settings::originalLaunch(const QString& collection_name, const QString& game_path) const
+{
+#ifdef WITH_COMPAT_ESDE
+    const providers::esde::OriginalLaunch original = providers::esde::original_launch(collection_name, game_path);
+    return QVariantMap {
+        { QStringLiteral("known"), original.known },
+        { QStringLiteral("command"), original.command },
+    };
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(game_path);
+    return QVariantMap { { QStringLiteral("known"), false }, { QStringLiteral("command"), QString() } };
+#endif
+}
+
 QString Settings::setCollectionEmulator(const QString& collection_name, const QString& command)
 {
 #ifdef WITH_COMPAT_ESDE
