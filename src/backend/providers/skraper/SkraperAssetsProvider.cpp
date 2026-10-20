@@ -26,11 +26,60 @@
 
 #include <QDir>
 #include <QDirIterator>
+#include <QFile>
 #include <QStringBuilder>
 #include <array>
+#include <functional>
+
+#ifdef Q_OS_UNIX
+#include <dirent.h>
+#endif
 
 
 namespace {
+/// Calls `on_file(dir, name)` for every (non-hidden) file in `dir` and its
+/// subfolders. Pegasus X: on Android and Linux this reads the folders
+/// directly instead of asking for each file's details one by one, which on
+/// Android's shared storage is slow (thousands of art files at startup)
+void for_each_file(const QString& dir, const std::function<void(const QString&, const QString&)>& on_file, int depth = 0)
+{
+    if (depth > 16)
+        return;
+#ifdef Q_OS_UNIX
+    const QByteArray encoded = QFile::encodeName(dir);
+    DIR* const handle = opendir(encoded.constData());
+    if (!handle)
+        return;
+    QStringList subdirs;
+    while (const dirent* const entry = readdir(handle)) {
+        if (entry->d_name[0] == '.')  // ".", ".." and hidden files
+            continue;
+        const QString name = QFile::decodeName(entry->d_name);
+        bool is_dir = entry->d_type == DT_DIR;
+        bool is_file = entry->d_type == DT_REG;
+        if (entry->d_type == DT_UNKNOWN || entry->d_type == DT_LNK) {
+            const QFileInfo finfo(dir % QLatin1Char('/') % name);
+            is_dir = finfo.isDir();
+            is_file = finfo.isFile();
+        }
+        if (is_dir)
+            subdirs.append(dir % QLatin1Char('/') % name);
+        else if (is_file)
+            on_file(dir, name);
+    }
+    closedir(handle);
+    for (const QString& subdir : subdirs)
+        for_each_file(subdir, on_file, depth + 1);
+#else
+    QDirIterator dir_it(dir, QDir::Files | QDir::Readable | QDir::NoDotAndDotDot,
+                        QDirIterator::Subdirectories | QDirIterator::FollowSymlinks);
+    while (dir_it.hasNext()) {
+        dir_it.next();
+        on_file(dir_it.fileInfo().absolutePath(), dir_it.fileName());
+    }
+#endif
+}
+
 HashMap<QString, model::Game*> build_gamepath_db(const HashMap<QString, model::GameFile*>& filepath_to_entry_map)
 {
     HashMap<QString, model::Game*> map;
@@ -154,9 +203,6 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
         QStringLiteral("/.media/"),
     };
 
-    constexpr auto DIR_FILTERS = QDir::Files | QDir::Readable | QDir::NoDotAndDotDot;
-    constexpr auto DIR_FLAGS = QDirIterator::Subdirectories | QDirIterator::FollowSymlinks;
-
 
     const HashMap<QString, model::Game*> extless_path_to_game = build_gamepath_db(sctx.current_filepath_to_entry_map());
 
@@ -187,21 +233,21 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
                     const QString search_dir = game_media_dir % dir_name;
                     const int subpath_len = media_dir_subpath.length() + dir_name.length();
 
-                    QDirIterator dir_it(search_dir, DIR_FILTERS, DIR_FLAGS);
-                    while (dir_it.hasNext()) {
-                        dir_it.next();
-                        const QFileInfo finfo = dir_it.fileInfo();
-
-                        const QString game_path = ::clean_abs_dir(finfo).remove(root_dir.length(), subpath_len)
-                                                % '/' % finfo.completeBaseName();
+                    for_each_file(search_dir, [&](const QString& dir, const QString& name) {
+                        // the media tree mirrors the game folder: <game dir>/media/covers/Sub/Game.png
+                        // is for <game dir>/Sub/Game.*
+                        const int dot = name.lastIndexOf(QLatin1Char('.'));
+                        const QString basename = dot > 0 ? name.left(dot) : name;
+                        const QString game_path = QDir::cleanPath(dir).remove(root_dir.length(), subpath_len)
+                                                % '/' % basename;
                         const auto it = extless_path_to_game.find(game_path);
                         if (it == extless_path_to_game.cend())
-                            continue;
+                            return;
 
                         model::Game& game = *(it->second);
-                        game.assetsMut().add_file(asset_type, dir_it.filePath());
+                        game.assetsMut().add_file(asset_type, dir % QLatin1Char('/') % name);
                         found_assets_cnt++;
-                    }
+                    });
                 }
             }
         }

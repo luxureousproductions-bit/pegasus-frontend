@@ -73,8 +73,36 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         // box"); Pegasus has no screen reader support to lose.
         final android.view.View content = getWindow().getDecorView();
         content.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        if (Build.VERSION.SDK_INT >= 26)
-            content.setDefaultFocusHighlightEnabled(false);
+        if (Build.VERSION.SDK_INT >= 26 && !m_focus_listener_added) {
+            m_focus_listener_added = true;
+            noFocusHighlight(content);
+
+            // Qt puts an invisible text box over a text field being typed in
+            // (for the on-screen keyboard), and Android draws its focus
+            // highlight on it, which stays after the field is gone: the
+            // "blue box". No view of Pegasus gets that highlight.
+            content.getViewTreeObserver().addOnGlobalFocusChangeListener(
+                new android.view.ViewTreeObserver.OnGlobalFocusChangeListener() {
+                    @Override
+                    public void onGlobalFocusChanged(android.view.View oldFocus, android.view.View newFocus) {
+                        noFocusHighlight(newFocus);
+                    }
+                });
+        }
+    }
+
+    private boolean m_focus_listener_added = false;
+
+    // Pegasus X: turns off Android's focus highlight on a view and its children
+    private static void noFocusHighlight(android.view.View view) {
+        if (Build.VERSION.SDK_INT < 26 || view == null)
+            return;
+        view.setDefaultFocusHighlightEnabled(false);
+        if (view instanceof android.view.ViewGroup) {
+            final android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                noFocusHighlight(group.getChildAt(i));
+        }
     }
 
 

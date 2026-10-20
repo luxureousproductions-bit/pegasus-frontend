@@ -626,8 +626,10 @@ FocusScope {
             x: picker.focus ? parent.width - width - height * 0.04 : parent.width
             Behavior on x { PropertyAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
-            color: "#eee"
+            color: "#2b2b2b"
             radius: vpx(8)
+            border.color: "#444"
+            border.width: vpx(1)
 
             MouseArea {
                 anchors.fill: parent
@@ -673,15 +675,15 @@ FocusScope {
 
                         width: ListView.view.width
                         height: isHeader ? vpx(36) : vpx(46)
-                        color: highlighted ? "#444" : "transparent"
+                        color: highlighted ? "#3aa" : "transparent"
 
                         Text {
                             id: entryText
                             text: modelData.text
-                            color: parent.highlighted ? "#fff"
-                                 : parent.isHeader ? "#555"
-                                 : modelData.kind === "custom" ? "#1b7373"
-                                 : (modelData.kind === "option" && !modelData.installed) ? "#666" : "#222"
+                            color: parent.highlighted ? "#111"
+                                 : parent.isHeader ? "#999"
+                                 : modelData.kind === "custom" ? "#5cc"
+                                 : (modelData.kind === "option" && !modelData.installed) ? "#888" : "#eee"
                             font.family: globalFonts.sans
                             font.pixelSize: parent.isHeader ? vpx(14) : vpx(19)
                             font.bold: parent.isHeader || modelData.kind === "custom"
@@ -697,7 +699,7 @@ FocusScope {
                         Text {
                             id: noteText
                             text: modelData.current ? qsTr("current") + api.tr : (modelData.note || "")
-                            color: parent.highlighted ? "#9dd" : "#555"
+                            color: parent.highlighted ? "#123" : "#aaa"
                             font.family: globalFonts.sans
                             font.pixelSize: vpx(14)
                             anchors.right: parent.right
@@ -736,6 +738,9 @@ FocusScope {
             cmdBox.focus = true;
         }
         function closeDialog() {
+            // the keyboard and its focus go away with the dialog
+            Qt.inputMethod.hide();
+            cmdInput.focus = false;
             page.focus = true;
         }
         function insert(text) {
@@ -761,6 +766,8 @@ FocusScope {
                 dialogMessage.text = error === "" ? qsTr("Started \"%1\".").arg(target.title) + api.tr : error;
                 return;
             }
+            Qt.inputMethod.hide();
+            cmdInput.focus = false;
             picker.game = game;
             picker.apply(cmd);
         }
