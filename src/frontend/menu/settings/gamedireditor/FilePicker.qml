@@ -22,6 +22,13 @@ import Pegasus.FolderListModel 1.0
 FocusScope {
     id: root
 
+    // Pegasus X: which files can be picked (pick() gets their folder), and
+    // the text above the list; the defaults pick a metadata file
+    property var fileNames: ["metadata.pegasus.txt", "metadata.txt"]
+    property var fileExtensions: [".metadata.pegasus.txt", ".metadata.txt"]
+    property string infoText: qsTr("Select a collection file below (metadata.pegasus.txt or metadata.txt).\n"
+                                   + "The directory of the file will then be added to the list.")
+
     signal cancel
     signal pick(string dir_path)
 
@@ -66,14 +73,8 @@ FocusScope {
 
     FolderListModel {
         id: folderModel
-        files: [
-            "metadata.pegasus.txt",
-            "metadata.txt",
-        ]
-        extensions: [
-            ".metadata.pegasus.txt",
-            ".metadata.txt",
-        ]
+        files: root.fileNames
+        extensions: root.fileExtensions
         showAllFiles: true
     }
 
@@ -108,8 +109,7 @@ FocusScope {
 
         Text {
             id: info
-            text: qsTr("Select a collection file below (metadata.pegasus.txt or metadata.txt).\n"
-                     + "The directory of the file will then be added to the list.")
+            text: root.infoText
             color: "#ee4"
             font.family: globalFonts.sans
             font.pixelSize: vpx(18)

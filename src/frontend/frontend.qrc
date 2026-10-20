@@ -44,6 +44,7 @@
         <file>menu/mainmenu/RollableMenuItem.qml</file>
         <file>menu/mainmenu/SecondaryMenuItem.qml</file>
         <file>menu/settings/GameDirEditor.qml</file>
+        <file>menu/settings/EsdeImport.qml</file>
         <file>menu/settings/GamepadEditor.qml</file>
         <file>menu/settings/KeyEditor.qml</file>
         <file>menu/settings/ProviderEditor.qml</file>

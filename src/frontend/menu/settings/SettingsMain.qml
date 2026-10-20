@@ -29,6 +29,7 @@ FocusScope {
     signal openKeySettings
     signal openGamepadSettings
     signal openGameDirSettings
+    signal openEsdeImport
     signal openAndroidSafSettings
     signal openProviderSettings
     signal reloadRequested
@@ -115,6 +116,14 @@ FocusScope {
             type: SettingsEntry.Type.Button
             buttonAction: root.openGameDirSettings
             section: "gaming"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("ES-DE import...")
+            desc: QT_TR_NOOP("Turn ES-DE's game details, art and manuals into Pegasus metadata files, for some systems or all of them.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openEsdeImport
+            section: "gaming"
+            enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
             label: QT_TR_NOOP("Accessible Android directories...")

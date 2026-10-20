@@ -26,7 +26,12 @@
 #include "platform/AndroidHelpers.h"
 #endif
 
+#ifdef WITH_COMPAT_ESDE
+#include "providers/esde/EsdeProvider.h"
+#endif
+
 #include <QCursor>
+#include <QSettings>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QSet>
@@ -150,6 +155,88 @@ QStringList Settings::gameDirs() const
 
     dirlist.sort();
     return dirlist;
+}
+
+namespace {
+// Pegasus X: settings of its own features, kept apart from Pegasus' own
+QString pegasusx_settings_path()
+{
+    return paths::writableConfigDir() + QStringLiteral("/pegasusx.ini");
+}
+} // namespace
+
+bool Settings::esdeImportSupported() const
+{
+#ifdef WITH_COMPAT_ESDE
+    return true;
+#else
+    return false;
+#endif
+}
+
+QString Settings::esdeImportDir() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    const QString saved = file.value(QStringLiteral("esdeImport/dir")).toString();
+#ifdef WITH_COMPAT_ESDE
+    if (saved.isEmpty() || !QFileInfo(saved).isDir())
+        return providers::esde::esde_default_dir();
+#endif
+    return saved;
+}
+
+void Settings::setEsdeImportDir(const QString& dir)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("esdeImport/dir"), dir.isEmpty() ? QString() : ::pretty_path(dir));
+    emit esdeImportDirChanged();
+}
+
+QVariantList Settings::esdeImportSystems() const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& sys : providers::esde::esde_import_systems(esdeImportDir())) {
+        out.append(QVariantMap {
+            { QStringLiteral("name"), sys.name },
+            { QStringLiteral("fullname"), sys.fullname },
+            { QStringLiteral("shortName"), sys.short_name },
+            { QStringLiteral("games"), sys.games },
+            { QStringLiteral("hasGamelist"), sys.has_gamelist },
+            { QStringLiteral("hasMedia"), sys.has_media },
+            { QStringLiteral("folders"), sys.folders },
+        });
+    }
+#endif
+    return out;
+}
+
+QVariantMap Settings::runEsdeImport(const QStringList& system_names)
+{
+#ifdef WITH_COMPAT_ESDE
+    const auto result = providers::esde::esde_import(esdeImportDir(), system_names);
+
+    // the folders written to have to be game directories, or Pegasus won't
+    // read the new metadata files
+    QSet<QString> known;
+    AppSettings::parse_gamedirs([&known](const QString& line){
+        known.insert(::pretty_path(line));
+    });
+    for (const QString& folder : result.folders) {
+        if (!known.contains(::pretty_path(QFileInfo(folder))))
+            addGameDir(folder);
+    }
+
+    return QVariantMap {
+        { QStringLiteral("systems"), result.systems },
+        { QStringLiteral("games"), result.games },
+        { QStringLiteral("files"), result.written_files },
+        { QStringLiteral("error"), result.error },
+    };
+#else
+    Q_UNUSED(system_names);
+    return QVariantMap { { QStringLiteral("error"), QStringLiteral("Not supported on this platform") } };
+#endif
 }
 
 void Settings::addGameDir(const QString& path)

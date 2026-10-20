@@ -38,5 +38,41 @@ public:
     QStringList cacheInputFiles() const final;
 };
 
+
+// -- ES-DE import (Settings > ES-DE import) --------------------------------------
+
+/// A system of an ES-DE setup that has games in its ROMs folders
+struct EsdeImportSystem {
+    QString name;        ///< ES-DE's name, eg. "snesna"
+    QString fullname;
+    QString short_name;  ///< the name themes use, eg. "snes"
+    int games = 0;
+    bool has_gamelist = false;
+    bool has_media = false;
+    QStringList folders;  ///< its folders in the ROMs folders
+};
+
+struct EsdeImportResult {
+    int systems = 0;
+    int games = 0;
+    QStringList written_files;
+    QStringList folders;  ///< the system folders a file was written to
+    QString error;
+};
+
+/// The ES-DE folder found on this device, or empty
+QString esde_default_dir();
+
+/// The systems of the ES-DE setup in `esde_dir` that have games
+std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir);
+
+/// For each system (all if empty), writes esde-import.metadata.pegasus.txt
+/// into each of its ROM folders: every game there, with the details from
+/// ES-DE's gamelist and the paths of its art and manuals in ES-DE's media
+/// folder. Multi-disc games are one entry with all their discs. No launch
+/// commands are written; the folder's other metadata files or the emulator
+/// settings provide those. Running it again replaces the file.
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names);
+
 } // namespace esde
 } // namespace providers

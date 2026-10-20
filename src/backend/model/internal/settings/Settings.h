@@ -49,6 +49,8 @@ class Settings : public QObject {
                READ showMissingGames WRITE setShowMissingGames
                NOTIFY showMissingGamesChanged)
     Q_PROPERTY(QStringList gameDirs READ gameDirs NOTIFY gameDirsChanged)
+    Q_PROPERTY(bool esdeImportSupported READ esdeImportSupported CONSTANT)
+    Q_PROPERTY(QString esdeImportDir READ esdeImportDir WRITE setEsdeImportDir NOTIFY esdeImportDirChanged)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
@@ -79,6 +81,13 @@ public:
     Q_INVOKABLE void addGameDir(const QString&);
     Q_INVOKABLE void removeGameDirs(const QVariantList&);
 
+    // Pegasus X: ES-DE import
+    bool esdeImportSupported() const;
+    QString esdeImportDir() const;
+    void setEsdeImportDir(const QString&);
+    Q_INVOKABLE QVariantList esdeImportSystems() const;
+    Q_INVOKABLE QVariantMap runEsdeImport(const QStringList& system_names);
+
     QStringList androidGrantedDirs() const;
     Q_INVOKABLE void requestAndroidDir();
 
@@ -91,6 +100,7 @@ signals:
     void scanOnLaunchChanged();
     void showMissingGamesChanged();
     void gameDirsChanged();
+    void esdeImportDirChanged();
     void androidDirsChanged();
     void providerReloadingRequested();
 };

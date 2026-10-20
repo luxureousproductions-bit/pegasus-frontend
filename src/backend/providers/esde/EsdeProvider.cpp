@@ -26,6 +26,7 @@
 #include "providers/SearchContext.h"
 #include "providers/es2/Es2Metadata.h"
 #include "providers/es2/Es2Systems.h"
+#include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "providers/skraper/SkraperAssetsProvider.h"
 #include "utils/HashMap.h"
 #include "utils/PathTools.h"
@@ -38,6 +39,8 @@
 #include <QSet>
 #include <QStringBuilder>
 #include <QVariantMap>
+#include <QTextStream>
+#include <QUrl>
 #include <QXmlStreamReader>
 #include <algorithm>
 
@@ -978,6 +981,425 @@ Provider& EsdeProvider::run(SearchContext& sctx)
     Log::info(display_name(), LOGMSG("%1 games and %2 media files found")
         .arg(QString::number(found_games_total), QString::number(found_assets)));
     return *this;
+}
+
+
+
+// -- ES-DE import -----------------------------------------------------------------
+
+namespace {
+const QString IMPORT_FILE_NAME = QStringLiteral("esde-import.metadata.pegasus.txt");
+
+/// What the import needs to know about an ES-DE setup
+struct ImportSetup {
+    QString esde_dir;
+    QString media_root;
+    bool show_hidden = true;
+    HashMap<QString, EsdeSystem> systems;
+    std::vector<QString> order;
+    QStringList rom_roots;
+};
+
+ImportSetup load_import_setup(const QString& esde_dir)
+{
+    init_esde_resources();
+    ImportSetup out;
+    out.esde_dir = QDir::cleanPath(esde_dir);
+
+    const HashMap<QString, QString> settings = read_esde_settings(out.esde_dir);
+    const auto media_it = settings.find(QStringLiteral("MediaDirectory"));
+    out.media_root = (media_it != settings.cend() && !media_it->second.isEmpty())
+        ? media_it->second
+        : out.esde_dir % QStringLiteral("/downloaded_media");
+    const auto hidden_it = settings.find(QStringLiteral("ShowHiddenGames"));
+    out.show_hidden = hidden_it == settings.cend() || hidden_it->second != QLatin1String("false");
+
+    bool load_exclusive = false;
+    const QString log_tag = QStringLiteral("ES-DE import");
+    load_systems(log_tag, out.esde_dir % QStringLiteral("/custom_systems/es_systems.xml"), out.systems, out.order, load_exclusive);
+    if (!load_exclusive) {
+        bool unused = false;
+        load_systems(log_tag, QStringLiteral(":/esde/es_systems.xml"), out.systems, out.order, unused);
+    }
+
+    // the ROMs folders: ES-DE's setting, the usual "ROMs" folders, and the
+    // parent folders of the game directories set in Pegasus
+    const auto add_root = [&out](QString dir) {
+        dir = QDir::cleanPath(dir);
+        if (!dir.isEmpty() && QFileInfo(dir).isDir() && !out.rom_roots.contains(dir))
+            out.rom_roots.append(dir);
+    };
+    const auto rom_it = settings.find(QStringLiteral("ROMDirectory"));
+    if (rom_it != settings.cend() && !rom_it->second.isEmpty()) {
+        QString dir = rom_it->second;
+        if (dir.startsWith(QLatin1String("~/")))
+            dir = ::android::primary_storage_path() + dir.mid(1);
+        add_root(dir);
+    }
+    for (const QString& root : ::android::storage_paths()) {
+        if (root != QLatin1String("/"))
+            add_root(root % QStringLiteral("/ROMs"));
+    }
+    {
+        const providers::SearchContext probe;  // reads the game directory list
+        for (const QString& dir : probe.root_game_dirs()) {
+            add_root(dir);
+            add_root(QFileInfo(dir).absolutePath());
+        }
+    }
+    return out;
+}
+
+/// A system's folders: %ROMPATH%/<system> in every ROMs folder
+QStringList system_folders(const EsdeSystem& sys, const QStringList& rom_roots)
+{
+    QStringList out;
+    if (sys.path.contains(QLatin1String("%ROMPATH%"))) {
+        for (const QString& root : rom_roots) {
+            QString dir = sys.path;
+            dir.replace(QLatin1String("%ROMPATH%"), root);
+            dir = QDir::cleanPath(dir);
+            if (QFileInfo(dir).isDir() && !out.contains(dir))
+                out.append(dir);
+        }
+    }
+    else if (QFileInfo(sys.path).isDir()) {
+        out.append(QDir::cleanPath(sys.path));
+    }
+    return out;
+}
+
+/// The collection name used by the other metadata files of a folder, so the
+/// imported games join that collection instead of making a second one
+QString existing_collection_name(const QString& dir)
+{
+    static const QRegularExpression rx(QStringLiteral("^collection\\s*:\\s*(.+)$"),
+                                       QRegularExpression::MultilineOption);
+    for (const QFileInfo& finfo : QDir(dir).entryInfoList(QDir::Files | QDir::Readable, QDir::Name)) {
+        const QString name = finfo.fileName();
+        if (name == IMPORT_FILE_NAME)
+            continue;
+        if (name != QLatin1String("metadata.pegasus.txt") && name != QLatin1String("metadata.txt")
+            && !name.endsWith(QLatin1String(".metadata.pegasus.txt")) && !name.endsWith(QLatin1String(".metadata.txt")))
+            continue;
+        const auto match = rx.match(read_file(finfo.absoluteFilePath()));
+        if (match.hasMatch())
+            return match.captured(1).trimmed();
+    }
+    return {};
+}
+
+/// A value for a metadata file: multiple lines are indented, empty lines are "."
+QString metafile_value(const QString& value)
+{
+    QStringList lines = value.trimmed().split(QLatin1Char('\n'));
+    for (int i = 1; i < lines.size(); i++) {
+        const QString line = lines.at(i).trimmed();
+        lines[i] = QStringLiteral("  ") % (line.isEmpty() ? QStringLiteral(".") : line);
+    }
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString asset_key(AssetType type)
+{
+    switch (type) {
+        case AssetType::BOX_FRONT: return QStringLiteral("box_front");
+        case AssetType::BOX_BACK: return QStringLiteral("box_back");
+        case AssetType::BOX_SPINE: return QStringLiteral("box_spine");
+        case AssetType::BOX_FULL: return QStringLiteral("box_full");
+        case AssetType::CARTRIDGE: return QStringLiteral("cartridge");
+        case AssetType::LOGO: return QStringLiteral("logo");
+        case AssetType::POSTER: return QStringLiteral("poster");
+        case AssetType::ARCADE_MARQUEE: return QStringLiteral("marquee");
+        case AssetType::ARCADE_BEZEL: return QStringLiteral("bezel");
+        case AssetType::ARCADE_PANEL: return QStringLiteral("panel");
+        case AssetType::ARCADE_CABINET_L: return QStringLiteral("cabinet_left");
+        case AssetType::ARCADE_CABINET_R: return QStringLiteral("cabinet_right");
+        case AssetType::UI_TILE: return QStringLiteral("tile");
+        case AssetType::UI_BANNER: return QStringLiteral("banner");
+        case AssetType::UI_STEAMGRID: return QStringLiteral("steam");
+        case AssetType::BACKGROUND: return QStringLiteral("background");
+        case AssetType::MUSIC: return QStringLiteral("music");
+        case AssetType::SCREENSHOT: return QStringLiteral("screenshot");
+        case AssetType::TITLESCREEN: return QStringLiteral("titlescreen");
+        case AssetType::VIDEO: return QStringLiteral("video");
+        default: return {};
+    }
+}
+
+/// A local path for an asset or extra value (they may be file:// URLs)
+QString local_path(const QString& value)
+{
+    const QUrl url(value);
+    return url.isLocalFile() ? url.toLocalFile() : value;
+}
+
+/// One game's entry in a metadata file. If the user's own metadata already
+/// has the game (`own`), its title is kept and only what it lacks is written,
+/// so the user's details win whichever file Pegasus reads first.
+QString game_entry(const model::Game& game, const QStringList& files, const QDir& base_dir,
+                   const model::Game* own)
+{
+    QString out;
+    QTextStream stream(&out);
+    stream << "game: " << metafile_value(own ? own->title() : game.title()) << '\n';
+    if (files.size() == 1) {
+        stream << "file: " << base_dir.relativeFilePath(files.first()) << '\n';
+    }
+    else {
+        stream << "files:\n";
+        for (const QString& file : files)
+            stream << "  " << base_dir.relativeFilePath(file) << '\n';
+    }
+    if (!own && !game.sortBy().isEmpty() && game.sortBy() != game.title())
+        stream << "sort-by: " << game.sortBy() << '\n';
+    if (!game.developerListConst().isEmpty() && !(own && !own->developerListConst().isEmpty()))
+        stream << "developer: " << game.developerListConst().join(QStringLiteral(", ")) << '\n';
+    if (!game.publisherListConst().isEmpty() && !(own && !own->publisherListConst().isEmpty()))
+        stream << "publisher: " << game.publisherListConst().join(QStringLiteral(", ")) << '\n';
+    if (!game.genreListConst().isEmpty() && !(own && !own->genreListConst().isEmpty()))
+        stream << "genre: " << game.genreListConst().join(QStringLiteral(", ")) << '\n';
+    if (game.playerCount() > 1 && !(own && own->playerCount() > 1))
+        stream << "players: " << game.playerCount() << '\n';
+    if (game.rating() > 0.f && !(own && own->rating() > 0.f))
+        stream << "rating: " << qRound(game.rating() * 100.f) << "%\n";
+    if (game.releaseDate().isValid() && !(own && own->releaseDate().isValid()))
+        stream << "release: " << game.releaseDate().toString(Qt::ISODate) << '\n';
+    if (!game.summary().isEmpty() && !(own && !own->summary().isEmpty()))
+        stream << "summary: " << metafile_value(game.summary()) << '\n';
+    if (!game.description().isEmpty() && !(own && !own->description().isEmpty()))
+        stream << "description: " << metafile_value(game.description()) << '\n';
+
+    // NOTE: Assets only has a public getter per type
+    const auto asset_list = [](const model::Assets& a) {
+        return std::vector<std::pair<AssetType, const QStringList*>> {
+            { AssetType::BOX_FRONT, &a.boxFrontList() },
+            { AssetType::BOX_BACK, &a.boxBackList() },
+            { AssetType::BOX_SPINE, &a.boxSpineList() },
+            { AssetType::BOX_FULL, &a.boxFullList() },
+            { AssetType::CARTRIDGE, &a.cartridgeList() },
+            { AssetType::LOGO, &a.logoList() },
+            { AssetType::POSTER, &a.posterList() },
+            { AssetType::ARCADE_MARQUEE, &a.marqueeList() },
+            { AssetType::ARCADE_BEZEL, &a.bezelList() },
+            { AssetType::ARCADE_PANEL, &a.panelList() },
+            { AssetType::ARCADE_CABINET_L, &a.cabinetLeftList() },
+            { AssetType::ARCADE_CABINET_R, &a.cabinetRightList() },
+            { AssetType::UI_TILE, &a.tileList() },
+            { AssetType::UI_BANNER, &a.bannerList() },
+            { AssetType::UI_STEAMGRID, &a.steamList() },
+            { AssetType::BACKGROUND, &a.backgroundList() },
+            { AssetType::MUSIC, &a.musicList() },
+            { AssetType::SCREENSHOT, &a.screenshotList() },
+            { AssetType::TITLESCREEN, &a.titlescreenList() },
+            { AssetType::VIDEO, &a.videoList() },
+        };
+    };
+    const auto lists = asset_list(game.assets());
+    const auto own_lists = own ? asset_list(own->assets()) : decltype(lists)();
+    for (size_t i = 0; i < lists.size(); i++) {
+        const QString key = asset_key(lists[i].first);
+        if (key.isEmpty() || lists[i].second->isEmpty())
+            continue;
+        if (own && !own_lists[i].second->isEmpty())
+            continue;
+        stream << "assets." << key << ": " << local_path(lists[i].second->first()) << '\n';
+    }
+
+    // x- fields, eg. x-manual
+    for (auto it = game.extraMap().cbegin(); it != game.extraMap().cend(); ++it) {
+        if (own && own->extraMap().contains(it.key()))
+            continue;
+        QStringList values = it.value().toStringList();
+        if (values.isEmpty())
+            values.append(it.value().toString());
+        for (QString& value : values)
+            value = local_path(value);
+        if (!values.isEmpty() && !values.first().isEmpty())
+            stream << "x-" << it.key() << ": " << values.first() << '\n';
+    }
+
+    stream.flush();
+    return out;
+}
+} // namespace
+
+
+QString esde_default_dir()
+{
+    for (const QString& root : ::android::storage_paths()) {
+        if (root == QLatin1String("/"))
+            continue;
+        const QString dir = root % QStringLiteral("/ES-DE");
+        if (QFileInfo::exists(dir % QStringLiteral("/settings/es_settings.xml"))
+            || QFileInfo::exists(dir % QStringLiteral("/gamelists")))
+            return dir;
+    }
+    return {};
+}
+
+
+std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir)
+{
+    std::vector<EsdeImportSystem> out;
+    if (esde_dir.isEmpty() || !QFileInfo(esde_dir).isDir())
+        return out;
+
+    const ImportSetup setup = load_import_setup(esde_dir);
+    for (const QString& name : setup.order) {
+        const EsdeSystem& sys = setup.systems.at(name);
+        const QStringList folders = system_folders(sys, setup.rom_roots);
+        if (folders.isEmpty())
+            continue;
+
+        EsdeImportSystem entry;
+        entry.name = name;
+        entry.fullname = sys.fullname.isEmpty() ? name : sys.fullname;
+        entry.short_name = pegasus_short_name(name);
+        entry.folders = folders;
+        entry.has_gamelist = QFileInfo::exists(setup.esde_dir % QStringLiteral("/gamelists/") % name % QStringLiteral("/gamelist.xml"));
+        entry.has_media = QFileInfo(setup.media_root % QLatin1Char('/') % name).isDir();
+
+        const QStringList extensions = parse_extensions(sys.extensions);
+        for (const QString& folder : folders)
+            entry.games += static_cast<int>(find_game_groups(folder, extensions, {}).size());
+        if (entry.games > 0)
+            out.push_back(std::move(entry));
+    }
+    return out;
+}
+
+
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names)
+{
+    EsdeImportResult result;
+    if (esde_dir.isEmpty() || !QFileInfo(esde_dir).isDir()) {
+        result.error = QStringLiteral("ES-DE folder not found");
+        return result;
+    }
+
+    const ImportSetup setup = load_import_setup(esde_dir);
+    const QString log_tag = QStringLiteral("ES-DE import");
+    const es2::Metadata metahelper(log_tag, { setup.esde_dir });
+
+    for (const QString& name : setup.order) {
+        if (!system_names.isEmpty() && !system_names.contains(name))
+            continue;
+        const EsdeSystem& sys = setup.systems.at(name);
+        const QStringList folders = system_folders(sys, setup.rom_roots);
+        if (folders.isEmpty())
+            continue;
+
+        const QStringList extensions = parse_extensions(sys.extensions);
+        const GamelistInfo gamelist = read_gamelist(setup.esde_dir, sys.name, folders);
+        const QSet<QString> skipped = setup.show_hidden ? QSet<QString>() : gamelist.hidden_paths;
+        bool system_written = false;
+
+        for (const QString& folder : folders) {
+            // the games, read into a scratch list the same way the old ES-DE
+            // data source did, then written out as a metadata file
+            providers::SearchContext tmp_sctx(QStringList {});
+            model::Collection& collection = *tmp_sctx.get_or_create_collection(sys.name);
+
+            HashMap<QString, model::Game*> extless_path_to_game;
+            std::vector<std::pair<model::Game*, QStringList>> games;  // game, its files
+            for (const std::vector<QFileInfo>& group : find_game_groups(folder, extensions, skipped)) {
+                model::Game* game = tmp_sctx.create_game_for(collection);
+                QStringList files;
+                for (const QFileInfo& finfo : group) {
+                    const QString path = ::clean_abs_path(finfo);
+                    tmp_sctx.game_add_filepath(*game, path);
+                    files.append(path);
+
+                    QString extless = path;
+                    if (!finfo.isDir())
+                        extless = ::clean_abs_dir(finfo) % QLatin1Char('/') % finfo.completeBaseName();
+                    extless_path_to_game.emplace(extless, game);
+                    if (group.size() > 1) {
+                        extless_path_to_game.emplace(
+                            ::clean_abs_dir(finfo) % QLatin1Char('/') % strip_disc_tag(finfo.completeBaseName()), game);
+                    }
+                }
+                tmp_sctx.game_add_to(*game, collection);
+                if (group.size() > 1)
+                    game->setTitle(strip_disc_tag(group.front().completeBaseName()));
+                games.emplace_back(game, files);
+            }
+            if (games.empty()) {
+                tmp_sctx.discard_all();
+                continue;
+            }
+
+            const es2::SystemEntry sysentry {
+                sys.fullname, sys.name, folder, sys.extensions, sys.platform, QString(),
+            };
+            metahelper.find_metadata_for(sysentry, tmp_sctx);
+
+            // the games already in the folder's own metadata files
+            providers::SearchContext own_sctx(QStringList {});
+            {
+                const providers::pegasus::Metadata own_reader(log_tag);
+                for (const QFileInfo& finfo : QDir(folder).entryInfoList(QDir::Files | QDir::Readable, QDir::Name)) {
+                    const QString fname = finfo.fileName();
+                    if (fname == IMPORT_FILE_NAME)
+                        continue;
+                    if (fname == QLatin1String("metadata.pegasus.txt") || fname == QLatin1String("metadata.txt")
+                        || fname.endsWith(QLatin1String(".metadata.pegasus.txt")) || fname.endsWith(QLatin1String(".metadata.txt")))
+                        own_reader.apply_metafile(::clean_abs_path(finfo), own_sctx);
+                }
+            }
+            size_t found_assets = 0;
+            find_media(setup.media_root % QLatin1Char('/') % sys.name, folder, extless_path_to_game, found_assets);
+
+            // the file
+            QString collection_name = existing_collection_name(folder);
+            if (collection_name.isEmpty())
+                collection_name = sys.fullname.isEmpty() ? sys.name : sys.fullname;
+
+            QString text;
+            QTextStream stream(&text);
+            stream << "# Made by Pegasus X from ES-DE (" << setup.esde_dir << ").\n"
+                   << "# Settings > ES-DE import replaces this file when run again.\n\n"
+                   << "collection: " << collection_name << '\n'
+                   << "shortname: " << pegasus_short_name(sys.name) << "\n\n";
+            const QDir base_dir(folder);
+            for (const auto& entry : games) {
+                model::Game* const game = entry.first;
+                const QString clean = strip_disc_tag(game->title());
+                if (entry.second.size() > 1 && !clean.isEmpty())
+                    game->setTitle(clean);
+                const model::Game* own = nullptr;
+                for (const QString& file : entry.second) {
+                    own = own_sctx.game_by_filepath(file);
+                    if (own)
+                        break;
+                }
+                stream << game_entry(*game, entry.second, base_dir, own) << '\n';
+            }
+            stream.flush();
+            tmp_sctx.discard_all();
+            own_sctx.discard_all();
+
+            const QString file_path = folder % QLatin1Char('/') % IMPORT_FILE_NAME;
+            QFile file(file_path);
+            if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+                Log::warning(log_tag, LOGMSG("Could not write `%1`").arg(file_path));
+                if (result.error.isEmpty())
+                    result.error = QStringLiteral("Could not write to %1 (no write access?)").arg(folder);
+                continue;
+            }
+            file.write(text.toUtf8());
+            Log::info(log_tag, LOGMSG("Wrote %1 games to `%2`").arg(QString::number(games.size()), file_path));
+
+            result.games += static_cast<int>(games.size());
+            result.written_files.append(file_path);
+            result.folders.append(folder);
+            system_written = true;
+        }
+        if (system_written)
+            result.systems++;
+    }
+    return result;
 }
 
 } // namespace esde
