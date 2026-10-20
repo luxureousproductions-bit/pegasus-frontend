@@ -2427,6 +2427,28 @@ QString package_of_files(const QStringList& files)
 } // namespace
 
 
+QSet<QString> emulator_packages()
+{
+    init_esde_resources();
+    HashMap<QString, QStringList> emulators;
+    const QString tag = QStringLiteral("Library");
+    const QString esde_dir = esde_default_dir();
+    if (!esde_dir.isEmpty())
+        load_find_rules(tag, esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), emulators);
+    load_find_rules(tag, esde_list_file(QStringLiteral("es_find_rules.xml")), emulators);
+
+    QSet<QString> out;
+    for (const auto& pair : emulators) {
+        for (const QString& entry : pair.second) {
+            const QString package = entry.section(QLatin1Char('/'), 0, 0).trimmed();
+            if (!package.isEmpty())
+                out.insert(package);
+        }
+    }
+    return out;
+}
+
+
 std::vector<AndroidApp> android_apps()
 {
     std::vector<AndroidApp> out;

@@ -34,9 +34,11 @@
 
 #ifdef WITH_COMPAT_ESDE
 #include "providers/esde/EsdeProvider.h"
+#include "providers/LibraryRules.h"
 #endif
 
 #include <QCursor>
+#include <algorithm>
 #include <QLocale>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
@@ -327,6 +329,7 @@ QVariantList Settings::collectionGames(QObject* collections, const QString& coll
             out.append(QVariantMap {
                 { QStringLiteral("title"), game->title() },
                 { QStringLiteral("path"), files.front()->path() },
+                { QStringLiteral("key"), providers::library::game_key(*game) },
                 { QStringLiteral("obj"), QVariant::fromValue(static_cast<QObject*>(game)) },
             });
         }
@@ -740,6 +743,75 @@ void Settings::requestAndroidDir()
         emit androidDirsChanged();
     });
 #endif
+}
+
+bool Settings::mergeAndroid() const
+{
+    return providers::library::merge_android_enabled();
+}
+
+void Settings::setMergeAndroid(bool value)
+{
+    providers::library::set_merge_android_enabled(value);
+    emit libraryRulesChanged();
+}
+
+QVariantMap Settings::hiddenItems() const
+{
+    const providers::library::HiddenList list = providers::library::load_hidden();
+    QVariantList games;
+    for (const auto& entry : list.games) {
+        games.append(QVariantMap {
+            { QStringLiteral("path"), entry.path },
+            { QStringLiteral("title"), entry.title },
+            { QStringLiteral("collections"), entry.collections },
+        });
+    }
+    return QVariantMap {
+        { QStringLiteral("collections"), list.collections },
+        { QStringLiteral("games"), games },
+    };
+}
+
+QString Settings::gameKey(QObject* game) const
+{
+    const auto* const game_ptr = qobject_cast<model::Game*>(game);
+    return game_ptr ? providers::library::game_key(*game_ptr) : QString();
+}
+
+void Settings::setCollectionHidden(const QString& name, bool hidden)
+{
+    providers::library::HiddenList list = providers::library::load_hidden();
+    list.collections.removeAll(name);
+    if (hidden)
+        list.collections.append(name);
+    providers::library::save_hidden(list);
+    emit libraryRulesChanged();
+}
+
+void Settings::setGameHidden(const QString& path, const QString& title,
+                             const QStringList& collections, bool hidden)
+{
+    if (path.isEmpty())
+        return;
+    providers::library::HiddenList list = providers::library::load_hidden();
+    list.games.erase(std::remove_if(list.games.begin(), list.games.end(),
+        [&path](const providers::library::HiddenGame& entry) { return entry.path == path; }), list.games.end());
+    if (hidden) {
+        providers::library::HiddenGame entry;
+        entry.path = path;
+        entry.title = title;
+        entry.collections = collections;
+        list.games.push_back(std::move(entry));
+    }
+    providers::library::save_hidden(list);
+    emit libraryRulesChanged();
+}
+
+void Settings::reloadLibrary()
+{
+    Log::info(LOGMSG("Reloading the library..."));
+    emit libraryReloadRequested();
 }
 
 void Settings::reloadProviders()

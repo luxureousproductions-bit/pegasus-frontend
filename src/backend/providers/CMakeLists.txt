@@ -9,6 +9,8 @@ target_sources(pegasus-backend PRIVATE
     SearchContext.h
     GameDataCache.cpp
     GameDataCache.h
+    LibraryRules.cpp
+    LibraryRules.h
 )
 
 

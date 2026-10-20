@@ -16,6 +16,7 @@
 
 
 #include "ProviderManager.h"
+#include "LibraryRules.h"
 
 #include "AppSettings.h"
 #include "GameDataCache.h"
@@ -84,6 +85,8 @@ void ProviderManager::run(const bool force_refresh)
             finalize_timer.start();
             // TODO: C++17
             std::tie(m_found_collections, m_found_games) = sctx.finalize();
+            // Pegasus X: one Android collection, hidden games left out
+            providers::library::apply_library_rules(m_found_collections, m_found_games);
             Log::info(LOGMSG("Game list cache restore took %1ms").arg(finalize_timer.elapsed()));
 
             m_current_progress = 1.f;
@@ -148,6 +151,8 @@ void ProviderManager::run(const bool force_refresh)
 
         Log::info(LOGMSG("Game list post-processing took %1ms").arg(finalize_timer.elapsed()));
         GameDataCache::save(sctx, providers, m_found_collections, m_found_games);
+        // Pegasus X: after the cache, which keeps everything (see LibraryRules.h)
+        providers::library::apply_library_rules(m_found_collections, m_found_games);
         emit scanFinished();
     });
 }

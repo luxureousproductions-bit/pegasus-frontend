@@ -57,6 +57,7 @@ FocusScope {
         onOpenGameDirSettings: root.openModal("GameDirEditor.qml")
         onOpenEsdeImport: root.openModal("EsdeImport.qml")
         onOpenEmulatorSettings: root.openScreen("EmulatorEditor.qml")
+        onOpenLibrarySettings: root.openScreen("LibraryEditor.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
         onReloadRequested: Internal.settings.reloadProviders()

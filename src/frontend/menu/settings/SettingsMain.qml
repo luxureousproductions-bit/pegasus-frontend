@@ -31,6 +31,7 @@ FocusScope {
     signal openGameDirSettings
     signal openEsdeImport
     signal openEmulatorSettings
+    signal openLibrarySettings
     signal openAndroidSafSettings
     signal openProviderSettings
     signal reloadRequested
@@ -133,6 +134,13 @@ FocusScope {
             buttonAction: root.openEmulatorSettings
             section: "gaming"
             enabled: Internal.settings.esdeImportSupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Library...")
+            desc: QT_TR_NOOP("Hide games and collections from every theme, or show them again, and keep your Android collections together.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openLibrarySettings
+            section: "gaming"
         },
         SettingsEntry {
             label: QT_TR_NOOP("Accessible Android directories...")

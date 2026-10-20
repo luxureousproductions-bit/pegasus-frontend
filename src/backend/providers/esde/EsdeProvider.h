@@ -19,6 +19,7 @@
 
 #include "providers/Provider.h"
 
+#include <QSet>
 #include <QString>
 #include <QStringList>
 #include <functional>
@@ -168,6 +169,10 @@ struct AndroidApp {
 
 /// The installed apps that can be opened, games first, then by name
 std::vector<AndroidApp> android_apps();
+
+/// The packages of every emulator ES-DE knows (its find rules, and the custom
+/// ones of the ES-DE folder), to tell emulators apart from other apps
+QSet<QString> emulator_packages();
 
 /// The command that opens an app
 QString android_app_command(const QString& component);

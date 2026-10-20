@@ -222,6 +222,9 @@ Backend::Backend(const CliArgs& args)
                      m_api_public->keysPtr(), &model::Keys::refresh_keys);
     QObject::connect(m_api_private->settingsPtr(), &model::Settings::providerReloadingRequested,
                      [this](){ onScanRequested(true); });
+    // Pegasus X: hidden games and the like only need the cached list read again
+    QObject::connect(m_api_private->settingsPtr(), &model::Settings::libraryReloadRequested,
+                     [this](){ onScanRequested(false); });
 
     QObject::connect(m_api_public, &model::ApiObject::favoritesChanged,
                      [this](){ onFavoritesChanged(); });

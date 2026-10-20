@@ -56,6 +56,7 @@ class Settings : public QObject {
     Q_PROPERTY(bool esdeAppsAsAndroid READ esdeAppsAsAndroid WRITE setEsdeAppsAsAndroid NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeGamesAsAndroid READ esdeGamesAsAndroid WRITE setEsdeGamesAsAndroid NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeImportRunning READ esdeImportRunning NOTIFY esdeImportRunningChanged)
+    Q_PROPERTY(bool mergeAndroid READ mergeAndroid WRITE setMergeAndroid NOTIFY libraryRulesChanged)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
@@ -142,6 +143,18 @@ public:
     Q_INVOKABLE void requestAndroidGames(const QString& action, const QString& collection_name);
     /// The same command for many loaded games at once
     Q_INVOKABLE void setLiveLaunchCommands(const QVariantList& games, const QString& command);
+    // Library: hidden games and collections, one Android collection
+    bool mergeAndroid() const;
+    void setMergeAndroid(bool);
+    /// { collections: [names], games: [{ path, title, collections }] }
+    Q_INVOKABLE QVariantMap hiddenItems() const;
+    /// What a game is hidden by: its first file's path, or its URI
+    Q_INVOKABLE QString gameKey(QObject* game) const;
+    Q_INVOKABLE void setCollectionHidden(const QString& name, bool hidden);
+    Q_INVOKABLE void setGameHidden(const QString& path, const QString& title,
+                                   const QStringList& collections, bool hidden);
+    /// Reads the games again from the cache (quick), applying the changes
+    Q_INVOKABLE void reloadLibrary();
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"
     Q_INVOKABLE QString emulatorListInfo() const;
 
@@ -169,6 +182,8 @@ signals:
     void esdeImportSystemsReady(QVariantList systems);
     void androidDirsChanged();
     void providerReloadingRequested();
+    void libraryReloadRequested();
+    void libraryRulesChanged();
 
 private:
     bool m_esde_import_running = false;
