@@ -30,6 +30,7 @@ FocusScope {
     signal openGamepadSettings
     signal openGameDirSettings
     signal openEsdeImport
+    signal openEmulatorSettings
     signal openAndroidSafSettings
     signal openProviderSettings
     signal reloadRequested
@@ -122,6 +123,14 @@ FocusScope {
             desc: QT_TR_NOOP("Turn ES-DE's game details, art and manuals into Pegasus metadata files, for some systems or all of them.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openEsdeImport
+            section: "gaming"
+            enabled: Internal.settings.esdeImportSupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Emulators...")
+            desc: QT_TR_NOOP("Pick the emulator of each collection, or of single games. It's written into the collection's metadata file.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openEmulatorSettings
             section: "gaming"
             enabled: Internal.settings.esdeImportSupported
         },

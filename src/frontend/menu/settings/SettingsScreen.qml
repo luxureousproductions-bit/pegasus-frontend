@@ -26,6 +26,7 @@ FocusScope {
     signal close
 
     function openScreen(url) {
+        subscreen.source = "";  // a fresh screen every time (see openModal)
         subscreen.source = url;
         subscreen.focus = true;
         root.state = "sub";
@@ -55,6 +56,7 @@ FocusScope {
         onOpenGamepadSettings: root.openScreen("GamepadEditor.qml")
         onOpenGameDirSettings: root.openModal("GameDirEditor.qml")
         onOpenEsdeImport: root.openModal("EsdeImport.qml")
+        onOpenEmulatorSettings: root.openScreen("EmulatorEditor.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
         onReloadRequested: Internal.settings.reloadProviders()
