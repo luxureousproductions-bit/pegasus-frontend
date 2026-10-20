@@ -20,7 +20,12 @@
 #include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
+#include "model/gaming/Collection.h"
+#include "model/gaming/CollectionListModel.h"
 #include "model/gaming/Game.h"
+#include "model/gaming/GameFile.h"
+#include "model/gaming/GameFileListModel.h"
+#include "model/gaming/GameListModel.h"
 #include "utils/PathTools.h"
 
 #ifdef Q_OS_ANDROID
@@ -37,6 +42,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
+#include <QThreadPool>
 #include <QtConcurrent/QtConcurrent>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -169,6 +175,19 @@ QString pegasusx_settings_path()
 {
     return paths::writableConfigDir() + QStringLiteral("/pegasusx.ini");
 }
+
+// The Emulators screen's background work: one thread, so changes are written
+// in the order they were made and a read sees the changes before it
+QThreadPool* emulator_pool()
+{
+    static QThreadPool* pool = [] {
+        QThreadPool* p = new QThreadPool;
+        p->setMaxThreadCount(1);
+        p->setExpiryTimeout(-1);
+        return p;
+    }();
+    return pool;
+}
 } // namespace
 
 bool Settings::esdeImportSupported() const
@@ -279,10 +298,99 @@ QVariantList Settings::emulatorCollections() const
 
 void Settings::requestEmulatorCollections()
 {
-    QtConcurrent::run([this]{
+    QtConcurrent::run(emulator_pool(), [this]{
         const QVariantList list = emulatorCollections();
-        emit emulatorCollectionsReady(list);  // queued to the screen
+        QMetaObject::invokeMethod(this, [this, list]{
+            m_emu_cache = list;
+            emit emulatorCollectionsReady(list);
+        }, Qt::QueuedConnection);
     });
+}
+
+QVariantList Settings::collectionGames(QObject* collections, const QString& collection_name) const
+{
+    QVariantList out;
+    const auto* const list = qobject_cast<model::CollectionListModel*>(collections);
+    if (!list)
+        return out;
+    for (model::Collection* const coll : list->entries()) {
+        if (coll->name() != collection_name)
+            continue;
+        const std::vector<model::Game*>& games = coll->gameList()->entries();
+        out.reserve(out.size() + static_cast<int>(games.size()));
+        for (model::Game* const game : games) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            if (files.empty())
+                continue;
+            out.append(QVariantMap {
+                { QStringLiteral("title"), game->title() },
+                { QStringLiteral("path"), files.front()->path() },
+                { QStringLiteral("obj"), QVariant::fromValue(static_cast<QObject*>(game)) },
+            });
+        }
+    }
+    return out;
+}
+
+void Settings::requestCollectionDetails(const QString& collection_name, bool android)
+{
+    const QVariantList cached_apps = m_android_apps_cache;
+    QtConcurrent::run(emulator_pool(), [this, collection_name, android, cached_apps]{
+        QVariantMap details;
+        details.insert(QStringLiteral("gameCommands"), gameEmulators(collection_name));
+        if (android) {
+            details.insert(QStringLiteral("gameApps"), androidGameApps(collection_name));
+            details.insert(QStringLiteral("apps"), cached_apps.isEmpty() ? androidApps() : cached_apps);
+        }
+        QVariantMap original { { QStringLiteral("known"), false }, { QStringLiteral("command"), QString() } };
+        QVariantMap game_originals;
+#ifdef WITH_COMPAT_ESDE
+        const providers::esde::OriginalLaunches originals = providers::esde::original_launches(collection_name);
+        original.insert(QStringLiteral("known"), originals.collection_known);
+        original.insert(QStringLiteral("command"), originals.collection_command);
+        for (const auto& game : originals.games)
+            game_originals.insert(game.path, game.command);
+#endif
+        details.insert(QStringLiteral("original"), original);
+        details.insert(QStringLiteral("gameOriginals"), game_originals);
+
+        QMetaObject::invokeMethod(this, [this, collection_name, details]{
+            if (details.contains(QStringLiteral("apps")))
+                m_android_apps_cache = details.value(QStringLiteral("apps")).toList();
+            emit collectionDetailsReady(collection_name, details);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void Settings::saveEmulator(const QString& collection_name, const QString& game_path,
+                            const QString& game_title, const QString& command)
+{
+    QtConcurrent::run(emulator_pool(), [this, collection_name, game_path, game_title, command]{
+        const QString error = game_path.isEmpty()
+            ? setCollectionEmulator(collection_name, command)
+            : setGameEmulator(collection_name, game_path, game_title, command);
+        QMetaObject::invokeMethod(this, [this, collection_name, game_path, error]{
+            emit emulatorSaved(collection_name, game_path, error);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void Settings::requestAndroidGames(const QString& action, const QString& collection_name)
+{
+    QtConcurrent::run(emulator_pool(), [this, action, collection_name]{
+        const int count = action == QLatin1String("add")
+            ? addAndroidGames(collection_name)
+            : matchAndroidGames(collection_name);
+        QMetaObject::invokeMethod(this, [this, action, collection_name, count]{
+            emit androidGamesDone(action, collection_name, count);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void Settings::setLiveLaunchCommands(const QVariantList& games, const QString& command)
+{
+    for (const QVariant& game : games)
+        setLiveLaunchCommand(game.value<QObject*>(), command);
 }
 
 void Settings::requestEsdeImportSystems()

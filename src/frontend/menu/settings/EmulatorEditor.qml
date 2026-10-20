@@ -39,46 +39,132 @@ FocusScope {
     property var gameCommands: ({}) // game path -> its own launch command
     property string message: ""
     property bool loading: true
+    property bool detailsLoading: false  // the open collection's per-game commands
+    property var collOriginal: ({ "known": false, "command": "" })
+    property var gameOriginals: ({})     // game path -> its command before Pegasus X
+    property bool changed: false         // something was saved since the list was read
+    property int refreshesPending: 0
+    property var pendingCollections: null
 
-    // the collections are read in the background (it takes a moment with a
-    // big library), so the screen can show that it's loading
-    Component.onCompleted: refresh()
+    // Everything slow happens in the background, one thing at a time and in
+    // order, so the screen never waits: the list from last time shows at
+    // once and is refreshed behind it, picks show right away and are written
+    // after.
+    Component.onCompleted: {
+        var cached = Internal.settings.cachedEmulatorCollections();
+        if (cached.length > 0) {
+            collections = cached;
+            loading = false;
+            list.currentIndex = 1;  // the first collection, below the emulator list row
+        }
+        refresh();
+    }
 
     function refresh() {
+        refreshesPending++;
         Internal.settings.requestEmulatorCollections();
+    }
+    function showCollections(fresh) {
+        var keep = list.currentIndex;
+        var first = loading;
+        collections = fresh;
+        loading = false;
+        list.currentIndex = first ? (fresh.length > 0 ? 1 : 0) : Math.min(keep, fresh.length);
     }
     Connections {
         target: Internal.settings
-        function onEmulatorCollectionsReady(collections) {
-            const first = root.loading;
-            root.collections = collections;
-            root.loading = false;
-            if (first && collections.length > 0)
-                list.currentIndex = 1;  // the first collection, below the emulator list row
-            if (root.coll)
-                root.loadGames();
+        function onEmulatorCollectionsReady(fresh) {
+            root.refreshesPending--;
+            if (root.refreshesPending > 0)
+                return;  // a newer one is on its way
+            if (root.coll) {
+                // don't change the open collection under the user's feet
+                root.pendingCollections = fresh;
+                return;
+            }
+            root.showCollections(fresh);
         }
-    }
-
-    function loadGames() {
-        var out = [];
-        for (var i = 0; i < api.collections.count; i++) {
-            var c = api.collections.get(i);
-            if (c.name !== coll.name)
-                continue;
-            for (var j = 0; j < c.games.count; j++) {
-                var game = c.games.get(j);
-                if (game.files.count > 0)
-                    out.push({ "title": game.title, "path": game.files.get(0).path, "obj": game });
+        function onCollectionDetailsReady(name, details) {
+            if (!root.coll || name !== root.coll.name)
+                return;
+            var before = root.gameCommands;
+            var liveAfter = root.liveAfterDetails;
+            root.keepPagePosition(function() {
+                root.gameCommands = details.gameCommands;
+                root.gameApps = details.gameApps || {};
+                if (details.apps)
+                    root.androidApps = details.apps;
+                root.collOriginal = details.original;
+                root.gameOriginals = details.gameOriginals;
+                root.detailsLoading = false;
+            });
+            if (liveAfter) {
+                // apps matched in the background: those games open them right away
+                root.liveAfterDetails = false;
+                for (var i = 0; i < root.games.length; i++) {
+                    var cmd = root.gameCommands[root.games[i].path];
+                    if (cmd && cmd !== before[root.games[i].path])
+                        Internal.settings.setLiveLaunchCommand(root.games[i].obj, cmd);
+                }
             }
         }
-        games = out;
-        gameCommands = Internal.settings.gameEmulators(coll.name);
-        if (coll.isAndroid) {
-            if (androidApps.length === 0)
-                androidApps = Internal.settings.androidApps();
-            gameApps = Internal.settings.androidGameApps(coll.name);
+        function onEmulatorSaved(name, gamePath, error) {
+            root.savesPending--;
+            if (error === "")
+                return;
+            // show what's really in the file again
+            root.message = error;
+            if (root.coll && root.coll.name === name)
+                root.loadDetails();
+            root.changed = true;
         }
+        function onAndroidGamesDone(action, name, count) {
+            root.busy = false;
+            if (action === "match")
+                root.message = count > 0 ? qsTr("%1 games now open their app.").arg(count) + api.tr
+                                         : qsTr("No more games could be matched. Pick their app one by one below.") + api.tr;
+            else
+                root.message = count > 0 ? qsTr("Added %1 games. Reload the games to see them.").arg(count) + api.tr
+                                         : qsTr("No installed games are missing from this collection.") + api.tr;
+            root.changed = true;
+            if (root.coll && root.coll.name === name) {
+                root.liveAfterDetails = action === "match";
+                root.loadDetails();
+            }
+        }
+    }
+    property int savesPending: 0
+    property bool busy: false            // matching or adding Android games
+    property bool liveAfterDetails: false
+
+    function loadDetails() {
+        detailsLoading = true;
+        Internal.settings.requestCollectionDetails(coll.name, !!coll.isAndroid);
+    }
+
+    // changing what the page shows rebuilds its rows: stay on the same one
+    function keepPagePosition(change) {
+        var index = page.currentIndex;
+        var y = page.contentY;
+        change();
+        page.currentIndex = index;
+        page.contentY = y;
+    }
+
+    // emulator labels by command, for the open collection
+    function commandKey(command) {
+        return command.replace(/\s+/g, " ").trim();
+    }
+    readonly property var labelsByCommand: {
+        var out = {};
+        if (!coll)
+            return out;
+        for (var i = 0; i < coll.options.length; i++) {
+            var key = commandKey(coll.options[i].command);
+            if (!(key in out))
+                out[key] = coll.options[i].label;
+        }
+        return out;
     }
 
     // Android collections: each game opens its own app
@@ -91,17 +177,6 @@ FocusScope {
         }
         return pkg;
     }
-    function reloadAndroid(what) {
-        var before = gameCommands;
-        gameCommands = Internal.settings.gameEmulators(coll.name);
-        gameApps = Internal.settings.androidGameApps(coll.name);
-        // the loaded games open their app right away
-        for (var i = 0; i < games.length; i++) {
-            var cmd = gameCommands[games[i].path];
-            if (cmd && cmd !== before[games[i].path])
-                Internal.settings.setLiveLaunchCommand(games[i].obj, cmd);
-        }
-    }
 
     // the name of the emulator a command belongs to
     function sameCommand(a, b) {
@@ -110,7 +185,10 @@ FocusScope {
     function labelOf(c, command) {
         if (!command)
             return "";
-        for (var i = 0; i < c.options.length; i++) {
+        var label = c === coll ? labelsByCommand[commandKey(command)] : undefined;
+        if (label !== undefined)
+            return label;
+        for (var i = 0; c !== coll && i < c.options.length; i++) {
             if (sameCommand(c.options[i].command, command))
                 return c.options[i].label;
         }
@@ -135,10 +213,12 @@ FocusScope {
             Internal.settings.setLiveLaunchCommand(game.obj, command !== "" ? command : (coll.command || ""));
             return;
         }
+        var objs = [];
         for (var i = 0; i < games.length; i++) {
             if (!gameCommands[games[i].path])
-                Internal.settings.setLiveLaunchCommand(games[i].obj, command);
+                objs.push(games[i].obj);
         }
+        Internal.settings.setLiveLaunchCommands(objs, command);
     }
 
     // the first row of the list is the emulator list itself
@@ -162,16 +242,35 @@ FocusScope {
     }
 
     function openCollection(index) {
+        gameCommands = {};
+        gameApps = {};
+        collOriginal = { "known": false, "command": "" };
+        gameOriginals = {};
         collIndex = index;
         message = "";
-        loadGames();
+        games = Internal.settings.collectionGames(api.collections, coll.name);
+        loadDetails();
         page.currentIndex = 1;
+        page.positionViewAtBeginning();
         page.focus = true;
     }
     function backToList() {
+        var keep = collIndex + 1;
         collIndex = -1;
         message = "";
+        games = [];
+        list.currentIndex = keep;
         list.focus = true;
+        if (changed) {
+            changed = false;
+            pendingCollections = null;
+            refresh();  // the game counts and the like, in the background
+        }
+        else if (pendingCollections) {
+            var fresh = pendingCollections;
+            pendingCollections = null;
+            showCollections(fresh);
+        }
     }
 
     function closeMaybe() {
@@ -386,12 +485,15 @@ FocusScope {
                     if (root.gameApps[root.games[ag].path])
                         set++;
                 }
-                out.push({ "kind": "section", "text": qsTr("Per-game · %1 of %2 open an app").arg(set).arg(root.games.length) + api.tr });
+                out.push({ "kind": "section", "text": root.detailsLoading
+                    ? qsTr("Per-game · reading...") + api.tr
+                    : qsTr("Per-game · %1 of %2 open an app").arg(set).arg(root.games.length) + api.tr });
                 for (var ai = 0; ai < root.games.length; ai++) {
                     var pkg = root.gameApps[root.games[ai].path];
                     out.push({ "kind": "game", "text": root.games[ai].title, "game": root.games[ai],
                                "own": !!pkg, "missing": !pkg,
-                               "value": pkg ? qsTr("Opens %1").arg(root.appLabel(pkg)) + api.tr : qsTr("No app set") + api.tr });
+                               "value": pkg ? qsTr("Opens %1").arg(root.appLabel(pkg)) + api.tr
+                                      : root.detailsLoading ? "" : qsTr("No app set") + api.tr });
                 }
                 return out;
             }
@@ -409,11 +511,14 @@ FocusScope {
                 if (root.gameCommands[root.games[g].path])
                     own++;
             }
-            out.push({ "kind": "section", "text": qsTr("Per-game · %1 set").arg(own) + api.tr });
+            out.push({ "kind": "section", "text": root.detailsLoading
+                ? qsTr("Per-game · reading...") + api.tr
+                : qsTr("Per-game · %1 set").arg(own) + api.tr });
+            var inherit = root.detailsLoading ? "" : qsTr("Collection's emulator") + api.tr;
             for (var i = 0; i < root.games.length; i++) {
                 var cmd = root.gameCommands[root.games[i].path];
                 out.push({ "kind": "game", "text": root.games[i].title, "game": root.games[i],
-                           "own": !!cmd, "value": cmd ? root.labelOf(c, cmd) : qsTr("Collection's emulator") + api.tr });
+                           "own": !!cmd, "value": cmd ? root.labelOf(c, cmd) : inherit });
             }
             return out;
         }
@@ -453,16 +558,13 @@ FocusScope {
             else if (row.kind === "game") {
                 picker.openFor(row.game);
             }
-            else if (row.kind === "match") {
-                var matched = Internal.settings.matchAndroidGames(root.coll.name);
-                root.reloadAndroid();
-                root.message = matched > 0 ? qsTr("%1 games now open their app.").arg(matched) + api.tr
-                                           : qsTr("No more games could be matched. Pick their app one by one below.") + api.tr;
-            }
-            else if (row.kind === "addgames") {
-                var added = Internal.settings.addAndroidGames(root.coll.name);
-                root.message = added > 0 ? qsTr("Added %1 games. Reload the games to see them.").arg(added) + api.tr
-                                         : qsTr("No installed games are missing from this collection.") + api.tr;
+            else if (row.kind === "match" || row.kind === "addgames") {
+                if (root.busy)
+                    return;
+                root.busy = true;
+                root.message = row.kind === "match" ? qsTr("Matching apps...") + api.tr
+                                                    : qsTr("Looking for installed games...") + api.tr;
+                Internal.settings.requestAndroidGames(row.kind === "match" ? "match" : "add", root.coll.name);
             }
             else if (row.kind === "test") {
                 if (root.games.length === 0 || !root.coll.command) {
@@ -645,7 +747,8 @@ FocusScope {
         visible: box.x < parent.width
 
         function openFor(g) {
-            original = Internal.settings.originalLaunch(root.coll.name, g ? g.path : "");
+            original = g ? { "known": !!root.gameOriginals[g.path], "command": root.gameOriginals[g.path] || "" }
+                         : root.collOriginal;
             game = g;
             var idx = 0;
             for (var i = 0; i < entries.length; i++) {
@@ -666,13 +769,11 @@ FocusScope {
 
         function apply(command) {
             var c = root.coll;
-            var error = game
-                ? Internal.settings.setGameEmulator(c.name, game.path, game.title, command)
-                : Internal.settings.setCollectionEmulator(c.name, command);
-            if (error !== "") {
-                root.message = error;
-            }
-            else {
+            // shown and used right away; written to the file in the background
+            root.savesPending++;
+            root.changed = true;
+            Internal.settings.saveEmulator(c.name, game ? game.path : "", game ? game.title : "", command);
+            {
                 root.applyLive(game, command);
                 root.message = game
                     ? qsTr("Saved for \"%1\".").arg(game.title) + api.tr
@@ -692,8 +793,10 @@ FocusScope {
                         delete appCmds[game.path];
                         delete apps[game.path];
                     }
-                    root.gameApps = apps;
-                    root.gameCommands = appCmds;
+                    root.keepPagePosition(function() {
+                        root.gameApps = apps;
+                        root.gameCommands = appCmds;
+                    });
                 }
                 else if (game) {
                     var cmds = Object.assign({}, root.gameCommands);
@@ -701,7 +804,9 @@ FocusScope {
                         cmds[game.path] = command;
                     else
                         delete cmds[game.path];
-                    root.gameCommands = cmds;
+                    root.keepPagePosition(function() {
+                        root.gameCommands = cmds;
+                    });
                 }
                 else {
                     var list = root.collections.slice();
@@ -716,10 +821,10 @@ FocusScope {
                             updated.currentInstalled = updated.options[i].installed;
                         }
                     }
-                    var keepIndex = page.currentIndex;
-                    list[root.collIndex] = updated;
-                    root.collections = list;
-                    page.currentIndex = keepIndex;
+                    root.keepPagePosition(function() {
+                        list[root.collIndex] = updated;
+                        root.collections = list;
+                    });
                 }
             }
             closePicker();

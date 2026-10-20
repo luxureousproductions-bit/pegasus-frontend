@@ -39,6 +39,8 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSet>
 #include <QStringBuilder>
@@ -2054,10 +2056,24 @@ QString same_command_key(const QString& command)
 }
 
 /// The files that define a collection, loaded
-std::vector<MetaFile> files_defining(const QString& collection_name)
+// Which files define each collection, remembered from the last full read
+// (emulator_collections), so a change only reads the files it touches
+// instead of every metadata file of every game directory
+QMutex& collection_files_mutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+HashMap<QString, QStringList>& collection_files_cache()
+{
+    static HashMap<QString, QStringList> cache;
+    return cache;
+}
+
+std::vector<MetaFile> load_defining(const QStringList& paths, const QString& collection_name)
 {
     std::vector<MetaFile> out;
-    for (const QString& path : all_metafiles()) {
+    for (const QString& path : paths) {
         MetaFile file;
         if (!file.load(path))
             continue;
@@ -2067,6 +2083,31 @@ std::vector<MetaFile> files_defining(const QString& collection_name)
         if (defines)
             out.push_back(std::move(file));
     }
+    return out;
+}
+
+std::vector<MetaFile> files_defining(const QString& collection_name)
+{
+    QStringList known;
+    {
+        QMutexLocker lock(&collection_files_mutex());
+        const auto it = collection_files_cache().find(collection_name);
+        if (it != collection_files_cache().cend())
+            known = it->second;
+    }
+    if (!known.isEmpty()) {
+        std::vector<MetaFile> out = load_defining(known, collection_name);
+        if (!out.empty())
+            return out;
+    }
+
+    // not known yet, or the files changed: look everywhere
+    std::vector<MetaFile> out = load_defining(all_metafiles(), collection_name);
+    QStringList paths;
+    for (const MetaFile& file : out)
+        paths.append(file.path);
+    QMutexLocker lock(&collection_files_mutex());
+    collection_files_cache()[collection_name] = paths;
     return out;
 }
 } // namespace
@@ -2172,6 +2213,14 @@ std::vector<EmulatorCollection> emulator_collections()
     std::sort(out.begin(), out.end(), [](const EmulatorCollection& a, const EmulatorCollection& b) {
         return a.name.compare(b.name, Qt::CaseInsensitive) < 0;
     });
+
+    {
+        QMutexLocker lock(&collection_files_mutex());
+        HashMap<QString, QStringList>& cache = collection_files_cache();
+        cache.clear();
+        for (const EmulatorCollection& coll : out)
+            cache[coll.name] = coll.files;
+    }
     return out;
 }
 
@@ -2290,6 +2339,36 @@ OriginalLaunch original_launch(const QString& collection_name, const QString& ga
         // a backup without the game: the game had no launch line of its own
         if (!wanted.isEmpty())
             out.known = true;
+    }
+    return out;
+}
+
+
+OriginalLaunches original_launches(const QString& collection_name)
+{
+    OriginalLaunches out;
+    for (const MetaFile& current : files_defining(collection_name)) {
+        MetaFile backup;
+        if (!backup.load(current.path % QStringLiteral(".bak")))
+            continue;
+        for (const MetaBlock& block : backup.blocks) {
+            const MetaEntry* launch = block.entry(QStringLiteral("launch"));
+            if (!launch)
+                launch = block.entry(QStringLiteral("command"));
+            if (block.is_collection) {
+                if (block.name == collection_name && !out.collection_known) {
+                    out.collection_known = true;
+                    out.collection_command = launch ? launch->values.join(QLatin1Char(' ')) : QString();
+                }
+                continue;
+            }
+            if (!launch || block.collection_index < 0
+                || backup.blocks[static_cast<size_t>(block.collection_index)].name != collection_name)
+                continue;
+            const QStringList files = backup.game_files(block);
+            if (!files.isEmpty())
+                out.games.push_back({ files.first(), launch->values.join(QLatin1Char(' ')) });
+        }
     }
     return out;
 }

@@ -144,6 +144,15 @@ struct OriginalLaunch {
 };
 OriginalLaunch original_launch(const QString& collection_name, const QString& game_path);
 
+/// All of a collection's original commands at once (see original_launch):
+/// the collection's, and those of the games that had their own
+struct OriginalLaunches {
+    bool collection_known = false;
+    QString collection_command;
+    std::vector<GameEmulator> games;
+};
+OriginalLaunches original_launches(const QString& collection_name);
+
 /// Starts `command` with a game file. Returns an error, or empty.
 QString test_emulator_command(const QString& command, const QString& game_path);
 

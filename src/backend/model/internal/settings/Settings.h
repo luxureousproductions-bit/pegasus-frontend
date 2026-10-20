@@ -127,6 +127,21 @@ public:
     Q_INVOKABLE QString androidAppCommand(const QString& component) const;
     Q_INVOKABLE int matchAndroidGames(const QString& collection_name);
     Q_INVOKABLE int addAndroidGames(const QString& collection_name);
+    // Emulators screen, kept responsive: reads and writes happen in the
+    // background, one at a time and in order, and report back with signals
+    /// The last list of emulatorCollectionsReady, to show at once
+    Q_INVOKABLE QVariantList cachedEmulatorCollections() const { return m_emu_cache; }
+    /// The games of a collection as { title, path, obj }, read in C++
+    Q_INVOKABLE QVariantList collectionGames(QObject* collections, const QString& collection_name) const;
+    /// collectionDetailsReady: { gameCommands, gameApps, apps, original, gameOriginals }
+    Q_INVOKABLE void requestCollectionDetails(const QString& collection_name, bool android);
+    /// Writes a launch command (game_path empty: the collection's); emulatorSaved
+    Q_INVOKABLE void saveEmulator(const QString& collection_name, const QString& game_path,
+                                  const QString& game_title, const QString& command);
+    /// action "match" or "add"; androidGamesDone
+    Q_INVOKABLE void requestAndroidGames(const QString& action, const QString& collection_name);
+    /// The same command for many loaded games at once
+    Q_INVOKABLE void setLiveLaunchCommands(const QVariantList& games, const QString& command);
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"
     Q_INVOKABLE QString emulatorListInfo() const;
 
@@ -147,6 +162,9 @@ signals:
     void esdeImportProgress(int done, int total, QString system);
     void esdeImportFinished(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
+    void collectionDetailsReady(QString collection, QVariantMap details);
+    void emulatorSaved(QString collection, QString gamePath, QString error);
+    void androidGamesDone(QString action, QString collection, int count);
     void emulatorListUpdated(bool ok, QString message);
     void esdeImportSystemsReady(QVariantList systems);
     void androidDirsChanged();
@@ -155,6 +173,8 @@ signals:
 private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
+    QVariantList m_emu_cache;
+    QVariantList m_android_apps_cache;
 };
 
 } // namespace model
