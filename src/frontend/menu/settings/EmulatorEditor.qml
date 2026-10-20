@@ -74,6 +74,33 @@ FocusScope {
         }
         games = out;
         gameCommands = Internal.settings.gameEmulators(coll.name);
+        if (coll.isAndroid) {
+            if (androidApps.length === 0)
+                androidApps = Internal.settings.androidApps();
+            gameApps = Internal.settings.androidGameApps(coll.name);
+        }
+    }
+
+    // Android collections: each game opens its own app
+    property var androidApps: []  // [{ label, package, component, game }]
+    property var gameApps: ({})   // game path -> package of the app it opens
+    function appLabel(pkg) {
+        for (var i = 0; i < androidApps.length; i++) {
+            if (androidApps[i]["package"] === pkg)
+                return androidApps[i].label;
+        }
+        return pkg;
+    }
+    function reloadAndroid(what) {
+        var before = gameCommands;
+        gameCommands = Internal.settings.gameEmulators(coll.name);
+        gameApps = Internal.settings.androidGameApps(coll.name);
+        // the loaded games open their app right away
+        for (var i = 0; i < games.length; i++) {
+            var cmd = gameCommands[games[i].path];
+            if (cmd && cmd !== before[games[i].path])
+                Internal.settings.setLiveLaunchCommand(games[i].obj, cmd);
+        }
     }
 
     // the name of the emulator a command belongs to
@@ -90,6 +117,8 @@ FocusScope {
         return qsTr("Custom command") + api.tr;
     }
     function collectionText(c) {
+        if (c.isAndroid)
+            return qsTr("Each game opens its own app") + api.tr;
         if (!c.command)
             return qsTr("None yet") + api.tr;
         var text = c.currentLabel !== "" ? c.currentLabel : qsTr("Your metadata's command") + api.tr;
@@ -342,6 +371,30 @@ FocusScope {
                 return [];
             var out = [];
             out.push({ "kind": "section", "text": qsTr("Collection") + api.tr });
+            if (c.isAndroid) {
+                out.push({ "kind": "match", "text": qsTr("Match apps automatically") + api.tr,
+                           "value": qsTr("for games with no app yet") + api.tr });
+                out.push({ "kind": "addgames", "text": qsTr("Add installed games") + api.tr,
+                           "value": qsTr("games on this device not listed yet") + api.tr });
+                var files = [];
+                for (var af = 0; af < c.files.length; af++)
+                    files.push(c.files[af].split("/").slice(-2).join("/"));
+                out.push({ "kind": "info", "text": qsTr("Saved in") + api.tr, "value": files.join(", ") });
+
+                var set = 0;
+                for (var ag = 0; ag < root.games.length; ag++) {
+                    if (root.gameApps[root.games[ag].path])
+                        set++;
+                }
+                out.push({ "kind": "section", "text": qsTr("Per-game · %1 of %2 open an app").arg(set).arg(root.games.length) + api.tr });
+                for (var ai = 0; ai < root.games.length; ai++) {
+                    var pkg = root.gameApps[root.games[ai].path];
+                    out.push({ "kind": "game", "text": root.games[ai].title, "game": root.games[ai],
+                               "own": !!pkg, "missing": !pkg,
+                               "value": pkg ? qsTr("Opens %1").arg(root.appLabel(pkg)) + api.tr : qsTr("No app set") + api.tr });
+                }
+                return out;
+            }
             out.push({ "kind": "emulator", "text": qsTr("Emulator") + api.tr,
                        "value": c.system === "" ? qsTr("Unknown system, use a custom command") + api.tr : root.collectionText(c) });
             out.push({ "kind": "test", "text": qsTr("Test with a game") + api.tr,
@@ -399,6 +452,17 @@ FocusScope {
             }
             else if (row.kind === "game") {
                 picker.openFor(row.game);
+            }
+            else if (row.kind === "match") {
+                var matched = Internal.settings.matchAndroidGames(root.coll.name);
+                root.reloadAndroid();
+                root.message = matched > 0 ? qsTr("%1 games now open their app.").arg(matched) + api.tr
+                                           : qsTr("No more games could be matched. Pick their app one by one below.") + api.tr;
+            }
+            else if (row.kind === "addgames") {
+                var added = Internal.settings.addAndroidGames(root.coll.name);
+                root.message = added > 0 ? qsTr("Added %1 games. Reload the games to see them.").arg(added) + api.tr
+                                         : qsTr("No installed games are missing from this collection.") + api.tr;
             }
             else if (row.kind === "test") {
                 if (root.games.length === 0 || !root.coll.command) {
@@ -460,7 +524,7 @@ FocusScope {
             Text {
                 visible: !parent.isSection
                 text: modelData.value || ""
-                color: parent.isInfo ? "#999" : (modelData.own ? "#5cc" : "#c0c0c0")
+                color: parent.isInfo ? "#999" : modelData.missing ? "#e8b06a" : (modelData.own ? "#5cc" : "#c0c0c0")
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(22)
                 anchors.left: rowLabel.right
@@ -514,6 +578,25 @@ FocusScope {
             if (!c)
                 return [];
             var out = [];
+            if (c.isAndroid && game) {
+                var currentPkg = root.gameApps[game.path] || "";
+                out.push({ "kind": "inherit", "text": qsTr("No app") + api.tr, "current": currentPkg === "" });
+                var gamesList = [], others = [];
+                for (var a = 0; a < root.androidApps.length; a++) {
+                    var app = root.androidApps[a];
+                    var appEntry = { "kind": "app", "text": app.label, "component": app.component, "pkg": app["package"],
+                                     "note": app["package"], "current": app["package"] === currentPkg };
+                    (app.game ? gamesList : others).push(appEntry);
+                }
+                if (gamesList.length > 0)
+                    out.push({ "kind": "header", "text": qsTr("Games") + api.tr });
+                out = out.concat(gamesList);
+                if (others.length > 0)
+                    out.push({ "kind": "header", "text": qsTr("Other apps") + api.tr });
+                out = out.concat(others);
+                out.push({ "kind": "custom", "text": qsTr("Custom command...") + api.tr, "current": false });
+                return out;
+            }
             var current = game ? (root.gameCommands[game.path] || "") : (c.command || "");
             if (game)
                 out.push({ "kind": "inherit", "text": qsTr("Collection's emulator") + api.tr, "current": current === "" });
@@ -577,7 +660,23 @@ FocusScope {
                     : qsTr("Saved for %1.").arg(c.name) + api.tr;
 
                 // show the change right away, without reading everything again
-                if (game) {
+                if (game && c.isAndroid) {
+                    var apps = Object.assign({}, root.gameApps);
+                    var appCmds = Object.assign({}, root.gameCommands);
+                    if (command !== "") {
+                        appCmds[game.path] = command;
+                        var m = command.match(/-[np]\s+\W?([A-Za-z0-9_.]+)/);
+                        if (m)
+                            apps[game.path] = m[1];
+                    }
+                    else {
+                        delete appCmds[game.path];
+                        delete apps[game.path];
+                    }
+                    root.gameApps = apps;
+                    root.gameCommands = appCmds;
+                }
+                else if (game) {
                     var cmds = Object.assign({}, root.gameCommands);
                     if (command !== "")
                         cmds[game.path] = command;
@@ -615,6 +714,8 @@ FocusScope {
                 return closePicker();
             if (entry.kind === "inherit")
                 return apply("");
+            if (entry.kind === "app")
+                return apply(Internal.settings.androidAppCommand(entry.component));
             if (entry.kind === "custom") {
                 var start = game ? (root.gameCommands[game.path] || root.coll.command || "") : (root.coll.command || "");
                 commandDialog.openFor(game, start);
