@@ -32,6 +32,7 @@
 
 #include <QCursor>
 #include <QSettings>
+#include <QtConcurrent/QtConcurrent>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QSet>
@@ -211,31 +212,62 @@ QVariantList Settings::esdeImportSystems() const
     return out;
 }
 
-QVariantMap Settings::runEsdeImport(const QStringList& system_names)
+bool Settings::esdeCombineAndroid() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return file.value(QStringLiteral("esdeImport/combineAndroid"), true).toBool();
+}
+
+void Settings::setEsdeCombineAndroid(bool value)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("esdeImport/combineAndroid"), value);
+    emit esdeImportDirChanged();
+}
+
+void Settings::startEsdeImport(const QStringList& system_names)
 {
 #ifdef WITH_COMPAT_ESDE
-    const auto result = providers::esde::esde_import(esdeImportDir(), system_names);
+    if (m_esde_import_running)
+        return;
+    m_esde_import_running = true;
+    emit esdeImportRunningChanged();
 
-    // the folders written to have to be game directories, or Pegasus won't
-    // read the new metadata files
-    QSet<QString> known;
-    AppSettings::parse_gamedirs([&known](const QString& line){
-        known.insert(::pretty_path(line));
+    const QString esde_dir = esdeImportDir();
+    const bool combine_android = esdeCombineAndroid();
+
+    // the work runs in the background, so the screen can show its progress
+    QtConcurrent::run([this, esde_dir, system_names, combine_android]{
+        const auto result = providers::esde::esde_import(esde_dir, system_names, combine_android,
+            [this](int done, int total, const QString& system) {
+                emit esdeImportProgress(done, total, system);  // queued to the screen
+            });
+
+        // back on the main thread: the folders written to have to be game
+        // directories, or Pegasus won't read the new metadata files
+        QMetaObject::invokeMethod(this, [this, result]{
+            QSet<QString> known;
+            AppSettings::parse_gamedirs([&known](const QString& line){
+                known.insert(::pretty_path(line));
+            });
+            for (const QString& folder : result.folders) {
+                if (!known.contains(::pretty_path(QFileInfo(folder))))
+                    addGameDir(folder);
+            }
+
+            m_esde_import_running = false;
+            emit esdeImportRunningChanged();
+            emit esdeImportFinished(QVariantMap {
+                { QStringLiteral("systems"), result.systems },
+                { QStringLiteral("games"), result.games },
+                { QStringLiteral("files"), result.written_files },
+                { QStringLiteral("error"), result.error },
+            });
+        }, Qt::QueuedConnection);
     });
-    for (const QString& folder : result.folders) {
-        if (!known.contains(::pretty_path(QFileInfo(folder))))
-            addGameDir(folder);
-    }
-
-    return QVariantMap {
-        { QStringLiteral("systems"), result.systems },
-        { QStringLiteral("games"), result.games },
-        { QStringLiteral("files"), result.written_files },
-        { QStringLiteral("error"), result.error },
-    };
 #else
     Q_UNUSED(system_names);
-    return QVariantMap { { QStringLiteral("error"), QStringLiteral("Not supported on this platform") } };
+    emit esdeImportFinished(QVariantMap { { QStringLiteral("error"), QStringLiteral("Not supported on this platform") } });
 #endif
 }
 

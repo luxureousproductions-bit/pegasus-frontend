@@ -1271,7 +1271,8 @@ std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir)
 }
 
 
-EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names)
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, bool combine_android,
+                             const std::function<void(int, int, const QString&)>& progress)
 {
     EsdeImportResult result;
     if (esde_dir.isEmpty() || !QFileInfo(esde_dir).isDir()) {
@@ -1283,13 +1284,27 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
     const QString log_tag = QStringLiteral("ES-DE import");
     const es2::Metadata metahelper(log_tag, { setup.esde_dir });
 
+    QStringList todo;
     for (const QString& name : setup.order) {
-        if (!system_names.isEmpty() && !system_names.contains(name))
-            continue;
+        if (system_names.isEmpty() || system_names.contains(name))
+            todo.append(name);
+    }
+
+    int done = 0;
+    for (const QString& name : todo) {
         const EsdeSystem& sys = setup.systems.at(name);
+        if (progress)
+            progress(done, todo.size(), sys.fullname.isEmpty() ? name : sys.fullname);
+        done++;
+
         const QStringList folders = system_folders(sys, setup.rom_roots);
         if (folders.isEmpty())
             continue;
+
+        // Android Apps and Android Games can share one "Android" collection
+        const bool as_android = combine_android
+            && (name == QLatin1String("androidapps") || name == QLatin1String("androidgames"));
+        const QString short_name = as_android ? QStringLiteral("android") : pegasus_short_name(sys.name);
 
         const QStringList extensions = parse_extensions(sys.extensions);
         const GamelistInfo gamelist = read_gamelist(setup.esde_dir, sys.name, folders);
@@ -1354,6 +1369,8 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
 
             // the file
             QString collection_name = existing_collection_name(folder);
+            if (collection_name.isEmpty() && as_android)
+                collection_name = QStringLiteral("Android");
             if (collection_name.isEmpty())
                 collection_name = sys.fullname.isEmpty() ? sys.name : sys.fullname;
 
@@ -1362,7 +1379,7 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
             stream << "# Made by Pegasus X from ES-DE (" << setup.esde_dir << ").\n"
                    << "# Settings > ES-DE import replaces this file when run again.\n\n"
                    << "collection: " << collection_name << '\n'
-                   << "shortname: " << pegasus_short_name(sys.name) << "\n\n";
+                   << "shortname: " << short_name << "\n\n";
             const QDir base_dir(folder);
             for (const auto& entry : games) {
                 model::Game* const game = entry.first;
@@ -1400,6 +1417,8 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
         if (system_written)
             result.systems++;
     }
+    if (progress)
+        progress(todo.size(), todo.size(), QString());
     return result;
 }
 

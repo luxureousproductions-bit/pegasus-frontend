@@ -32,6 +32,11 @@ FocusScope {
     property string message: ""
     property bool imported: false
 
+    // progress of a running import
+    property real progress: 0
+    property string progressSystem: ""
+    readonly property bool running: Internal.settings.esdeImportRunning
+
     signal close
 
     anchors.fill: parent
@@ -58,10 +63,17 @@ FocusScope {
     }
     readonly property bool allPicked: systems.length > 0 && pickedCount === systems.length
 
-    // one list, so the controller just goes up and down:
-    // the ES-DE folder, "all systems", each system, then Import
+    // one list, so the controller just goes up and down: the ES-DE folder,
+    // the Android option, "all systems", each system, then Import
     readonly property var rows: {
         var out = [{ "kind": "folder" }];
+        var hasAndroid = false;
+        for (var j = 0; j < systems.length; j++) {
+            if (systems[j].name === "androidapps" || systems[j].name === "androidgames")
+                hasAndroid = true;
+        }
+        if (hasAndroid)
+            out.push({ "kind": "android" });
         if (systems.length > 0)
             out.push({ "kind": "all" });
         for (var i = 0; i < systems.length; i++)
@@ -94,19 +106,29 @@ FocusScope {
             message = qsTr("Pick at least one system first.") + api.tr;
             return;
         }
-        message = qsTr("Importing...") + api.tr;
-        // let the message show before the work starts
-        Qt.callLater(function() {
-            var result = Internal.settings.runEsdeImport(names);
-            if (result.files.length > 0) {
-                imported = true;
-                message = qsTr("Imported %1 games from %2 systems.").arg(result.games).arg(result.systems) + api.tr
+        message = "";
+        progress = 0;
+        progressSystem = "";
+        Internal.settings.startEsdeImport(names);
+    }
+
+    Connections {
+        target: Internal.settings
+        function onEsdeImportProgress(done, total, system) {
+            root.progress = total > 0 ? done / total : 0;
+            root.progressSystem = system;
+        }
+        function onEsdeImportFinished(result) {
+            root.progress = 1;
+            if (result.files && result.files.length > 0) {
+                root.imported = true;
+                root.message = qsTr("Imported %1 games from %2 systems.").arg(result.games).arg(result.systems) + api.tr
                     + (result.error !== "" ? " " + result.error : "");
             }
             else {
-                message = result.error !== "" ? result.error : qsTr("Nothing was imported.") + api.tr;
+                root.message = result.error !== "" ? result.error : qsTr("Nothing was imported.") + api.tr;
             }
-        });
+        }
     }
 
     function activate(index) {
@@ -115,6 +137,8 @@ FocusScope {
         var row = rows[index];
         if (row.kind === "folder")
             filePicker.focus = true;
+        else if (row.kind === "android")
+            Internal.settings.esdeCombineAndroid = !Internal.settings.esdeCombineAndroid;
         else if (row.kind === "all")
             toggleAll();
         else if (row.kind === "system")
@@ -131,6 +155,10 @@ FocusScope {
     }
 
     Keys.onPressed: {
+        if (root.running) {
+            event.accepted = true;  // wait for the import to finish
+            return;
+        }
         if (api.keys.isCancel(event) && !event.isAutoRepeat) {
             event.accepted = true;
             root.closeMaybe();
@@ -207,6 +235,10 @@ FocusScope {
                 highlightMoveDuration: 0
 
                 Keys.onPressed: {
+                    if (root.running) {
+                        event.accepted = true;
+                        return;
+                    }
                     if (api.keys.isAccept(event) && !event.isAutoRepeat) {
                         event.accepted = true;
                         root.activate(currentIndex);
@@ -218,6 +250,7 @@ FocusScope {
                                                         && (ListView.isCurrentItem || rowMouse.containsMouse)
                     readonly property bool isSystem: modelData.kind === "system"
                     readonly property bool checked: modelData.kind === "all" ? root.allPicked
+                                                  : modelData.kind === "android" ? Internal.settings.esdeCombineAndroid
                                                   : isSystem ? !!root.picked[modelData.sys.name] : false
 
                     width: ListView.view.width
@@ -229,7 +262,7 @@ FocusScope {
                     // check box
                     Rectangle {
                         id: box
-                        visible: modelData.kind === "all" || parent.isSystem
+                        visible: modelData.kind === "all" || modelData.kind === "android" || parent.isSystem
                         width: vpx(20)
                         height: width
                         radius: vpx(3)
@@ -251,6 +284,7 @@ FocusScope {
                                         ? qsTr("ES-DE folder: %1").arg(Internal.settings.esdeImportDir) + api.tr
                                         : qsTr("ES-DE folder not found, select to pick it") + api.tr;
                                 case "all": return qsTr("All systems") + api.tr;
+                                case "android": return qsTr("Put Android Apps and Android Games in one \"Android\" collection") + api.tr;
                                 case "import": return root.pickedCount > 0
                                     ? qsTr("Import %1 systems").arg(root.pickedCount) + api.tr
                                     : qsTr("Import") + api.tr;
@@ -283,7 +317,10 @@ FocusScope {
                                 parts.push(qsTr("details"));
                             if (modelData.sys.hasMedia)
                                 parts.push(qsTr("art"));
-                            return modelData.sys.name + " → " + modelData.sys.shortName + " · " + parts.join(" · ") + api.tr;
+                            var shortName = Internal.settings.esdeCombineAndroid
+                                && (modelData.sys.name === "androidapps" || modelData.sys.name === "androidgames")
+                                ? "android" : modelData.sys.shortName;
+                            return modelData.sys.name + " → " + shortName + " · " + parts.join(" · ") + api.tr;
                         }
                         color: parent.highlighted ? "#113" : "#aaa"
                         font.family: globalFonts.sans
@@ -336,6 +373,62 @@ FocusScope {
             anchors.right: parent.right
             anchors.margins: vpx(15)
             horizontalAlignment: Text.AlignHCenter
+        }
+    }
+
+
+    // while importing: a progress bar over the list
+    Rectangle {
+        anchors.fill: main
+        radius: main.radius
+        color: "#cc222222"
+        visible: root.running
+
+        MouseArea {
+            anchors.fill: parent
+        }
+
+        Column {
+            anchors.centerIn: parent
+            width: parent.width * 0.7
+            spacing: vpx(14)
+
+            Text {
+                text: qsTr("Importing from ES-DE...") + api.tr
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(22)
+                font.bold: true
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+            }
+
+            Rectangle {
+                width: parent.width
+                height: vpx(14)
+                radius: height / 2
+                color: "#333"
+
+                Rectangle {
+                    width: Math.max(height, parent.width * root.progress)
+                    height: parent.height
+                    radius: height / 2
+                    color: "#3aa"
+                    Behavior on width { NumberAnimation { duration: 200 } }
+                }
+            }
+
+            Text {
+                text: root.progressSystem !== ""
+                    ? qsTr("%1%  ·  %2").arg(Math.round(root.progress * 100)).arg(root.progressSystem) + api.tr
+                    : qsTr("Getting ready...") + api.tr
+                color: "#ccc"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(16)
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+            }
         }
     }
 

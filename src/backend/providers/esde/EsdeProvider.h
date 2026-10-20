@@ -19,6 +19,10 @@
 
 #include "providers/Provider.h"
 
+#include <QString>
+#include <QStringList>
+#include <functional>
+
 
 namespace providers {
 namespace esde {
@@ -72,7 +76,11 @@ std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir);
 /// folder. Multi-disc games are one entry with all their discs. No launch
 /// commands are written; the folder's other metadata files or the emulator
 /// settings provide those. Running it again replaces the file.
-EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names);
+/// `combine_android`: Android Apps and Android Games go into one "Android"
+/// collection. `progress` is called before each system (done, total, name)
+/// and once more at the end; it may be called from a worker thread.
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, bool combine_android,
+                             const std::function<void(int, int, const QString&)>& progress);
 
 } // namespace esde
 } // namespace providers
