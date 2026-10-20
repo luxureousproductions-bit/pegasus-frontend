@@ -527,6 +527,11 @@ void Metadata::apply_entry(ParserState& ps, const metafile::Entry& entry, Search
         ps.cur_game = sctx.create_game();
         ps.cur_game->setTitle(first_line_of(ps, entry));
         ps.cur_game->setLaunchCmdBasedir(ps.dir.path());
+        // Pegasus X: where the entry came from, so duplicates can be told
+        // apart (Settings > Library): your own file, or an ES-DE import
+        ps.cur_game->extraMapMut().insert(QStringLiteral("pegasusx-source"),
+            QStringList { QFileInfo(ps.path).fileName() == QLatin1String("esde-import.metadata.pegasus.txt")
+                ? QStringLiteral("esde") : QStringLiteral("user") });
 
         // Add to the ones found so far
         for (model::Collection* const coll : ps.all_colls)

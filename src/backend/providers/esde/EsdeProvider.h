@@ -55,7 +55,12 @@ struct EsdeImportSystem {
     bool has_gamelist = false;
     bool has_media = false;
     QStringList folders;  ///< its folders in the ROMs folders
+    QStringList imported_files;  ///< the esde-import files already written there
 };
+
+/// Removes the ES-DE import files of these folders (your own files stay).
+/// Returns how many were removed.
+int esde_delete_import(const QStringList& folders);
 
 struct EsdeImportResult {
     int systems = 0;

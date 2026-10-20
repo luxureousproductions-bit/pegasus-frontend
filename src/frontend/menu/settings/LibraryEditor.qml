@@ -40,7 +40,30 @@ FocusScope {
 
     property string collName: ""      // the open collection, empty: the list
     property bool collVisible: false  // it's in the library right now
-    property var collGames: []        // [{ title, path, key }] of its loaded games
+    property var collGames: []        // [{ title, path, key, source, kind }] of its loaded games
+
+    // Android: entries are grouped into Games / Apps / Emulators, and can be
+    // moved between them (kept in config/pegasusx-android-kinds.json)
+    property var kinds: Internal.settings.androidKinds()  // key -> moved kind
+    readonly property bool grouped: {
+        for (var i = 0; i < collGames.length; i++) {
+            if (collGames[i].kind !== "")
+                return true;
+        }
+        return false;
+    }
+    function kindOf(game) {
+        return kinds[game.key] || game.kind || "Game";
+    }
+    // titles go into styled text, so their own <, > and & stay as written
+    function esc(text) {
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+    function sourceLabel(source) {
+        if (source === "user") return qsTr("User metadata") + api.tr;
+        if (source === "esde") return qsTr("ES-DE import") + api.tr;
+        return qsTr("Pegasus data import") + api.tr;
+    }
 
     function isCollectionHidden(name) {
         return hidden.collections.indexOf(name) >= 0;
@@ -162,7 +185,7 @@ FocusScope {
         readonly property var rows: {
             var out = [];
             if (root.collName === "") {
-                out.push({ "kind": "android", "text": qsTr("Combine Android collections") + api.tr,
+                out.push({ "kind": "android", "text": qsTr("Merge Android Games into Android") + api.tr,
                            "value": root.mergeAndroid ? qsTr("On") + api.tr : qsTr("Off") + api.tr });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
                 for (var i = 0; i < root.collections.length; i++) {
@@ -181,6 +204,38 @@ FocusScope {
             out.push({ "kind": "section", "text": qsTr("Collection") + api.tr });
             out.push({ "kind": "hidecoll", "text": qsTr("Hide collection") + api.tr,
                        "value": collHidden ? qsTr("Hidden") + api.tr : qsTr("Shown") + api.tr, "hidden": collHidden });
+
+            if (root.grouped) {
+                var groups = [
+                    { "kind": "Game", "text": qsTr("Games") + api.tr, "rows": [] },
+                    { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [] },
+                    { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [] },
+                ];
+                for (var ga = 0; ga < root.collGames.length; ga++) {
+                    var entry = root.collGames[ga];
+                    var k = root.kindOf(entry);
+                    var gi = k === "Application" ? 1 : k === "Emulator" ? 2 : 0;
+                    groups[gi].rows.push({ "kind": "game", "text": entry.title, "path": entry.key, "hidden": false,
+                                           "gameKind": k, "moved": !!root.kinds[entry.key],
+                                           "note": root.sourceLabel(entry.source),
+                                           "value": qsTr("Shown") + api.tr });
+                }
+                for (var gs = 0; gs < groups.length; gs++) {
+                    groups[gs].rows.sort(function(a, b) { return a.text.localeCompare(b.text); });
+                    out.push({ "kind": "section", "text": groups[gs].text + " · " + groups[gs].rows.length });
+                    out = out.concat(groups[gs].rows);
+                }
+                var hiddenHere = root.hiddenGamesOf(root.collName);
+                if (hiddenHere.length > 0) {
+                    out.push({ "kind": "section", "text": qsTr("Hidden · %1").arg(hiddenHere.length) + api.tr });
+                    for (var hh = 0; hh < hiddenHere.length; hh++) {
+                        out.push({ "kind": "game", "text": hiddenHere[hh].title, "path": hiddenHere[hh].path,
+                                   "hidden": true, "gameKind": "", "moved": false, "note": "",
+                                   "value": qsTr("Hidden") + api.tr });
+                    }
+                }
+                return out;
+            }
 
             var games = [];
             var known = {};
@@ -235,8 +290,8 @@ FocusScope {
                     root.changed = true;
                 });
                 root.message = root.mergeAndroid
-                    ? qsTr("Your Android collections become one \"Android\", games first.") + api.tr
-                    : qsTr("Your Android collections stay as they are.") + api.tr;
+                    ? qsTr("Android Games joins Android, games listed first.") + api.tr
+                    : qsTr("Android Games stays its own collection, and its games aren't listed in Android too.") + api.tr;
             }
             else if (row.kind === "collection") {
                 root.openCollection(row.coll.name, row.coll.loaded);
@@ -246,6 +301,9 @@ FocusScope {
                     Internal.settings.setCollectionHidden(root.collName, !row.hidden);
                     root.reloadHidden();
                 });
+            }
+            else if (row.kind === "game" && root.grouped) {
+                actions.openFor(row);
             }
             else if (row.kind === "game") {
                 root.keepPosition(function() {
@@ -292,7 +350,10 @@ FocusScope {
             Text {
                 id: rowLabel
                 visible: !parent.isSection
-                text: modelData.text
+                textFormat: Text.StyledText
+                text: modelData.note
+                    ? root.esc(modelData.text) + " <font color='#888'>(" + modelData.note + (modelData.moved ? " · " + qsTr("moved") + api.tr : "") + ")</font>"
+                    : root.esc(modelData.text)
                 color: parent.isInfo ? "#999" : (modelData.hidden ? "#999" : "#eee")
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(22)
@@ -329,10 +390,151 @@ FocusScope {
         }
     }
 
+    // what to do with an Android entry: hide or show it, move it to another section
+    FocusScope {
+        id: actions
+
+        property var row: null
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+
+        readonly property var entries: {
+            var r = row;
+            if (!r)
+                return [];
+            var out = [];
+            out.push({ "act": r.hidden ? "show" : "hide", "text": r.hidden ? qsTr("Show it again") + api.tr : qsTr("Hide") + api.tr });
+            if (!r.hidden) {
+                if (r.gameKind !== "Game")
+                    out.push({ "act": "Game", "text": qsTr("Move to Games") + api.tr });
+                if (r.gameKind !== "Application")
+                    out.push({ "act": "Application", "text": qsTr("Move to Apps") + api.tr });
+                if (r.gameKind !== "Emulator")
+                    out.push({ "act": "Emulator", "text": qsTr("Move to Emulators") + api.tr });
+                if (r.moved)
+                    out.push({ "act": "auto", "text": qsTr("Back to automatic") + api.tr });
+            }
+            return out;
+        }
+
+        function openFor(r) {
+            row = r;
+            actionList.currentIndex = 0;
+            focus = true;
+        }
+        function closeActions() {
+            list.focus = true;
+        }
+        function run(index) {
+            var e = entries[index];
+            var r = row;
+            closeActions();
+            if (!e || !r)
+                return;
+            root.keepPosition(function() {
+                if (e.act === "hide" || e.act === "show") {
+                    Internal.settings.setGameHidden(r.path, r.text, [root.collName], e.act === "hide");
+                    root.reloadHidden();
+                    if (e.act === "hide") {
+                        // out of the list right away
+                        var left = [];
+                        for (var i = 0; i < root.collGames.length; i++) {
+                            if (root.collGames[i].key !== r.path)
+                                left.push(root.collGames[i]);
+                        }
+                        root.collGames = left;
+                    }
+                    return;
+                }
+                Internal.settings.setAndroidKind(r.path, e.act === "auto" ? "" : e.act);
+                root.kinds = Internal.settings.androidKinds();
+                root.changed = true;
+            });
+            if (e.act === "show")
+                root.message = qsTr("\"%1\" comes back once you leave this screen.").arg(r.text) + api.tr;
+        }
+
+        Keys.onPressed: {
+            if (event.isAutoRepeat)
+                return;
+            if (api.keys.isCancel(event)) {
+                event.accepted = true;
+                closeActions();
+            }
+            else if (api.keys.isAccept(event)) {
+                event.accepted = true;
+                run(actionList.currentIndex);
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.3
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: actions.closeActions()
+            }
+        }
+        Rectangle {
+            id: actionBox
+            width: Math.min(vpx(460), parent.width * 0.5)
+            y: header.height + vpx(12)
+            height: titleText.height + actionList.contentHeight + vpx(16)
+            x: parent.width - width - vpx(24)
+            color: "#2b2b2b"
+            radius: vpx(6)
+
+            MouseArea { anchors.fill: parent }
+
+            Text {
+                id: titleText
+                width: parent.width
+                text: actions.row ? actions.row.text : ""
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(20)
+                elide: Text.ElideRight
+                padding: vpx(16)
+            }
+            ListView {
+                id: actionList
+                anchors.top: titleText.bottom
+                anchors.left: parent.left
+                anchors.right: parent.right
+                height: contentHeight
+                focus: true
+                interactive: false
+                model: actions.entries
+                delegate: Rectangle {
+                    width: ListView.view.width
+                    height: vpx(22) * 2.4
+                    color: ListView.isCurrentItem ? "#3aa" : "transparent"
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: vpx(20)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.text
+                        color: parent.ListView.isCurrentItem ? "#111" : "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(20)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: actions.run(index)
+                    }
+                }
+            }
+        }
+    }
+
     Text {
         id: messageBar
         text: root.message !== "" ? root.message
             : root.changed ? qsTr("Changes are applied when you leave this screen.") + api.tr
+            : root.grouped ? qsTr("Entries with the exact same name show once: your own metadata first, then ES-DE imports, then Pegasus' data import. Select one to hide it or move it to another section.") + api.tr
             : qsTr("Hidden games and collections are left out of every theme. Nothing on your storage changes.") + api.tr
         height: implicitHeight
         color: "#ddd"

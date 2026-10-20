@@ -232,6 +232,7 @@ QVariantList Settings::esdeImportSystems() const
             { QStringLiteral("hasGamelist"), sys.has_gamelist },
             { QStringLiteral("hasMedia"), sys.has_media },
             { QStringLiteral("folders"), sys.folders },
+            { QStringLiteral("importedFiles"), sys.imported_files },
         });
     }
 #endif
@@ -309,6 +310,18 @@ void Settings::requestEmulatorCollections()
     });
 }
 
+namespace {
+// the Game / Application / Emulator tag Settings > Library gave an Android entry
+QString android_kind_tag(const model::Game& game)
+{
+    for (const QString& tag : game.tagListConst()) {
+        if (tag == QLatin1String("Game") || tag == QLatin1String("Application") || tag == QLatin1String("Emulator"))
+            return tag;
+    }
+    return {};
+}
+} // namespace
+
 QVariantList Settings::collectionGames(QObject* collections, const QString& collection_name) const
 {
     QVariantList out;
@@ -330,6 +343,8 @@ QVariantList Settings::collectionGames(QObject* collections, const QString& coll
                 { QStringLiteral("title"), game->title() },
                 { QStringLiteral("path"), files.front()->path() },
                 { QStringLiteral("key"), providers::library::game_key(*game) },
+                { QStringLiteral("source"), providers::library::source_of(*game) },
+                { QStringLiteral("kind"), android_kind_tag(*game) },
                 { QStringLiteral("obj"), QVariant::fromValue(static_cast<QObject*>(game)) },
             });
         }
@@ -616,11 +631,9 @@ void Settings::startEsdeImport(const QStringList& system_names)
     emit esdeImportRunningChanged();
 
     const QString esde_dir = esdeImportDir();
-    QStringList android_systems;
-    if (esdeAppsAsAndroid())
-        android_systems.append(QStringLiteral("androidapps"));
-    if (esdeGamesAsAndroid())
-        android_systems.append(QStringLiteral("androidgames"));
+    // Android apps always go into "Android"; Android Games keeps its own
+    // collection, which Settings > Library merges into Android (or not)
+    const QStringList android_systems { QStringLiteral("androidapps") };
 
     // the work runs in the background, so the screen can show its progress
     QtConcurrent::run([this, esde_dir, system_names, android_systems]{
@@ -805,6 +818,27 @@ void Settings::setGameHidden(const QString& path, const QString& title,
         list.games.push_back(std::move(entry));
     }
     providers::library::save_hidden(list);
+    emit libraryRulesChanged();
+}
+
+int Settings::deleteEsdeImport(const QStringList& folders)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::esde_delete_import(folders);
+#else
+    Q_UNUSED(folders);
+    return 0;
+#endif
+}
+
+QVariantMap Settings::androidKinds() const
+{
+    return providers::library::load_kinds();
+}
+
+void Settings::setAndroidKind(const QString& key, const QString& kind)
+{
+    providers::library::set_kind(key, kind);
     emit libraryRulesChanged();
 }
 

@@ -153,6 +153,12 @@ public:
     Q_INVOKABLE void setCollectionHidden(const QString& name, bool hidden);
     Q_INVOKABLE void setGameHidden(const QString& path, const QString& title,
                                    const QStringList& collections, bool hidden);
+    /// Android entries moved to "Game" / "Application" / "Emulator", by gameKey
+    Q_INVOKABLE QVariantMap androidKinds() const;
+    /// Moves an Android entry to a section; an empty kind: back to automatic
+    Q_INVOKABLE void setAndroidKind(const QString& key, const QString& kind);
+    /// Removes the ES-DE import files of these folders; returns how many
+    Q_INVOKABLE int deleteEsdeImport(const QStringList& folders);
     /// Reads the games again from the cache (quick), applying the changes
     Q_INVOKABLE void reloadLibrary();
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"

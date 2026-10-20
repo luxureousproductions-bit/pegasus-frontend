@@ -50,6 +50,10 @@ QString hidden_path()
 {
     return paths::writableConfigDir() % QStringLiteral("/pegasusx-hidden.json");
 }
+QString kinds_path()
+{
+    return paths::writableConfigDir() % QStringLiteral("/pegasusx-android-kinds.json");
+}
 QString settings_path()
 {
     return paths::writableConfigDir() % QStringLiteral("/pegasusx.ini");
@@ -98,22 +102,63 @@ std::vector<model::Collection*> sorted_unique(std::vector<model::Collection*> li
 
 // -- Android ------------------------------------------------------------------
 
-void merge_android(std::vector<model::Collection*>& collections)
+int source_rank(const model::Game& game)
 {
-    std::vector<model::Collection*> sources;
+    const QString source = providers::library::source_of(game);
+    if (source == QLatin1String("user")) return 0;
+    if (source == QLatin1String("esde")) return 1;
+    return 2;
+}
+
+// Entries with the exact same title show once: your own metadata first, then
+// an ES-DE import, then Pegasus' own data import. The others are returned.
+std::vector<model::Game*> dedupe_by_title(std::vector<model::Game*>& list)
+{
+    HashMap<QString, size_t> at;  // title -> position in `kept`
+    std::vector<model::Game*> kept;
+    std::vector<model::Game*> dropped;
+    for (model::Game* const game : list) {
+        const auto it = at.find(game->title());
+        if (it == at.cend()) {
+            at.emplace(game->title(), kept.size());
+            kept.push_back(game);
+            continue;
+        }
+        model::Game*& current = kept[it->second];
+        if (source_rank(*game) < source_rank(*current)) {
+            dropped.push_back(current);
+            current = game;
+        }
+        else {
+            dropped.push_back(game);
+        }
+    }
+    list = std::move(kept);
+    return dropped;
+}
+
+void merge_android(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games, bool merge_games)
+{
+    std::vector<model::Collection*> app_sources;
+    std::vector<model::Collection*> game_sources;
     model::Collection* target = nullptr;
     for (model::Collection* const coll : collections) {
         if (!is_android_collection(*coll))
             continue;
-        sources.push_back(coll);
+        if (is_android_games_collection(*coll))
+            game_sources.push_back(coll);
+        else
+            app_sources.push_back(coll);
         if (coll->name() == QLatin1String("Android"))
             target = coll;
     }
-    if (sources.empty())
+    if (app_sources.empty() && game_sources.empty())
         return;
 
-    // what each app is: from your metadata first, then what the app itself
-    // says (Android's "game" flag), then whether it's a known emulator
+    // what each app is: a move you made in Settings > Library first, then
+    // your metadata, then what the app itself says (Android's "game" flag),
+    // then whether it's a known emulator
+    const QVariantMap moved = providers::library::load_kinds();
     HashMap<QString, bool> flagged_game;
 #ifdef Q_OS_ANDROID
     for (const QString& line : ::android::android_app_list()) {
@@ -141,13 +186,27 @@ void merge_android(std::vector<model::Collection*>& collections)
 
     // every game once, remembering which came from a games collection
     std::vector<model::Game*> all;
+    std::vector<model::Game*> app_side;   // in Android
+    std::vector<model::Game*> game_side;  // in Android Games
     QSet<model::Game*> seen;
     QSet<model::Game*> from_games_collection;
-    for (model::Collection* const coll : sources) {
-        const bool games_coll = is_android_games_collection(*coll);
+    for (model::Collection* const coll : app_sources) {
         for (model::Game* const game : coll->gameList()->entries()) {
-            if (games_coll)
-                from_games_collection.insert(game);
+            if (!seen.contains(game)) {
+                seen.insert(game);
+                all.push_back(game);
+                app_side.push_back(game);
+            }
+        }
+    }
+    QSet<model::Game*> in_game_side;
+    for (model::Collection* const coll : game_sources) {
+        for (model::Game* const game : coll->gameList()->entries()) {
+            from_games_collection.insert(game);
+            if (!in_game_side.contains(game)) {
+                in_game_side.insert(game);
+                game_side.push_back(game);
+            }
             if (!seen.contains(game)) {
                 seen.insert(game);
                 all.push_back(game);
@@ -155,16 +214,25 @@ void merge_android(std::vector<model::Collection*>& collections)
         }
     }
 
-    std::vector<model::Game*> games_part;
-    std::vector<model::Game*> apps_part;
+    HashMap<model::Game*, QString> kind_of;
     for (model::Game* const game : all) {
         QStringList& genres = game->genreList();
-        QString kind;
-        if (has_entry(genres, QStringLiteral("Emulator")))
+        QStringList& tags = game->tagList();
+        const QString key = providers::library::game_key(*game);
+        QString kind = moved.value(key).toString();
+        if (!kind.isEmpty()) {
+            // your move replaces what the entry was tagged before
+            for (const QString& other : { QStringLiteral("Game"), QStringLiteral("Emulator"), QStringLiteral("Application") }) {
+                tags.removeAll(other);
+                genres.removeAll(other);
+            }
+        }
+        else if (has_entry(genres, QStringLiteral("Emulator")))
             kind = QStringLiteral("Emulator");
         else if (has_entry(genres, QStringLiteral("Application")))
             kind = QStringLiteral("Application");
-        else if (has_entry(genres, QStringLiteral("Game")) || from_games_collection.contains(game))
+        else if (has_entry(genres, QStringLiteral("Game")) || has_entry(tags, QStringLiteral("Game"))
+                 || from_games_collection.contains(game))
             kind = QStringLiteral("Game");
         else {
             const QString package = package_of(*game);
@@ -179,50 +247,103 @@ void merge_android(std::vector<model::Collection*>& collections)
                 kind = QStringLiteral("Game");  // not an app: something you added to an Android collection
         }
 
-        QStringList& tags = game->tagList();
         if (!has_entry(tags, kind))
             tags.append(kind);
         if (kind != QLatin1String("Game") && !has_entry(genres, kind))
             genres.append(kind);
-
-        (kind == QLatin1String("Game") ? games_part : apps_part).push_back(game);
+        kind_of.emplace(game, kind);
     }
-    std::sort(games_part.begin(), games_part.end(), model::sort_games);
-    std::sort(apps_part.begin(), apps_part.end(), model::sort_games);
-    std::vector<model::Game*> ordered = games_part;
-    ordered.insert(ordered.end(), apps_part.cbegin(), apps_part.cend());
 
-    const bool new_target = target == nullptr;
-    if (new_target) {
+    // what goes where
+    std::vector<model::Game*> android_list;
+    std::vector<model::Game*> games_list;
+    if (merge_games) {
+        android_list = all;
+    }
+    else {
+        QSet<QString> game_titles;
+        for (model::Game* const game : game_side)
+            game_titles.insert(game->title());
+        // Android Games is its own collection: its games aren't listed twice
+        for (model::Game* const game : app_side) {
+            if (!in_game_side.contains(game) && !game_titles.contains(game->title()))
+                android_list.push_back(game);
+        }
+        games_list = game_side;
+    }
+    const std::vector<model::Game*> dropped_a = dedupe_by_title(android_list);
+    const std::vector<model::Game*> dropped_g = dedupe_by_title(games_list);
+
+    // games first in Android, then apps and emulators
+    const auto order = [&kind_of](std::vector<model::Game*>& list) {
+        std::stable_sort(list.begin(), list.end(), [&kind_of](model::Game* a, model::Game* b) {
+            const bool ga = kind_of[a] == QLatin1String("Game");
+            const bool gb = kind_of[b] == QLatin1String("Game");
+            if (ga != gb)
+                return ga;
+            return model::sort_games(a, b);
+        });
+    };
+    order(android_list);
+    order(games_list);
+
+    if (!android_list.empty() && !target) {
         target = new model::Collection(QStringLiteral("Android"));
         target->setShortName(QStringLiteral("android"));
-        target->setGames(std::vector<model::Game*>(ordered));
+        target->setGames(std::vector<model::Game*>(android_list));
+        collections.push_back(target);
     }
-    target->gameList()->update(std::vector<model::Game*>(ordered));
+    if (target && android_list.empty())
+        target = nullptr;  // nothing left in it: goes with the merged ones below
+    if (target)
+        target->gameList()->update(std::vector<model::Game*>(android_list));
+    model::Collection* const games_target = (!merge_games && !games_list.empty()) ? game_sources.front() : nullptr;
+    if (games_target)
+        games_target->gameList()->update(std::vector<model::Game*>(games_list));
 
-    const QSet<model::Collection*> merged(sources.cbegin(), sources.cend());
+    // each game's collections
+    const QSet<model::Game*> in_android(android_list.cbegin(), android_list.cend());
+    const QSet<model::Game*> in_games(games_list.cbegin(), games_list.cend());
+    QSet<model::Collection*> sources(app_sources.cbegin(), app_sources.cend());
+    for (model::Collection* const coll : game_sources)
+        sources.insert(coll);
+    QSet<model::Game*> removed;
     for (model::Game* const game : all) {
         std::vector<model::Collection*> list;
         for (model::Collection* const coll : game->collectionsModel()->entries()) {
-            if (!merged.contains(coll))
+            if (!sources.contains(coll))
                 list.push_back(coll);
         }
-        list.push_back(target);
-        game->collectionsModel()->update(sorted_unique(std::move(list)));
+        if (target && in_android.contains(game))
+            list.push_back(target);
+        if (games_target && in_games.contains(game))
+            list.push_back(games_target);
+        if (list.empty())
+            removed.insert(game);
+        else
+            game->collectionsModel()->update(sorted_unique(std::move(list)));
     }
 
+    // the merged collections go (Android, and Android Games while it's kept)
     for (model::Collection* const coll : sources) {
-        if (coll == target)
+        if (coll == target || coll == games_target)
             continue;
-        Log::info(LOG_TAG, LOGMSG("`%1` merged into `Android`").arg(coll->name()));
+        Log::info(LOG_TAG, LOGMSG("`%1` merged into `%2`").arg(coll->name(),
+            (games_target && is_android_games_collection(*coll)) ? games_target->name() : QStringLiteral("Android")));
         collections.erase(std::remove(collections.begin(), collections.end(), coll), collections.end());
         delete coll;
     }
-    if (new_target) {
-        collections.push_back(target);
-        std::sort(collections.begin(), collections.end(), model::sort_collections);
+    std::sort(collections.begin(), collections.end(), model::sort_collections);
+
+    // duplicates that are in nothing else any more
+    if (!removed.isEmpty()) {
+        games.erase(std::remove_if(games.begin(), games.end(),
+            [&removed](model::Game* const game) { return removed.contains(game); }), games.end());
+        for (model::Game* const game : removed)
+            delete game;
     }
-    Log::info(LOG_TAG, LOGMSG("Android: %1 games, %2 apps").arg(games_part.size()).arg(apps_part.size()));
+    Log::info(LOG_TAG, LOGMSG("Android: %1 entries, %2 duplicates left out")
+        .arg(android_list.size() + games_list.size()).arg(dropped_a.size() + dropped_g.size()));
 }
 
 
@@ -313,6 +434,38 @@ QString game_key(const model::Game& game)
     return path.isEmpty() ? files.front()->uri() : path;
 }
 
+QString source_of(const model::Game& game)
+{
+    const QStringList source = game.extraMap().value(QStringLiteral("pegasusx-source")).toStringList();
+    if (!source.isEmpty() && (source.first() == QLatin1String("user") || source.first() == QLatin1String("esde")))
+        return source.first();
+    return QStringLiteral("pegasus");
+}
+
+QVariantMap load_kinds()
+{
+    QFile file(kinds_path());
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(file.readAll()).object().toVariantMap();
+}
+
+bool set_kind(const QString& key, const QString& kind)
+{
+    QVariantMap kinds = load_kinds();
+    if (kind.isEmpty())
+        kinds.remove(key);
+    else
+        kinds.insert(key, kind);
+    QFile file(kinds_path());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        Log::warning(LOG_TAG, LOGMSG("Could not write `%1`").arg(kinds_path()));
+        return false;
+    }
+    file.write(QJsonDocument(QJsonObject::fromVariantMap(kinds)).toJson(QJsonDocument::Indented));
+    return true;
+}
+
 HiddenList load_hidden()
 {
     HiddenList out;
@@ -379,8 +532,7 @@ void set_merge_android_enabled(bool value)
 
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
 {
-    if (merge_android_enabled())
-        merge_android(collections);
+    merge_android(collections, games, merge_android_enabled());
     apply_hidden(collections, games);
 }
 

@@ -1411,17 +1411,44 @@ std::vector<EsdeImportSystem> esde_import_systems(const QString& esde_dir)
         entry.name = name;
         entry.fullname = sys.fullname.isEmpty() ? name : sys.fullname;
         entry.short_name = pegasus_short_name(name);
+        // Android apps always go into the one "Android" collection
+        if (name == QLatin1String("androidapps")) {
+            entry.fullname = QStringLiteral("Android");
+            entry.short_name = QStringLiteral("android");
+        }
         entry.folders = folders;
+        for (const QString& folder : folders) {
+            const QString file = folder % QLatin1Char('/') % IMPORT_FILE_NAME;
+            if (QFileInfo::exists(file))
+                entry.imported_files.append(file);
+        }
         entry.has_gamelist = QFileInfo::exists(setup.esde_dir % QStringLiteral("/gamelists/") % name % QStringLiteral("/gamelist.xml"));
         entry.has_media = QFileInfo(setup.media_root % QLatin1Char('/') % name).isDir();
 
         const QStringList extensions = parse_extensions(sys.extensions);
         for (const QString& folder : folders)
             entry.games += quick_game_count(folder, extensions);
-        if (entry.games > 0)
+        if (entry.games > 0 || !entry.imported_files.isEmpty())
             out.push_back(std::move(entry));
     }
+    std::sort(out.begin(), out.end(), [](const EsdeImportSystem& a, const EsdeImportSystem& b) {
+        return a.fullname.compare(b.fullname, Qt::CaseInsensitive) < 0;
+    });
     return out;
+}
+
+
+int esde_delete_import(const QStringList& folders)
+{
+    int removed = 0;
+    for (const QString& folder : folders) {
+        const QString file = folder % QLatin1Char('/') % IMPORT_FILE_NAME;
+        if (QFileInfo::exists(file) && QFile::remove(file)) {
+            removed++;
+            Log::info(QStringLiteral("ES-DE import"), LOGMSG("Removed `%1`").arg(file));
+        }
+    }
+    return removed;
 }
 
 

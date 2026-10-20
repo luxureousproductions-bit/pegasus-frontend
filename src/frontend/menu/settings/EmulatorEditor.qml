@@ -480,20 +480,33 @@ FocusScope {
                     files.push(c.files[af].split("/").slice(-2).join("/"));
                 out.push({ "kind": "info", "text": qsTr("Saved in") + api.tr, "value": files.join(", ") });
 
-                var set = 0;
-                for (var ag = 0; ag < root.games.length; ag++) {
-                    if (root.gameApps[root.games[ag].path])
-                        set++;
-                }
-                out.push({ "kind": "section", "text": root.detailsLoading
-                    ? qsTr("Per-game · reading...") + api.tr
-                    : qsTr("Per-game · %1 of %2 open an app").arg(set).arg(root.games.length) + api.tr });
+                // grouped like Settings > Library: Games, Apps, Emulators
+                var groups = [
+                    { "kind": "Game", "text": qsTr("Games") + api.tr, "rows": [], "set": 0 },
+                    { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [], "set": 0 },
+                    { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [], "set": 0 },
+                ];
                 for (var ai = 0; ai < root.games.length; ai++) {
-                    var pkg = root.gameApps[root.games[ai].path];
-                    out.push({ "kind": "game", "text": root.games[ai].title, "game": root.games[ai],
-                               "own": !!pkg, "missing": !pkg,
-                               "value": pkg ? qsTr("Opens %1").arg(root.appLabel(pkg)) + api.tr
-                                      : root.detailsLoading ? "" : qsTr("No app set") + api.tr });
+                    var ag = root.games[ai];
+                    var gi = ag.kind === "Application" ? 1 : ag.kind === "Emulator" ? 2 : 0;
+                    var pkg = root.gameApps[ag.path];
+                    if (pkg)
+                        groups[gi].set++;
+                    var src = ag.source === "user" ? qsTr("User metadata") + api.tr
+                            : ag.source === "esde" ? qsTr("ES-DE import") + api.tr
+                            : qsTr("Pegasus data import") + api.tr;
+                    groups[gi].rows.push({ "kind": "game", "text": ag.title + "  (" + src + ")", "game": ag,
+                                           "own": !!pkg, "missing": !pkg && !root.detailsLoading,
+                                           "value": pkg ? qsTr("Opens %1").arg(root.appLabel(pkg)) + api.tr
+                                                  : root.detailsLoading ? "" : qsTr("No app set") + api.tr });
+                }
+                for (var gs = 0; gs < groups.length; gs++) {
+                    if (groups[gs].rows.length === 0)
+                        continue;
+                    out.push({ "kind": "section", "text": root.detailsLoading
+                        ? groups[gs].text + qsTr(" · reading...") + api.tr
+                        : groups[gs].text + qsTr(" · %1 of %2 open an app").arg(groups[gs].set).arg(groups[gs].rows.length) + api.tr });
+                    out = out.concat(groups[gs].rows);
                 }
                 return out;
             }
