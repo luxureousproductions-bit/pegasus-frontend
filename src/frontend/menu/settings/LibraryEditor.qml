@@ -60,9 +60,14 @@ FocusScope {
         return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
     function sourceLabel(source) {
-        if (source === "user") return qsTr("User metadata") + api.tr;
-        if (source === "esde") return qsTr("ES-DE import") + api.tr;
-        return qsTr("Pegasus data import") + api.tr;
+        if (source === "user") return qsTr("Game directory") + api.tr;
+        if (source === "esde") return qsTr("ES-DE") + api.tr;
+        return qsTr("Pegasus") + api.tr;
+    }
+    // A to Z ignoring upper/lower case (localeCompare doesn't on every device)
+    function byName(a, b) {
+        var x = String(a).toLowerCase(), y = String(b).toLowerCase();
+        return x < y ? -1 : (x > y ? 1 : 0);
     }
 
     function isCollectionHidden(name) {
@@ -101,7 +106,7 @@ FocusScope {
             if (!seen[hidden.collections[h]])
                 out.push({ "name": hidden.collections[h], "games": 0, "loaded": false });
         }
-        out.sort(function(a, b) { return a.name.localeCompare(b.name); });
+        out.sort(function(a, b) { return root.byName(a.name, b.name); });
         return out;
     }
 
@@ -226,7 +231,7 @@ FocusScope {
                                            "value": qsTr("Shown") + api.tr });
                 }
                 for (var gs = 0; gs < groups.length; gs++) {
-                    groups[gs].rows.sort(function(a, b) { return a.text.localeCompare(b.text); });
+                    groups[gs].rows.sort(function(a, b) { return root.byName(a.text, b.text); });
                     out.push({ "kind": "section", "text": groups[gs].text + " · " + groups[gs].rows.length });
                     out = out.concat(groups[gs].rows);
                 }
@@ -253,7 +258,7 @@ FocusScope {
                 if (!known[hiddenList[hg].path])
                     games.push({ "title": hiddenList[hg].title, "path": hiddenList[hg].path });
             }
-            games.sort(function(a, b) { return a.title.localeCompare(b.title); });
+            games.sort(function(a, b) { return root.byName(a.title, b.title); });
 
             out.push({ "kind": "section", "text": qsTr("Games · %1 hidden").arg(hiddenList.length) + api.tr });
             if (!root.collVisible)
@@ -542,7 +547,7 @@ FocusScope {
         id: messageBar
         text: root.message !== "" ? root.message
             : root.changed ? qsTr("Changes are applied when you leave this screen.") + api.tr
-            : root.grouped ? qsTr("Entries with the exact same name show once: your own metadata first, then ES-DE imports, then Pegasus' data import. Select one to hide it or move it to another section.") + api.tr
+            : root.grouped ? qsTr("Entries with the exact same name show once: your game directory's metadata first, then ES-DE, then Pegasus. Select one to hide it or move it to another section.") + api.tr
             : qsTr("Hidden games and collections are left out of every theme. Nothing on your storage changes.") + api.tr
         height: implicitHeight
         color: "#ddd"

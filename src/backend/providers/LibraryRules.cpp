@@ -291,10 +291,12 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
         // plain A to Z: games, apps and emulators together, upper and lower
         // case alike (themes and Settings > Library group them by their tags)
         std::stable_sort(list.begin(), list.end(), [](model::Game* a, model::Game* b) {
-            const int by_name = a->sortBy().compare(b->sortBy(), Qt::CaseInsensitive);
-            if (by_name != 0)
-                return by_name < 0;
-            return a->title().compare(b->title(), Qt::CaseInsensitive) < 0;
+            // by the title you see (a sort-by of your metadata could put an
+            // entry far from its name)
+            const int by_title = a->title().compare(b->title(), Qt::CaseInsensitive);
+            if (by_title != 0)
+                return by_title < 0;
+            return a->sortBy().compare(b->sortBy(), Qt::CaseInsensitive) < 0;
         });
     };
     order(android_list);

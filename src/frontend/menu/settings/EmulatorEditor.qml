@@ -536,9 +536,9 @@ FocusScope {
                     var pkg = root.gameApps[ag.path];
                     if (pkg)
                         groups[gi].set++;
-                    var src = ag.source === "user" ? qsTr("User metadata") + api.tr
-                            : ag.source === "esde" ? qsTr("ES-DE import") + api.tr
-                            : qsTr("Pegasus data import") + api.tr;
+                    var src = ag.source === "user" ? qsTr("Game directory") + api.tr
+                            : ag.source === "esde" ? qsTr("ES-DE") + api.tr
+                            : qsTr("Pegasus") + api.tr;
                     groups[gi].rows.push({ "kind": "game", "text": ag.title + "  (" + src + ")", "game": ag,
                                            "own": !!pkg, "missing": !pkg && !root.detailsLoading,
                                            "value": pkg ? qsTr("Opens %1").arg(root.appLabel(pkg)) + api.tr
