@@ -258,6 +258,10 @@ QString GameDataCache::buildFingerprint(
     QJsonArray metadata_files;
     for (const QString& dir : paths::configDirs())
         add_metadata_fingerprints(metadata_files, dir);
+    // Pegasus X: the "metafiles" folder Pegasus reads too (and where Settings >
+    // Edit metadata saves games Pegasus found by itself): without it, a change
+    // there kept the old list in use
+    add_metadata_fingerprints(metadata_files, paths::writableConfigDir() + QStringLiteral("/metafiles"));
     for (const QString& dir : sctx.root_game_dirs())
         add_metadata_fingerprints(metadata_files, dir);
     root[QStringLiteral("metadata_files")] = metadata_files;

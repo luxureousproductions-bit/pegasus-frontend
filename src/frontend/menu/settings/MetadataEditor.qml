@@ -76,27 +76,31 @@ FocusScope {
         { "key": "summary", "label": qsTr("Summary") + api.tr, "type": "multi" },
         { "key": "description", "label": qsTr("Description") + api.tr, "type": "multi" },
     ]
-    // metadata key, label, Assets property
+    // The names XboxOSv2's media carousel uses: editor key, label, the
+    // Assets list it's read from, the metadata key it's written to, and for
+    // the two boxes sharing one Pegasus slot, which of them ("3d" / "2d").
+    // The files can sit in any folder Pegasus X knows (ES-DE, Skraper, ...).
     readonly property var artKinds: [
-        ["assets.box_front", qsTr("Box front") + api.tr, "boxFront"],
-        ["assets.box_back", qsTr("Box back") + api.tr, "boxBack"],
-        ["assets.box_full", qsTr("Full box") + api.tr, "boxFull"],
-        ["assets.cartridge", qsTr("Cartridge / disc") + api.tr, "cartridge"],
-        ["assets.logo", qsTr("Logo") + api.tr, "logo"],
-        ["assets.marquee", qsTr("Marquee") + api.tr, "marquee"],
-        ["assets.screenshot", qsTr("Screenshot") + api.tr, "screenshot"],
-        ["assets.titlescreen", qsTr("Title screen") + api.tr, "titlescreen"],
-        ["assets.background", qsTr("Background") + api.tr, "background"],
-        ["assets.banner", qsTr("Banner") + api.tr, "banner"],
-        ["assets.tile", qsTr("Tile") + api.tr, "tile"],
-        ["assets.poster", qsTr("Poster") + api.tr, "poster"],
-        ["assets.video", qsTr("Video") + api.tr, "video"],
-        ["x-manual", qsTr("Manual") + api.tr, ""],
+        ["art:video", qsTr("Videos") + api.tr, "videoList", "assets.video", ""],
+        ["art:screenshot", qsTr("Screenshot") + api.tr, "screenshotList", "assets.screenshot", ""],
+        ["art:titlescreen", qsTr("Title Screen") + api.tr, "titlescreenList", "assets.titlescreen", ""],
+        ["art:fanart", qsTr("Fanart") + api.tr, "backgroundList", "assets.background", ""],
+        ["art:box3d", qsTr("3D Box") + api.tr, "boxFrontList", "assets.box_front", "3d"],
+        ["art:box2d", qsTr("2D Box") + api.tr, "boxFrontList", "assets.box_front", "2d"],
+        ["art:boxback", qsTr("Back Box") + api.tr, "boxBackList", "assets.box_back", ""],
+        ["art:physical", qsTr("Physical Media") + api.tr, "cartridgeList", "assets.cartridge", ""],
+        ["art:miximage", qsTr("Miximage") + api.tr, "steamList", "assets.steam", ""],
+        ["art:logo", qsTr("Logo") + api.tr, "logoList", "assets.logo", ""],
+        ["art:manual", qsTr("Manual") + api.tr, "", "x-manual", ""],
     ]
+    function is3d(path) {
+        return /box3d|box_3d|3dbox/i.test(String(path));
+    }
+    property var origSlots: ({})  // metadata key -> every file the game has there now
     function artFilter(key) {
-        if (key === "assets.video")
+        if (key === "art:video")
             return [".mp4", ".webm", ".mkv", ".avi", ".mov"];
-        if (key === "x-manual")
+        if (key === "art:manual")
             return [".pdf", ".cbz", ".cbr", ".jpg", ".png"];
         return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"];
     }
@@ -171,14 +175,27 @@ FocusScope {
         o["rating"] = g.rating > 0 ? Math.round(g.rating * 100) + "%" : "";
         o["summary"] = g.summary || "";
         o["description"] = g.description || "";
+        var slots = {};
         for (var i = 0; i < artKinds.length; i++) {
-            var value = "";
-            if (artKinds[i][2] !== "")
-                value = g.assets ? g.assets[artKinds[i][2]] : "";
+            var kind = artKinds[i];
+            var files = [];
+            if (kind[2] !== "")
+                files = (g.assets && g.assets[kind[2]]) ? Array.prototype.slice.call(g.assets[kind[2]]) : [];
             else if (g.extra && g.extra.manual)
-                value = Array.isArray(g.extra.manual) ? g.extra.manual[0] : g.extra.manual;
-            o[artKinds[i][0]] = localPath(value);
+                files = Array.isArray(g.extra.manual) ? g.extra.manual.slice() : [g.extra.manual];
+            files = files.map(function(f) { return root.localPath(f); });
+            slots[kind[3]] = files;
+            // the one shown: for the boxes, the 3D or the 2D one
+            var shownFile = "";
+            for (var j = 0; j < files.length; j++) {
+                if (kind[4] === "3d" && !is3d(files[j])) continue;
+                if (kind[4] === "2d" && is3d(files[j])) continue;
+                shownFile = files[j];
+                break;
+            }
+            o[kind[0]] = shownFile;
         }
+        origSlots = slots;
         return o;
     }
     function readCollection(c) {
@@ -283,16 +300,66 @@ FocusScope {
         root.close();
     }
 
+    // edits -> what's written: art goes back into its slot's whole list,
+    // replacing only the file that was shown (the others, eg. more
+    // screenshots, stay)
+    function toChanges() {
+        var out = {};
+        var slots = {};
+        for (var key in edits) {
+            if (key.indexOf("art:") !== 0) {
+                out[key] = edits[key];
+                continue;
+            }
+            var kind = null;
+            for (var i = 0; i < artKinds.length; i++) {
+                if (artKinds[i][0] === key)
+                    kind = artKinds[i];
+            }
+            if (!kind)
+                continue;
+            var slot = kind[3];
+            if (!(slot in slots))
+                slots[slot] = (origSlots[slot] || []).slice();
+            var list = slots[slot];
+            var before = (key in saved) ? saved[key] : orig[key];
+            var at = before ? list.indexOf(before) : -1;
+            var value = edits[key];
+            if (at >= 0) {
+                if (value === "")
+                    list.splice(at, 1);
+                else
+                    list[at] = value;
+            }
+            else if (value !== "") {
+                if (kind[4] === "3d")
+                    list.push(value);      // the 2D box stays the main one
+                else
+                    list.unshift(value);
+            }
+        }
+        for (var s in slots)
+            out[s] = slots[s].filter(function(f) { return f && String(f).indexOf("image://") !== 0; });
+        return out;
+    }
+
     function save() {
         if (!dirty)
             return true;
         var error = page === "game"
-            ? Internal.settings.saveGameMetadata(collName, game.path || game.key, current("title"), edits)
+            ? Internal.settings.saveGameMetadata(collName, game.path || game.key, current("title"), toChanges())
             : Internal.settings.saveCollectionMetadata(collName, edits);
         if (error !== "") {
             message = error;
             return false;
         }
+        var written = toChanges();
+        var slotsNow = Object.assign({}, origSlots);
+        for (var w in written) {
+            if (w.indexOf("assets.") === 0 || w === "x-manual")
+                slotsNow[w] = written[w];
+        }
+        origSlots = slotsNow;
         var merged = Object.assign({}, saved);
         for (var key in edits)
             merged[key] = edits[key];

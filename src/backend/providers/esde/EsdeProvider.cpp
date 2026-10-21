@@ -2645,23 +2645,27 @@ QStringList aliases_of(const QString& key)
 QStringList value_lines(const QString& key, const QVariant& value, const QDir& base)
 {
     QStringList out;
+    const bool is_file = key.startsWith(QLatin1String("assets.")) || key == QLatin1String("x-manual");
+    // relative to the metadata file when it's inside its folder, so the art
+    // moves with the ROM folder
+    const auto file_value = [&base](const QString& path) {
+        const QString rel = base.relativeFilePath(path);
+        return rel.startsWith(QLatin1String("..")) ? path : rel;
+    };
     if (value.type() == QVariant::StringList || value.type() == QVariant::List) {
         for (const QVariant& item : value.toList()) {
             const QString text = item.toString().trimmed();
-            if (!text.isEmpty())
-                out.append(text);
+            if (text.isEmpty() || (is_file && text.startsWith(QLatin1String("image://"))))
+                continue;
+            out.append(is_file ? file_value(text) : text);
         }
         return out;
     }
     QString text = value.toString().trimmed();
     if (text.isEmpty())
         return out;
-    if (key.startsWith(QLatin1String("assets.")) || key == QLatin1String("x-manual")) {
-        // relative to the metadata file when it's inside its folder, so the
-        // art moves with the ROM folder
-        const QString rel = base.relativeFilePath(text);
-        return { rel.startsWith(QLatin1String("..")) ? text : rel };
-    }
+    if (is_file)
+        return { file_value(text) };
     return text.split(QLatin1Char('\n'));
 }
 
