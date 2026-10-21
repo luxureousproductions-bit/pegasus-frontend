@@ -241,7 +241,46 @@ FocusScope {
         Internal.settings.updateEmulatorList();
     }
 
+    // Settings > Library: Android entries moved to another section, and the
+    // apps in its Emulators section (offered as emulators for every system)
+    property var kinds: ({})
+    property var androidEmulators: []  // [{ title, package, component }]
+    function loadAndroidEmulators() {
+        kinds = Internal.settings.androidKinds();
+        var found = [];
+        var seen = {};
+        var names = ["Android", "Android Games"];
+        for (var n = 0; n < names.length; n++) {
+            var list = Internal.settings.collectionGames(api.collections, names[n]);
+            for (var i = 0; i < list.length; i++) {
+                var e = list[i];
+                var kind = kinds[e.key] || e.kind;
+                if (kind === "Emulator" && e["package"] && !seen[e["package"]]) {
+                    seen[e["package"]] = true;
+                    found.push({ "title": e.title, "package": e["package"], "component": "" });
+                }
+            }
+        }
+        if (found.length > 0) {
+            // the screen each app opens with
+            var apps = androidApps.length > 0 ? androidApps : Internal.settings.androidApps();
+            if (androidApps.length === 0)
+                androidApps = apps;
+            for (var f = 0; f < found.length; f++) {
+                for (var a = 0; a < apps.length; a++) {
+                    if (apps[a]["package"] === found[f]["package"]) {
+                        found[f].component = apps[a].component;
+                        break;
+                    }
+                }
+            }
+        }
+        androidEmulators = found.filter(function(x) { return x.component !== ""; });
+    }
+
     function openCollection(index) {
+        if (Object.keys(kinds).length === 0 && androidEmulators.length === 0)
+            loadAndroidEmulators();
         gameCommands = {};
         gameApps = {};
         collOriginal = { "known": false, "command": "" };
@@ -488,7 +527,8 @@ FocusScope {
                 ];
                 for (var ai = 0; ai < root.games.length; ai++) {
                     var ag = root.games[ai];
-                    var gi = ag.kind === "Application" ? 1 : ag.kind === "Emulator" ? 2 : 0;
+                    var agKind = root.kinds[ag.key] || ag.kind;
+                    var gi = agKind === "Application" ? 1 : agKind === "Emulator" ? 2 : 0;
                     var pkg = root.gameApps[ag.path];
                     if (pkg)
                         groups[gi].set++;
@@ -748,6 +788,25 @@ FocusScope {
             if (installed.length > 0)
                 out.push({ "kind": "header", "text": qsTr("Installed") + api.tr });
             out = out.concat(installed);
+            // apps in Settings > Library's Android Emulators section that the
+            // list doesn't know: opened with the game file, the way most do
+            var extra = [];
+            for (var ae = 0; ae < root.androidEmulators.length; ae++) {
+                var emu = root.androidEmulators[ae];
+                var known = false;
+                for (var ko = 0; ko < c.options.length && !known; ko++)
+                    known = c.options[ko].command.indexOf(emu["package"] + "/") >= 0;
+                if (known)
+                    continue;
+                var emuCmd = "am start --user 0 -n " + emu.component
+                    + " -a android.intent.action.VIEW -d {file.documenturi}";
+                extra.push({ "kind": "option", "text": emu.title, "command": emuCmd, "installed": true,
+                             "note": qsTr("from Library · test it") + api.tr,
+                             "current": current !== "" && root.sameCommand(emuCmd, current) });
+            }
+            if (extra.length > 0)
+                out.push({ "kind": "header", "text": qsTr("Your Android emulators") + api.tr });
+            out = out.concat(extra);
             if (missing.length > 0)
                 out.push({ "kind": "header", "text": qsTr("Not installed") + api.tr });
             out = out.concat(missing);

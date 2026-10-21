@@ -211,13 +211,18 @@ FocusScope {
                     { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [] },
                     { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [] },
                 ];
+                // two entries of the same name (eg. an app and its fork) show their package
+                var titleCount = {};
+                for (var tc = 0; tc < root.collGames.length; tc++)
+                    titleCount[root.collGames[tc].title] = (titleCount[root.collGames[tc].title] || 0) + 1;
                 for (var ga = 0; ga < root.collGames.length; ga++) {
                     var entry = root.collGames[ga];
                     var k = root.kindOf(entry);
                     var gi = k === "Application" ? 1 : k === "Emulator" ? 2 : 0;
                     groups[gi].rows.push({ "kind": "game", "text": entry.title, "path": entry.key, "hidden": false,
                                            "gameKind": k, "moved": !!root.kinds[entry.key],
-                                           "note": root.sourceLabel(entry.source),
+                                           "note": root.sourceLabel(entry.source)
+                                               + (titleCount[entry.title] > 1 && entry["package"] ? " · " + entry["package"] : ""),
                                            "value": qsTr("Shown") + api.tr });
                 }
                 for (var gs = 0; gs < groups.length; gs++) {
@@ -506,7 +511,10 @@ FocusScope {
                 anchors.right: parent.right
                 height: contentHeight
                 focus: true
-                interactive: false
+                // ListView only moves with the d-pad while interactive
+                interactive: true
+                boundsBehavior: Flickable.StopAtBounds
+                keyNavigationWraps: true
                 model: actions.entries
                 delegate: Rectangle {
                     width: ListView.view.width

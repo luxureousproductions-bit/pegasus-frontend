@@ -345,6 +345,8 @@ QVariantList Settings::collectionGames(QObject* collections, const QString& coll
                 { QStringLiteral("key"), providers::library::game_key(*game) },
                 { QStringLiteral("source"), providers::library::source_of(*game) },
                 { QStringLiteral("kind"), android_kind_tag(*game) },
+                { QStringLiteral("package"), providers::library::game_key(*game).startsWith(QLatin1String("android:"))
+                    ? providers::library::game_key(*game).mid(8) : QString() },
                 { QStringLiteral("obj"), QVariant::fromValue(static_cast<QObject*>(game)) },
             });
         }

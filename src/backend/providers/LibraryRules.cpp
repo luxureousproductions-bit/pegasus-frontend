@@ -112,19 +112,32 @@ int source_rank(const model::Game& game)
 
 // Entries with the exact same title show once: your own metadata first, then
 // an ES-DE import, then Pegasus' own data import. The others are returned.
+//
+// Two apps that are both installed (two packages, eg. a fork with the same
+// name) are different apps, so both stay; an entry without a package (your
+// own, pointing at a file) matches any of the same title.
 std::vector<model::Game*> dedupe_by_title(std::vector<model::Game*>& list)
 {
-    HashMap<QString, size_t> at;  // title -> position in `kept`
+    HashMap<QString, std::vector<size_t>> at;  // title -> positions in `kept`
     std::vector<model::Game*> kept;
     std::vector<model::Game*> dropped;
     for (model::Game* const game : list) {
-        const auto it = at.find(game->title());
-        if (it == at.cend()) {
-            at.emplace(game->title(), kept.size());
+        const QString package = package_of(*game);
+        std::vector<size_t>& same_title = at[game->title()];
+        size_t match = kept.size();
+        for (const size_t pos : same_title) {
+            const QString other = package_of(*kept[pos]);
+            if (package.isEmpty() || other.isEmpty() || package == other) {
+                match = pos;
+                break;
+            }
+        }
+        if (match == kept.size()) {
+            same_title.push_back(kept.size());
             kept.push_back(game);
             continue;
         }
-        model::Game*& current = kept[it->second];
+        model::Game*& current = kept[match];
         if (source_rank(*game) < source_rank(*current)) {
             dropped.push_back(current);
             current = game;
@@ -281,7 +294,11 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
             const bool gb = kind_of[b] == QLatin1String("Game");
             if (ga != gb)
                 return ga;
-            return model::sort_games(a, b);
+            // A to Z by what you see, whatever the case of the first letter
+            const int by_name = a->sortBy().compare(b->sortBy(), Qt::CaseInsensitive);
+            if (by_name != 0)
+                return by_name < 0;
+            return a->title().compare(b->title(), Qt::CaseInsensitive) < 0;
         });
     };
     order(android_list);
