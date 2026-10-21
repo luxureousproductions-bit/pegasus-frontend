@@ -60,22 +60,30 @@ FocusScope {
 
     readonly property var gameFields: [
         { "key": "title", "label": qsTr("Title") + api.tr, "type": "text" },
-        { "key": "sort-by", "label": qsTr("Sort title") + api.tr, "type": "text", "empty": qsTr("same as the title") + api.tr },
         { "key": "developer", "label": qsTr("Developer") + api.tr, "type": "list" },
         { "key": "publisher", "label": qsTr("Publisher") + api.tr, "type": "list" },
         { "key": "genre", "label": qsTr("Genres") + api.tr, "type": "list", "picks": true },
+        { "key": "description", "label": qsTr("Description") + api.tr, "type": "multi" },
+        { "key": "launch", "label": qsTr("Launch command") + api.tr, "type": "command" },
         { "key": "release", "label": qsTr("Release date") + api.tr, "type": "date" },
         { "key": "players", "label": qsTr("Players") + api.tr, "type": "number" },
         { "key": "rating", "label": qsTr("Rating") + api.tr, "type": "rating" },
-        { "key": "summary", "label": qsTr("Summary") + api.tr, "type": "multi" },
-        { "key": "description", "label": qsTr("Description") + api.tr, "type": "multi" },
     ]
     readonly property var collectionFields: [
         { "key": "name", "label": qsTr("Name") + api.tr, "type": "text" },
         { "key": "shortname", "label": qsTr("Short name") + api.tr, "type": "text" },
-        { "key": "summary", "label": qsTr("Summary") + api.tr, "type": "multi" },
-        { "key": "description", "label": qsTr("Description") + api.tr, "type": "multi" },
+        { "key": "extensions", "label": qsTr("Extensions") + api.tr, "type": "text" },
+        { "key": "launch", "label": qsTr("Launch command") + api.tr, "type": "command" },
     ]
+    property var collDetails: ({})   // the open collection's own lines (launch, extensions, default)
+    property var gameCommands: ({})  // game path -> its own launch command
+    // the command a game uses when it has none of its own
+    readonly property string collectionLaunch: {
+        var own = (page === "collection" && ("launch" in edits)) ? edits["launch"]
+                : ("launch" in savedColl) ? savedColl["launch"] : (collDetails.launch || "");
+        return own !== "" ? own : (collDetails.defaultCommand || "");
+    }
+    property var savedColl: ({})     // the collection's values saved this time
     // The names XboxOSv2's media carousel uses: editor key, label, the
     // Assets list it's read from, the metadata key it's written to, and for
     // the two boxes sharing one Pegasus slot, which of them ("3d" / "2d").
@@ -163,7 +171,6 @@ FocusScope {
     function readGame(g) {
         var o = {};
         o["title"] = g.title;
-        o["sort-by"] = (g.sortBy && g.sortBy !== g.title) ? g.sortBy : "";
         o["developer"] = (g.developerList || []).slice();
         o["publisher"] = (g.publisherList || []).slice();
         o["genre"] = (g.genreList || []).filter(function(x) {
@@ -173,8 +180,9 @@ FocusScope {
         o["release"] = (g.release && !isNaN(g.release.getTime())) ? Qt.formatDate(g.release, "yyyy-MM-dd") : "";
         o["players"] = g.players > 1 ? String(g.players) : "";
         o["rating"] = g.rating > 0 ? Math.round(g.rating * 100) + "%" : "";
-        o["summary"] = g.summary || "";
-        o["description"] = g.description || "";
+        // one text: the description, else the summary
+        o["description"] = g.description || g.summary || "";
+        o["launch"] = gameCommands[game.path] || "";
         var slots = {};
         for (var i = 0; i < artKinds.length; i++) {
             var kind = artKinds[i];
@@ -201,9 +209,9 @@ FocusScope {
     function readCollection(c) {
         return {
             "name": c.name,
-            "shortname": c.shortName || "",
-            "summary": c.summary || "",
-            "description": c.description || "",
+            "shortname": collDetails.shortname || c.shortName || "",
+            "extensions": collDetails.extensions || "",
+            "launch": collDetails.launch || "",
         };
     }
 
@@ -226,6 +234,9 @@ FocusScope {
         list_games.sort(function(a, b) { return root.byName(a.title, b.title); });
         games = list_games;
         savedTitles = {};
+        savedColl = {};
+        collDetails = Internal.settings.collectionDetails(entry.name);
+        gameCommands = Internal.settings.gameEmulators(entry.name);
         orig = readCollection(entry.obj);
         saved = {};
         edits = {};
@@ -270,7 +281,7 @@ FocusScope {
             var path = game ? game.path : "";
             page = "collection";
             orig = readCollection(collObj);
-            saved = {};
+            saved = savedColl;
             loc = Internal.settings.metadataLocation(collName, "");
             for (var i = 0; i < list.rows.length; i++) {
                 if (list.rows[i].kind === "game" && list.rows[i].game.path === path) {
@@ -340,6 +351,9 @@ FocusScope {
         }
         for (var s in slots)
             out[s] = slots[s].filter(function(f) { return f && String(f).indexOf("image://") !== 0; });
+        // one text: a new description replaces the summary too
+        if ("description" in out)
+            out["summary"] = "";
         return out;
     }
 
@@ -371,9 +385,25 @@ FocusScope {
                 var titles = Object.assign({}, savedTitles);
                 titles[game.path] = root.current("title");
                 savedTitles = titles;
+                if ("launch" in merged) {
+                    var cmds = Object.assign({}, gameCommands);
+                    cmds[game.path] = merged["launch"];
+                    gameCommands = cmds;
+                    // the game uses it right away
+                    Internal.settings.setLiveLaunchCommand(game.obj, merged["launch"] !== "" ? merged["launch"] : root.collectionLaunch);
+                }
             }
-            else if ("name" in merged) {
-                collName = merged["name"];
+            else {
+                savedColl = merged;
+                if ("name" in merged)
+                    collName = merged["name"];
+                if ("launch" in merged) {
+                    // the collection's games without their own use it right away
+                    for (var gi = 0; gi < games.length; gi++) {
+                        if (!gameCommands[games[gi].path])
+                            Internal.settings.setLiveLaunchCommand(games[gi].obj, root.collectionLaunch);
+                    }
+                }
             }
         });
         anySaved = true;
@@ -452,9 +482,20 @@ FocusScope {
                 var f = fields[i];
                 var value = root.current(f.key);
                 var text = root.shown(f, value);
+                var empty = f.empty || "—";
+                if (f.key === "launch") {
+                    empty = root.page === "game"
+                        ? qsTr("the collection's") + api.tr
+                        : (root.collDetails.defaultLabel
+                            ? qsTr("recommended: %1").arg(root.collDetails.defaultLabel) + api.tr
+                            : qsTr("none, pick one in Emulators") + api.tr);
+                }
                 out.push({ "kind": "field", "text": f.label, "field": f,
-                           "value": text !== "" ? text : (f.empty || "—"),
+                           "value": text !== "" ? text : empty,
                            "muted": text === "", "edited": f.key in root.edits, "done": f.key in root.saved });
+                // the game's file, below its title
+                if (root.page === "game" && f.key === "title")
+                    out.push({ "kind": "info", "text": qsTr("File") + api.tr, "value": root.fileShown() });
             }
 
             if (root.page === "game") {
@@ -470,7 +511,6 @@ FocusScope {
                                "muted": art === "" || isIcon, "edited": kind[0] in root.edits, "done": kind[0] in root.saved });
                 }
                 out.push({ "kind": "addart", "text": qsTr("Add art or a manual...") + api.tr, "value": "" });
-                out.push({ "kind": "info", "text": qsTr("Launch") + api.tr, "value": qsTr("set in Settings > Emulators") + api.tr });
             }
 
             var savedIn = root.loc.file ? root.loc.file.split("/").slice(-2).join("/") : "";
@@ -696,6 +736,16 @@ FocusScope {
         "art:logo": ["wheel", "marquees", "marquee", "logos", "logo"],
         "art:manual": ["manuals", "manual"],
     })
+    // "./game.steam": the game's file, from the folder of its metadata file
+    function fileShown() {
+        var path = game ? String(game.path || game.key || "") : "";
+        if (path.indexOf("/") !== 0)
+            return path;
+        var base = loc.file ? dirOf(loc.file) : "";
+        if (base !== "" && path.indexOf(base + "/") === 0)
+            return "./" + path.substring(base.length + 1);
+        return path;
+    }
     function dirOf(path) {
         var s = String(path || "");
         return s.substring(0, s.lastIndexOf("/"));
@@ -892,6 +942,9 @@ FocusScope {
             var text = Array.isArray(value) ? value.join("\n") : String(value || "");
             if (f.type === "rating")
                 text = text.replace("%", "");
+            // a launch command starts from the one in use, to change from there
+            if (f.type === "command" && text === "")
+                text = root.page === "game" ? root.collectionLaunch : (root.collDetails.defaultCommand || "");
             hint.text = "";
             if (multiLine) {
                 multiInput.text = text;
@@ -903,13 +956,18 @@ FocusScope {
             }
             if (f.picks && root.genres.length === 0)
                 root.genres = Internal.settings.libraryGenres(api.allGames);
+            kb.target = multiLine ? multiInput : lineInput;
+            kb.multiLine = multiLine;
+            kb.row = 1;
+            kb.col = 0;
             focus = true;
-            (multiLine ? multiBox : lineBox).focus = true;
+            kb.focus = true;
         }
         function closeDialog() {
             Qt.inputMethod.hide();
             lineInput.focus = false;
             multiInput.focus = false;
+            kb.focus = false;
             list.focus = true;
         }
         function finish() {
@@ -943,6 +1001,13 @@ FocusScope {
                 if ((f.key === "title" || f.key === "name") && value === "") {
                     hint.text = qsTr("The name can't be empty.") + api.tr;
                     return;
+                }
+                // the same as what it uses anyway: nothing of its own
+                if (f.type === "command") {
+                    if (root.page === "game" && value === root.collectionLaunch)
+                        value = "";
+                    if (root.page === "collection" && (root.collDetails.launch || "") === "" && value === (root.collDetails.defaultCommand || ""))
+                        value = "";
                 }
             }
             closeDialog();
@@ -980,7 +1045,7 @@ FocusScope {
             width: Math.min(parent.width * 0.8, vpx(900))
             height: dialogColumn.height + vpx(40)
             anchors.horizontalCenter: parent.horizontalCenter
-            y: vpx(30)
+            y: vpx(14)
             color: "#444"
             radius: vpx(8)
 
@@ -1016,7 +1081,7 @@ FocusScope {
                     visible: !fieldDialog.multiLine
                     width: parent.width
                     height: vpx(52)
-                    KeyNavigation.down: actionRow
+                    KeyNavigation.down: kb
 
                     Rectangle {
                         anchors.fill: parent
@@ -1032,6 +1097,7 @@ FocusScope {
                         font.pixelSize: vpx(20)
                         clip: true
                         verticalAlignment: TextInput.AlignVCenter
+                        cursorVisible: fieldDialog.visible
                         anchors.fill: parent
                         anchors.leftMargin: vpx(14)
                         anchors.rightMargin: vpx(14)
@@ -1040,7 +1106,7 @@ FocusScope {
                         onActiveFocusChanged: if (activeFocus) Qt.inputMethod.show()
                         Keys.onReturnPressed: fieldDialog.finish()
                         Keys.onEnterPressed: fieldDialog.finish()
-                        KeyNavigation.down: actionRow
+                        KeyNavigation.down: kb
                     }
                 }
 
@@ -1049,7 +1115,7 @@ FocusScope {
                     id: multiBox
                     visible: fieldDialog.multiLine
                     width: parent.width
-                    height: Math.min(Math.max(vpx(150), multiInput.contentHeight + vpx(24)), root.height * 0.42)
+                    height: Math.min(Math.max(vpx(110), multiInput.contentHeight + vpx(24)), root.height * 0.24)
 
                     Rectangle {
                         anchors.fill: parent
@@ -1078,12 +1144,13 @@ FocusScope {
                             font.family: globalFonts.sans
                             font.pixelSize: vpx(18)
                             wrapMode: TextEdit.Wrap
+                            cursorVisible: fieldDialog.visible
                             onCursorRectangleChanged: multiFlick.ensureVisible(cursorRectangle)
                             onActiveFocusChanged: if (activeFocus) Qt.inputMethod.show()
                             // the d-pad leaves the box from its last line
                             Keys.onDownPressed: {
                                 if (cursorRectangle.y + cursorRectangle.height >= contentHeight - 2) {
-                                    (fieldDialog.field && fieldDialog.field.picks && root.genres.length > 0 ? pickRow : actionRow).focus = true;
+                                    (fieldDialog.field && fieldDialog.field.picks && root.genres.length > 0 ? pickRow : kb).focus = true;
                                     event.accepted = true;
                                 }
                                 else {
@@ -1105,7 +1172,7 @@ FocusScope {
                     clip: true
                     model: visible ? root.genres : []
                     KeyNavigation.up: multiBox
-                    KeyNavigation.down: actionRow
+                    KeyNavigation.down: kb
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {
                             event.accepted = true;
@@ -1135,6 +1202,18 @@ FocusScope {
                     }
                 }
 
+                // Pegasus' own keyboard: d-pad and A, or touch
+                OnScreenKeyboard {
+                    id: kb
+                    width: parent.width
+                    onDone: fieldDialog.finish()
+                    onLeaveUp: {
+                        if (pickRow.visible)
+                            pickRow.focus = true;
+                    }
+                    onLeaveDown: actionRow.focus = true
+                }
+
                 Text {
                     id: hint
                     width: parent.width
@@ -1157,8 +1236,7 @@ FocusScope {
                         { "name": "cancel", "text": qsTr("Cancel") + api.tr },
                         { "name": "clear", "text": qsTr("Clear") + api.tr },
                     ]
-                    KeyNavigation.up: fieldDialog.multiLine
-                        ? (pickRow.visible ? pickRow : multiBox) : lineBox
+                    KeyNavigation.up: kb
 
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {

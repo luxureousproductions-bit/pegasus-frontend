@@ -197,8 +197,18 @@ FocusScope {
     function collectionText(c) {
         if (c.isAndroid)
             return qsTr("Each game opens its own app") + api.tr;
-        if (!c.command)
+        if (!c.command) {
+            // nothing in the metadata: the recommended one is used
+            for (var i = 0; i < c.options.length; i++) {
+                if (c.options[i].recommended && c.options[i].installed)
+                    return qsTr("%1 (recommended, used until you pick one)").arg(c.options[i].label) + api.tr;
+            }
+            for (var j = 0; j < c.options.length; j++) {
+                if (c.options[j].installed && !c.options[j].retroarch)
+                    return qsTr("%1 (used until you pick one)").arg(c.options[j].label) + api.tr;
+            }
             return qsTr("None yet") + api.tr;
+        }
         var text = c.currentLabel !== "" ? c.currentLabel : qsTr("Your metadata's command") + api.tr;
         if (c.currentInstalled)
             return text;
@@ -805,7 +815,9 @@ FocusScope {
             // apps in Settings > Library's Android Emulators section that the
             // list doesn't know: opened with the game file, the way most do
             var extra = [];
-            for (var ae = 0; ae < root.androidEmulators.length; ae++) {
+            // only for a collection whose system isn't known: for the others,
+            // the list above already has every emulator of that system
+            for (var ae = 0; c.system === "" && ae < root.androidEmulators.length; ae++) {
                 var emu = root.androidEmulators[ae];
                 var known = false;
                 for (var ko = 0; ko < c.options.length && !known; ko++)
@@ -1079,9 +1091,10 @@ FocusScope {
         function openFor(g, start) {
             game = g;
             cmdInput.text = start;
+            cmdInput.cursorPosition = start.length;
             dialogMessage.text = "";
             focus = true;
-            cmdBox.focus = true;
+            cmdKeyboard.focus = true;
         }
         function closeDialog() {
             // the keyboard and its focus go away with the dialog
@@ -1187,6 +1200,7 @@ FocusScope {
                         font.family: global.fonts.mono
                         font.pixelSize: vpx(16)
                         wrapMode: TextInput.WrapAnywhere
+                        cursorVisible: commandDialog.visible
                         anchors.fill: parent
                         anchors.margins: vpx(12)
                         onActiveFocusChanged: if (activeFocus) Qt.inputMethod.show()
@@ -1203,7 +1217,7 @@ FocusScope {
                     spacing: vpx(8)
                     model: [ "{file.documenturi}", "{file.uri}", "{file.path}", "{file.basename}", "{file.dir}" ]
                     KeyNavigation.up: cmdBox
-                    KeyNavigation.down: actionRow
+                    KeyNavigation.down: cmdKeyboard
 
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {
@@ -1236,6 +1250,16 @@ FocusScope {
                     }
                 }
 
+                // Pegasus' own keyboard: d-pad and A, or touch
+                OnScreenKeyboard {
+                    id: cmdKeyboard
+                    width: parent.width
+                    target: cmdInput
+                    onDone: commandDialog.act("save")
+                    onLeaveUp: insertRow.focus = true
+                    onLeaveDown: actionRow.focus = true
+                }
+
                 Text {
                     id: dialogMessage
                     width: parent.width
@@ -1258,7 +1282,7 @@ FocusScope {
                         { "name": "cancel", "text": qsTr("Cancel") + api.tr },
                         { "name": "test", "text": qsTr("Test with a game") + api.tr },
                     ]
-                    KeyNavigation.up: insertRow
+                    KeyNavigation.up: cmdKeyboard
 
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {
