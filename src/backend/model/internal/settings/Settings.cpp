@@ -844,6 +844,70 @@ void Settings::setAndroidKind(const QString& key, const QString& kind)
     emit libraryRulesChanged();
 }
 
+QVariantMap Settings::metadataLocation(const QString& collection_name, const QString& game_path) const
+{
+#ifdef WITH_COMPAT_ESDE
+    const providers::esde::MetadataLocation loc = providers::esde::metadata_location(collection_name, game_path);
+    return QVariantMap {
+        { QStringLiteral("file"), loc.file },
+        { QStringLiteral("isImport"), loc.is_import },
+        { QStringLiteral("isNew"), loc.is_new },
+    };
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(game_path);
+    return {};
+#endif
+}
+
+QString Settings::saveGameMetadata(const QString& collection_name, const QString& game_path,
+                                   const QString& game_title, const QVariantMap& changes)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::save_game_metadata(collection_name, game_path, game_title, changes);
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(game_path);
+    Q_UNUSED(game_title);
+    Q_UNUSED(changes);
+    return QStringLiteral("Not supported on this platform");
+#endif
+}
+
+QString Settings::saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::save_collection_metadata(collection_name, changes);
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(changes);
+    return QStringLiteral("Not supported on this platform");
+#endif
+}
+
+QStringList Settings::libraryGenres(QObject* all_games) const
+{
+    QStringList out;
+    const auto* const list = qobject_cast<model::ObjectListModel*>(all_games);
+    if (!list)
+        return out;
+    QSet<QString> seen;
+    for (int i = 0; i < list->count(); i++) {
+        const auto* const game = qobject_cast<model::Game*>(list->get(i));
+        if (!game)
+            continue;
+        for (const QString& genre : game->genreListConst()) {
+            const QString key = genre.trimmed().toLower();
+            if (key.isEmpty() || seen.contains(key) || key == QLatin1String("application") || key == QLatin1String("emulator"))
+                continue;
+            seen.insert(key);
+            out.append(genre.trimmed());
+        }
+    }
+    std::sort(out.begin(), out.end(), [](const QString& a, const QString& b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
+    return out;
+}
+
 void Settings::reloadLibrary()
 {
     Log::info(LOGMSG("Reloading the library..."));

@@ -58,17 +58,22 @@ HashMap<QString, model::Game*> find_apps_for(model::Collection& collection, prov
 
         const QString game_uri = QStringLiteral("android:") + package;
         model::Game* game_ptr = sctx.game_by_uri(game_uri);
+        const bool from_metadata = game_ptr != nullptr;
         if (!game_ptr) {
             game_ptr = sctx.create_game_for(collection);
             sctx.game_add_uri(*game_ptr, game_uri);
         }
         app_game_map.emplace(package, game_ptr);
 
+        // Pegasus X: an entry from your metadata (or the metadata editor)
+        // keeps its own title and launch command
+        if (!from_metadata || game_ptr->title().isEmpty())
+            game_ptr->setTitle(appname);
+        if (!from_metadata || game_ptr->launchCmd().isEmpty())
+            game_ptr->setLaunchCmd(QStringLiteral("am start --user 0 -a %1 -n %2").arg(action, component));
+
         const QString icon_uri = QStringLiteral("image://androidicons/") + package;
-        (*game_ptr)
-            .setTitle(appname)
-            .setLaunchCmd(QStringLiteral("am start --user 0 -a %1 -n %2").arg(action, component))
-            .assetsMut()
+        game_ptr->assetsMut()
             .add_uri(AssetType::BOX_FRONT, icon_uri)
             .add_uri(AssetType::UI_TILE, icon_uri);
     }

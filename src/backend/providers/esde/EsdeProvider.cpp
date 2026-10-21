@@ -1248,6 +1248,123 @@ HashMap<QString, QString> previous_launches(const QString& file_path, QString& c
     return out;
 }
 
+/// The name the metadata editor writes a key with ("genres" -> "genre")
+QString canonical_key(const QString& key)
+{
+    const QString k = key.trimmed().toLower();
+    static const QStringList sort_keys {
+        QStringLiteral("sorttitle"), QStringLiteral("sortname"), QStringLiteral("sort_title"),
+        QStringLiteral("sort_name"), QStringLiteral("sort-title"), QStringLiteral("sort-name"),
+        QStringLiteral("sortby"), QStringLiteral("sort_by"), QStringLiteral("sort-by"),
+    };
+    if (sort_keys.contains(k)) return QStringLiteral("sort-by");
+    if (k == QLatin1String("developers")) return QStringLiteral("developer");
+    if (k == QLatin1String("publishers")) return QStringLiteral("publisher");
+    if (k == QLatin1String("genres")) return QStringLiteral("genre");
+    if (k == QLatin1String("tags")) return QStringLiteral("tag");
+    return k;
+}
+
+/// What you changed with the metadata editor in an earlier import file
+/// (marked with x-pegasusx-edited), so importing again keeps it
+struct PreviousEdit {
+    QStringList keys;   ///< canonical keys, "title" for the title
+    QString title;
+    QStringList lines;  ///< the entries' lines as they were written
+};
+HashMap<QString, PreviousEdit> previous_edits(const QString& file_path)
+{
+    HashMap<QString, PreviousEdit> out;
+    const QString text = read_file(file_path);
+    if (text.isEmpty())
+        return out;
+    const QDir base(QFileInfo(file_path).absolutePath());
+
+    QStringList block;  // one game's lines
+    const auto flush = [&]{
+        if (block.isEmpty() || !block.first().startsWith(QLatin1String("game:")))
+            return;
+        PreviousEdit edit;
+        for (const QString& line : block) {
+            if (line.startsWith(QLatin1String("x-pegasusx-edited:"))) {
+                for (const QString& key : line.mid(18).split(QLatin1Char(','), QString::SkipEmptyParts))
+                    edit.keys.append(key.trimmed());
+            }
+        }
+        if (edit.keys.isEmpty())
+            return;
+        if (edit.keys.contains(QStringLiteral("title")))
+            edit.title = block.first().mid(5).trimmed();
+        QStringList files;
+        bool keep = false;
+        bool in_files = false;
+        for (int i = 1; i < block.size(); i++) {
+            const QString& line = block.at(i);
+            if (!line.isEmpty() && line.at(0).isSpace()) {
+                if (keep)
+                    edit.lines.append(line);
+                if (in_files)
+                    files.append(::clean_abs_path(QFileInfo(base, line.trimmed())));
+                continue;
+            }
+            const int colon = line.indexOf(QLatin1Char(':'));
+            const QString key = colon > 0 ? canonical_key(line.left(colon)) : QString();
+            const QString value = colon > 0 ? line.mid(colon + 1).trimmed() : QString();
+            in_files = key == QLatin1String("files");
+            if (key == QLatin1String("file") || (in_files && !value.isEmpty()))
+                files.append(::clean_abs_path(QFileInfo(base, value)));
+            keep = edit.keys.contains(key);
+            if (keep)
+                edit.lines.append(line);
+        }
+        for (const QString& file : files)
+            out.emplace(file, edit);
+    };
+    for (QString line : text.split(QLatin1Char('\n'))) {
+        line.remove(QLatin1Char('\r'));
+        if (line.trimmed().isEmpty() || line.startsWith(QLatin1Char('#')))
+            continue;
+        if (!line.at(0).isSpace() && (line.startsWith(QLatin1String("game:")) || line.startsWith(QLatin1String("collection:")))) {
+            flush();
+            block.clear();
+        }
+        block.append(line);
+    }
+    flush();
+    return out;
+}
+
+/// A freshly imported entry with your earlier edits put back in
+QString with_previous_edit(const QString& entry, const PreviousEdit& edit)
+{
+    QStringList lines = entry.split(QLatin1Char('\n'));
+    while (!lines.isEmpty() && lines.last().isEmpty())
+        lines.removeLast();
+    QStringList out;
+    bool skipping = false;
+    for (int i = 0; i < lines.size(); i++) {
+        const QString& line = lines.at(i);
+        if (i == 0) {
+            out.append(edit.keys.contains(QStringLiteral("title")) && !edit.title.isEmpty()
+                ? QStringLiteral("game: ") % edit.title : line);
+            continue;
+        }
+        if (!line.isEmpty() && line.at(0).isSpace()) {
+            if (!skipping)
+                out.append(line);
+            continue;
+        }
+        const int colon = line.indexOf(QLatin1Char(':'));
+        const QString key = colon > 0 ? canonical_key(line.left(colon)) : QString();
+        skipping = edit.keys.contains(key);
+        if (!skipping)
+            out.append(line);
+    }
+    out.append(edit.lines);
+    out.append(QStringLiteral("x-pegasusx-edited: ") % edit.keys.join(QStringLiteral(", ")));
+    return out.join(QLatin1Char('\n')) % QLatin1Char('\n');
+}
+
 /// One game's entry in a metadata file. If the user's own metadata already
 /// has the game (`own`), its title is kept and only what it lacks is written,
 /// so the user's details win whichever file Pegasus reads first.
@@ -1558,6 +1675,9 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
             QString collection_launch;
             const HashMap<QString, QString> old_launches =
                 previous_launches(folder % QLatin1Char('/') % IMPORT_FILE_NAME, collection_launch);
+            // and what you changed with the metadata editor
+            const HashMap<QString, PreviousEdit> old_edits =
+                previous_edits(folder % QLatin1Char('/') % IMPORT_FILE_NAME);
 
             QString text;
             QTextStream stream(&text);
@@ -1589,7 +1709,15 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
                         break;
                     }
                 }
-                stream << game_entry(*game, entry.second, base_dir, own, launch) << '\n';
+                QString game_text = game_entry(*game, entry.second, base_dir, own, launch);
+                for (const QString& file : entry.second) {
+                    const auto edit_it = old_edits.find(file);
+                    if (edit_it != old_edits.cend()) {
+                        game_text = with_previous_edit(game_text, edit_it->second);
+                        break;
+                    }
+                }
+                stream << game_text << '\n';
             }
             stream.flush();
             tmp_sctx.discard_all();
@@ -1787,6 +1915,98 @@ struct MetaFile {
         }
         lines.insert(insert_at, new_line);
         parse();
+    }
+
+    /// Pegasus X metadata editor: replaces every entry of a block named by
+    /// `aliases` with `key` and `values` (one line each), or removes them if
+    /// `values` is empty. Lists go one item per line; text keeps its lines.
+    void set_entry(size_t block_index, const QStringList& aliases, const QString& key, const QStringList& values) {
+        const MetaBlock& block = blocks.at(block_index);
+        std::vector<std::pair<int, int>> ranges;
+        for (const MetaEntry& e : block.entries) {
+            if (aliases.contains(e.key))
+                ranges.emplace_back(e.first, e.last);
+        }
+        int insert_at = -1;
+        if (!ranges.empty()) {
+            std::sort(ranges.begin(), ranges.end());
+            insert_at = ranges.front().first;
+            for (auto it = ranges.rbegin(); it != ranges.rend(); ++it) {
+                for (int i = it->second; i >= it->first; i--)
+                    lines.removeAt(i);
+            }
+        }
+        else {
+            // new: before the block's art and x- fields, else at its end
+            insert_at = block.last + 1;
+            if (!key.startsWith(QLatin1String("assets.")) && !key.startsWith(QLatin1String("x-"))) {
+                for (const MetaEntry& e : block.entries) {
+                    if (e.key.startsWith(QLatin1String("assets.")) || e.key.startsWith(QLatin1String("x-"))) {
+                        insert_at = e.first;
+                        break;
+                    }
+                }
+            }
+        }
+        QStringList new_lines;
+        for (int i = 0; i < values.size(); i++) {
+            const QString value = values.at(i).trimmed();
+            if (i == 0)
+                new_lines.append(key % QStringLiteral(": ") % value);
+            else
+                new_lines.append(QStringLiteral("  ") % (value.isEmpty() ? QStringLiteral(".") : value));
+        }
+        if (!values.isEmpty() && !values.first().trimmed().isEmpty()) {
+            for (int i = 0; i < new_lines.size(); i++)
+                lines.insert(insert_at + i, new_lines.at(i));
+        }
+        parse();
+    }
+
+    /// Renames a block ("game: <title>" / "collection: <name>")
+    void set_header(size_t block_index, const QString& name) {
+        const MetaBlock& block = blocks.at(block_index);
+        lines[block.first] = (block.is_collection ? QStringLiteral("collection: ") : QStringLiteral("game: ")) % name.simplified();
+        parse();
+    }
+
+    /// Adds an empty game block (title and file) to the end of a collection's part
+    int add_game_block(int collection_index, const QString& title, const QString& game_path) {
+        int insert_at = lines.size();
+        for (size_t i = static_cast<size_t>(collection_index) + 1; i < blocks.size(); i++) {
+            if (blocks[i].is_collection) {
+                insert_at = blocks[i].first;
+                break;
+            }
+        }
+        while (insert_at > 0 && lines.at(insert_at - 1).trimmed().isEmpty())
+            insert_at--;
+        lines.insert(insert_at, QString());
+        lines.insert(insert_at + 1, QStringLiteral("game: ") % title.simplified());
+        lines.insert(insert_at + 2, QStringLiteral("file: ") % (is_uri(game_path) ? game_path : QDir(dir).relativeFilePath(game_path)));
+        parse();
+        for (size_t i = 0; i < blocks.size(); i++) {
+            if (blocks[i].first == insert_at + 1)
+                return static_cast<int>(i);
+        }
+        return -1;
+    }
+
+    /// Adds Pegasus X's own marker of what was edited (ES-DE import files)
+    void mark_edited(size_t block_index, const QStringList& keys) {
+        QStringList all;
+        if (const MetaEntry* e = blocks.at(block_index).entry(QStringLiteral("x-pegasusx-edited"))) {
+            for (const QString& value : e->values) {
+                for (const QString& k : value.split(QLatin1Char(','), QString::SkipEmptyParts))
+                    all.append(k.trimmed());
+            }
+        }
+        for (const QString& k : keys) {
+            if (!all.contains(k))
+                all.append(k);
+        }
+        set_entry(block_index, { QStringLiteral("x-pegasusx-edited") }, QStringLiteral("x-pegasusx-edited"),
+                  { all.join(QStringLiteral(", ")) });
     }
 
     /// Adds a game block with a launch entry to the end of a collection's part of the file
@@ -2398,6 +2618,230 @@ OriginalLaunches original_launches(const QString& collection_name)
         }
     }
     return out;
+}
+
+
+// -- Metadata editor -----------------------------------------------------------
+
+namespace {
+QString edits_file_path()
+{
+    return paths::writableConfigDir() % QStringLiteral("/metafiles/pegasusx-edits.metadata.pegasus.txt");
+}
+
+QStringList aliases_of(const QString& key)
+{
+    if (key == QLatin1String("sort-by"))
+        return { QStringLiteral("sorttitle"), QStringLiteral("sortname"), QStringLiteral("sort_title"),
+                 QStringLiteral("sort_name"), QStringLiteral("sort-title"), QStringLiteral("sort-name"),
+                 QStringLiteral("sortby"), QStringLiteral("sort_by"), QStringLiteral("sort-by") };
+    if (key == QLatin1String("developer") || key == QLatin1String("publisher")
+        || key == QLatin1String("genre") || key == QLatin1String("tag"))
+        return { key, key % QLatin1Char('s') };
+    return { key };
+}
+
+// a changed value -> the lines it's written as
+QStringList value_lines(const QString& key, const QVariant& value, const QDir& base)
+{
+    QStringList out;
+    if (value.type() == QVariant::StringList || value.type() == QVariant::List) {
+        for (const QVariant& item : value.toList()) {
+            const QString text = item.toString().trimmed();
+            if (!text.isEmpty())
+                out.append(text);
+        }
+        return out;
+    }
+    QString text = value.toString().trimmed();
+    if (text.isEmpty())
+        return out;
+    if (key.startsWith(QLatin1String("assets.")) || key == QLatin1String("x-manual")) {
+        // relative to the metadata file when it's inside its folder, so the
+        // art moves with the ROM folder
+        const QString rel = base.relativeFilePath(text);
+        return { rel.startsWith(QLatin1String("..")) ? text : rel };
+    }
+    return text.split(QLatin1Char('\n'));
+}
+
+// the file and block a game is saved in: your own file first, then an ES-DE
+// import; -1 if none (a game Pegasus found by itself)
+std::pair<int, int> find_game_block(std::vector<MetaFile>& files, const QString& wanted)
+{
+    for (size_t f = 0; f < files.size(); f++) {
+        for (size_t b = 0; b < files[f].blocks.size(); b++) {
+            const MetaBlock& block = files[f].blocks[b];
+            if (!block.is_collection && files[f].game_files(block).contains(wanted))
+                return { static_cast<int>(f), static_cast<int>(b) };
+        }
+    }
+    return { -1, -1 };
+}
+
+void sort_own_first(std::vector<MetaFile>& files)
+{
+    std::stable_sort(files.begin(), files.end(), [](const MetaFile& a, const MetaFile& b) {
+        const bool a_import = QFileInfo(a.path).fileName() == IMPORT_FILE_NAME;
+        const bool b_import = QFileInfo(b.path).fileName() == IMPORT_FILE_NAME;
+        return !a_import && b_import;
+    });
+}
+
+QString apply_changes(MetaFile& file, size_t block_index, const QVariantMap& changes, const QString& header_key)
+{
+    QStringList edited;
+    const QDir base(file.dir);
+    for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
+        const QString key = it.key() == header_key ? it.key() : canonical_key(it.key());
+        if (key == header_key) {
+            const QString name = it.value().toString().simplified();
+            if (!name.isEmpty())
+                file.set_header(block_index, name);
+            edited.append(QStringLiteral("title"));
+            continue;
+        }
+        file.set_entry(block_index, aliases_of(key), key, value_lines(key, it.value(), base));
+        edited.append(key);
+    }
+    if (QFileInfo(file.path).fileName() == IMPORT_FILE_NAME && !file.blocks.at(block_index).is_collection)
+        file.mark_edited(block_index, edited);
+    return file.save();
+}
+} // namespace
+
+
+MetadataLocation metadata_location(const QString& collection_name, const QString& game_path)
+{
+    MetadataLocation out;
+    std::vector<MetaFile> files = files_defining(collection_name);
+    sort_own_first(files);
+    if (game_path.isEmpty()) {
+        if (!files.empty())
+            out.file = files.front().path;
+    }
+    else {
+        const QString wanted = MetaFile::is_uri(game_path) ? game_path : ::clean_abs_path(QFileInfo(game_path));
+        const auto found = find_game_block(files, wanted);
+        out.file = found.first >= 0 ? files[static_cast<size_t>(found.first)].path : edits_file_path();
+        out.is_new = found.first < 0;
+    }
+    out.is_import = QFileInfo(out.file).fileName() == IMPORT_FILE_NAME;
+    return out;
+}
+
+
+QString save_game_metadata(const QString& collection_name, const QString& game_path,
+                           const QString& game_title, const QVariantMap& changes)
+{
+    if (changes.isEmpty())
+        return {};
+    const QString wanted = MetaFile::is_uri(game_path) ? game_path : ::clean_abs_path(QFileInfo(game_path));
+    std::vector<MetaFile> files = files_defining(collection_name);
+    sort_own_first(files);
+
+    const auto found = find_game_block(files, wanted);
+    if (found.first >= 0) {
+        const QString error = apply_changes(files[static_cast<size_t>(found.first)], static_cast<size_t>(found.second),
+                                            changes, QStringLiteral("title"));
+        if (error.isEmpty())
+            Log::info(QStringLiteral("Metadata"), LOGMSG("`%1` saved in `%2`").arg(game_title, files[static_cast<size_t>(found.first)].path));
+        return error;
+    }
+
+    // a game Pegasus found by itself (eg. an Android app): a new entry of
+    // yours, in Pegasus X's own metadata file
+    MetaFile file;
+    const QString path = edits_file_path();
+    if (!file.load(path)) {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        file.path = path;
+        file.dir = QFileInfo(path).absolutePath();
+        file.lines = QStringList {
+            QStringLiteral("# Made by Pegasus X: your edits (Settings > Edit metadata) to games"),
+            QStringLiteral("# Pegasus found by itself, like its Android app import."),
+        };
+        file.parse();
+    }
+    int coll_index = -1;
+    for (size_t b = 0; b < file.blocks.size(); b++) {
+        if (file.blocks[b].is_collection && file.blocks[b].name == collection_name)
+            coll_index = static_cast<int>(b);
+    }
+    if (coll_index < 0) {
+        if (!file.lines.isEmpty() && !file.lines.last().trimmed().isEmpty())
+            file.lines.append(QString());
+        file.lines.append(QStringLiteral("collection: ") % collection_name);
+        file.parse();
+        for (size_t b = 0; b < file.blocks.size(); b++) {
+            if (file.blocks[b].is_collection && file.blocks[b].name == collection_name)
+                coll_index = static_cast<int>(b);
+        }
+    }
+    const int block_index = file.add_game_block(coll_index, game_title, wanted);
+    if (block_index < 0)
+        return QStringLiteral("Could not add `%1` to `%2`").arg(game_title, path);
+    const QString error = apply_changes(file, static_cast<size_t>(block_index), changes, QStringLiteral("title"));
+    if (!error.isEmpty())
+        return error;
+
+    // known from now on, without reading every metadata file again
+    {
+        QMutexLocker lock(&collection_files_mutex());
+        QStringList& known = collection_files_cache()[collection_name];
+        if (!known.contains(path))
+            known.append(path);
+    }
+    Log::info(QStringLiteral("Metadata"), LOGMSG("`%1` saved as a new entry in `%2`").arg(game_title, path));
+    return {};
+}
+
+
+QString save_collection_metadata(const QString& collection_name, const QVariantMap& changes)
+{
+    if (changes.isEmpty())
+        return {};
+    std::vector<MetaFile> files = files_defining(collection_name);
+    if (files.empty())
+        return QStringLiteral("No metadata file defines the collection `%1`").arg(collection_name);
+    sort_own_first(files);
+
+    // a new name goes into every file that defines it, so it stays one collection
+    const QString new_name = changes.value(QStringLiteral("name")).toString().simplified();
+    QVariantMap rest = changes;
+    rest.remove(QStringLiteral("name"));
+
+    bool first = true;
+    for (MetaFile& file : files) {
+        for (size_t b = 0; b < file.blocks.size(); b++) {
+            if (!file.blocks[b].is_collection || file.blocks[b].name != collection_name)
+                continue;
+            if (!new_name.isEmpty() && new_name != collection_name)
+                file.set_header(b, new_name);
+            if (first && !rest.isEmpty()) {
+                const QDir base(file.dir);
+                for (auto it = rest.cbegin(); it != rest.cend(); ++it) {
+                    const QString key = canonical_key(it.key());
+                    file.set_entry(b, aliases_of(key), key, value_lines(key, it.value(), base));
+                }
+            }
+            first = false;
+            break;
+        }
+        const QString error = file.save();
+        if (!error.isEmpty())
+            return error;
+    }
+    if (!new_name.isEmpty() && new_name != collection_name) {
+        QMutexLocker lock(&collection_files_mutex());
+        HashMap<QString, QStringList>& cache = collection_files_cache();
+        const auto it = cache.find(collection_name);
+        if (it != cache.end()) {
+            cache[new_name] = it->second;
+            cache.erase(collection_name);
+        }
+    }
+    return {};
 }
 
 

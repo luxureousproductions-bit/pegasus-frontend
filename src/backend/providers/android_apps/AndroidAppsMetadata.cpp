@@ -51,28 +51,30 @@ bool apply_json(model::Game& game, const QJsonDocument& json)
         return false;
 
 
+    // Pegasus X: details from your own metadata (or the metadata editor) win;
+    // the Play Store only fills what's missing
     const QString developer = root[Lat("developer")].toString();
-    if (!developer.isEmpty())
+    if (!developer.isEmpty() && game.developerListConst().isEmpty())
         game.developerList().append(root[Lat("developer")].toString());
     
     const QString category = root[Lat("category")].toString();
-    if (!category.isEmpty()){
+    if (!category.isEmpty() && game.genreListConst().isEmpty()){
         game.genreList().append(root[Lat("category")].toString());
     }
     
     QDate release = QDate::fromString(root[Lat("release")].toString(),"MMM d, yyyy");
-    if(release.isValid()){
-        game.setReleaseDate(release);
-    } else {
+    if (!release.isValid())
         release = QDate::fromString(root[Lat("release")].toString(),"d MMM yyyy");
+    if (!game.releaseDate().isValid())
         game.setReleaseDate(release);
-    }
-    
-    game.setDescription(root[Lat("description")].toString());
-    game.setSummary(game.description().section(QChar('\n'), 0, 0));
+
+    if (game.description().isEmpty())
+        game.setDescription(root[Lat("description")].toString());
+    if (game.summary().isEmpty())
+        game.setSummary(game.description().section(QChar('\n'), 0, 0));
 
     const double rating = root[Lat("rating")].toDouble(-1);
-    if (rating > 0.0)
+    if (rating > 0.0 && game.rating() <= 0.f)
         game.setRating(rating / 5.0);
 
     const QString background = root[Lat("background")].toString();

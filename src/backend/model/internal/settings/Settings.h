@@ -159,6 +159,15 @@ public:
     Q_INVOKABLE void setAndroidKind(const QString& key, const QString& kind);
     /// Removes the ES-DE import files of these folders; returns how many
     Q_INVOKABLE int deleteEsdeImport(const QStringList& folders);
+    // Edit metadata
+    /// { file, isImport, isNew } of where a game (or with an empty path, the collection) is saved
+    Q_INVOKABLE QVariantMap metadataLocation(const QString& collection_name, const QString& game_path) const;
+    /// Writes changed fields (see EsdeProvider.h); returns an error, or empty
+    Q_INVOKABLE QString saveGameMetadata(const QString& collection_name, const QString& game_path,
+                                         const QString& game_title, const QVariantMap& changes);
+    Q_INVOKABLE QString saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes);
+    /// Every genre used in the library, A to Z
+    Q_INVOKABLE QStringList libraryGenres(QObject* all_games) const;
     /// Reads the games again from the cache (quick), applying the changes
     Q_INVOKABLE void reloadLibrary();
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"

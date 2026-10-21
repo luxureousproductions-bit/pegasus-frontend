@@ -21,6 +21,7 @@
 
 #include <QSet>
 #include <QString>
+#include <QVariantMap>
 #include <QStringList>
 #include <functional>
 
@@ -158,6 +159,27 @@ struct OriginalLaunches {
     std::vector<GameEmulator> games;
 };
 OriginalLaunches original_launches(const QString& collection_name);
+
+// Pegasus X: Settings > Edit metadata
+
+/// Where a game's (or, with an empty `game_path`, a collection's) details are
+/// saved: your own file first, then an ES-DE import; a game Pegasus found by
+/// itself goes into Pegasus X's own file (`is_new`)
+struct MetadataLocation {
+    QString file;
+    bool is_import = false;
+    bool is_new = false;
+};
+MetadataLocation metadata_location(const QString& collection_name, const QString& game_path);
+
+/// Writes the changed fields of a game. Keys: title, sort-by, developer,
+/// publisher, genre (lists), release, players, rating, summary, description,
+/// assets.<kind>, x-manual; an empty value removes the field. In an ES-DE
+/// import the change is marked, so importing again keeps it.
+QString save_game_metadata(const QString& collection_name, const QString& game_path,
+                           const QString& game_title, const QVariantMap& changes);
+/// The same for a collection: name, shortname, summary, description, assets.<kind>
+QString save_collection_metadata(const QString& collection_name, const QVariantMap& changes);
 
 /// Starts `command` with a game file. Returns an error, or empty.
 QString test_emulator_command(const QString& command, const QString& game_path);
