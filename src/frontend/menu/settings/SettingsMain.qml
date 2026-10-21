@@ -32,6 +32,7 @@ FocusScope {
     signal openEsdeImport
     signal openEmulatorSettings
     signal openLibrarySettings
+    signal openMetadataEditor
     signal openAndroidSafSettings
     signal openProviderSettings
     signal reloadRequested
@@ -141,6 +142,14 @@ FocusScope {
             type: SettingsEntry.Type.Button
             buttonAction: root.openLibrarySettings
             section: "gaming"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Edit metadata...")
+            desc: QT_TR_NOOP("Change the details, art and files of your collections and games. Saved in Pegasus metadata files, so every theme shows it.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openMetadataEditor
+            section: "gaming"
+            enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
             label: QT_TR_NOOP("Accessible Android directories...")

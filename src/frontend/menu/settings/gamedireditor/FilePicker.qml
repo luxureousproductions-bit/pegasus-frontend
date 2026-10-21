@@ -31,6 +31,7 @@ FocusScope {
 
     signal cancel
     signal pick(string dir_path)
+    signal pickFile(string file_path)  // Pegasus X: the picked file itself
 
     anchors.fill: parent
 
@@ -39,6 +40,12 @@ FocusScope {
     // folder you left instead of keeping the old row number
     Component.onCompleted: root.resetPosition()
 
+    // Pegasus X: opens in a given folder (eg. the game's media folder)
+    function openAt(path) {
+        if (path)
+            folderModel.cd(path);
+        root.resetPosition();
+    }
     function resetPosition() {
         list.currentIndex = list.count > 1 ? 1 : 0;
         list.positionViewAtIndex(list.currentIndex, ListView.Center);
@@ -190,8 +197,10 @@ FocusScope {
                     root.enter(name);
                     return;
                 }
-                if (pickable)
+                if (pickable) {
+                    root.pickFile(folderModel.folder + "/" + name);
                     root.pick(folderModel.folder);
+                }
             }
 
             Keys.onPressed: {
