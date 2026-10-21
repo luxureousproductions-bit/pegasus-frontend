@@ -287,14 +287,10 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
     const std::vector<model::Game*> dropped_a = dedupe_by_title(android_list);
     const std::vector<model::Game*> dropped_g = dedupe_by_title(games_list);
 
-    // games first in Android, then apps and emulators
-    const auto order = [&kind_of](std::vector<model::Game*>& list) {
-        std::stable_sort(list.begin(), list.end(), [&kind_of](model::Game* a, model::Game* b) {
-            const bool ga = kind_of[a] == QLatin1String("Game");
-            const bool gb = kind_of[b] == QLatin1String("Game");
-            if (ga != gb)
-                return ga;
-            // A to Z by what you see, whatever the case of the first letter
+    const auto order = [](std::vector<model::Game*>& list) {
+        // plain A to Z: games, apps and emulators together, upper and lower
+        // case alike (themes and Settings > Library group them by their tags)
+        std::stable_sort(list.begin(), list.end(), [](model::Game* a, model::Game* b) {
             const int by_name = a->sortBy().compare(b->sortBy(), Qt::CaseInsensitive);
             if (by_name != 0)
                 return by_name < 0;

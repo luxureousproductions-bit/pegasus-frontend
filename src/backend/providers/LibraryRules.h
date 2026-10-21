@@ -30,7 +30,7 @@ namespace model { class Game; }
 // applied after the game list cache is written, so the cache always has
 // everything and a change here only needs a quick reload, not a full scan.
 //   - Android: Pegasus' own "Android" and your android / androidapps / "Android
-//     Apps" collections are one "Android" collection, games first. Android
+//     Apps" collections are one "Android" collection, A to Z. Android
 //     Games (androidgames) joins it too, unless merging is turned off. Each
 //     entry is tagged Game, Emulator or Application (tags), and apps and
 //     emulators also get that genre (as XboxOSv2 expects). Entries with the

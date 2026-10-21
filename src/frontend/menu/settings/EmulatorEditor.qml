@@ -245,16 +245,20 @@ FocusScope {
     // apps in its Emulators section (offered as emulators for every system)
     property var kinds: ({})
     property var androidEmulators: []  // [{ title, package, component }]
+    property var kindByPackage: ({})   // package -> its Library section (Game / Application / Emulator)
     function loadAndroidEmulators() {
         kinds = Internal.settings.androidKinds();
         var found = [];
         var seen = {};
+        var byPackage = {};
         var names = ["Android", "Android Games"];
         for (var n = 0; n < names.length; n++) {
             var list = Internal.settings.collectionGames(api.collections, names[n]);
             for (var i = 0; i < list.length; i++) {
                 var e = list[i];
                 var kind = kinds[e.key] || e.kind;
+                if (e["package"] && kind)
+                    byPackage[e["package"]] = kind;
                 if (kind === "Emulator" && e["package"] && !seen[e["package"]]) {
                     seen[e["package"]] = true;
                     found.push({ "title": e.title, "package": e["package"], "component": "" });
@@ -276,11 +280,11 @@ FocusScope {
             }
         }
         androidEmulators = found.filter(function(x) { return x.component !== ""; });
+        kindByPackage = byPackage;
     }
 
     function openCollection(index) {
-        if (Object.keys(kinds).length === 0 && androidEmulators.length === 0)
-            loadAndroidEmulators();
+        loadAndroidEmulators();  // follows Settings > Library's sections and moves
         gameCommands = {};
         gameApps = {};
         collOriginal = { "known": false, "command": "" };
@@ -751,19 +755,29 @@ FocusScope {
                 if (appOriginal)
                     out.push(appOriginal);
                 out.push({ "kind": "inherit", "text": qsTr("No app") + api.tr, "current": currentPkg === "" });
-                var gamesList = [], others = [];
+                // the same sections as Settings > Library, A to Z in each
+                var sections = [
+                    { "kind": "Game", "text": qsTr("Games") + api.tr, "rows": [] },
+                    { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [] },
+                    { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [] },
+                ];
                 for (var a = 0; a < root.androidApps.length; a++) {
                     var app = root.androidApps[a];
-                    var appEntry = { "kind": "app", "text": app.label, "component": app.component, "pkg": app["package"],
-                                     "note": app["package"], "current": app["package"] === currentPkg };
-                    (app.game ? gamesList : others).push(appEntry);
+                    var appKind = root.kindByPackage[app["package"]] || (app.game ? "Game" : "Application");
+                    var si = appKind === "Emulator" ? 2 : appKind === "Application" ? 1 : 0;
+                    sections[si].rows.push({ "kind": "app", "text": app.label, "component": app.component, "pkg": app["package"],
+                                             "note": app["package"], "current": app["package"] === currentPkg });
                 }
-                if (gamesList.length > 0)
-                    out.push({ "kind": "header", "text": qsTr("Games") + api.tr });
-                out = out.concat(gamesList);
-                if (others.length > 0)
-                    out.push({ "kind": "header", "text": qsTr("Other apps") + api.tr });
-                out = out.concat(others);
+                for (var sx = 0; sx < sections.length; sx++) {
+                    if (sections[sx].rows.length === 0)
+                        continue;
+                    sections[sx].rows.sort(function(x, y) {
+                        var lx = x.text.toLowerCase(), ly = y.text.toLowerCase();
+                        return lx < ly ? -1 : (lx > ly ? 1 : 0);
+                    });
+                    out.push({ "kind": "header", "text": sections[sx].text });
+                    out = out.concat(sections[sx].rows);
+                }
                 out.push({ "kind": "custom", "text": qsTr("Custom command...") + api.tr, "current": false });
                 return out;
             }
