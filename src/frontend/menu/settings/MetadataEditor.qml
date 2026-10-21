@@ -682,14 +682,58 @@ FocusScope {
     // -- Art -------------------------------------------------------------------------
 
     property string artKey: ""
+    // the folder names each kind of art can have (ES-DE, Skraper, Pegasus...)
+    readonly property var artFolders: ({
+        "art:video": ["videos", "video"],
+        "art:screenshot": ["screenshots", "screenshot", "snap", "snaps"],
+        "art:titlescreen": ["titlescreens", "screenshottitle", "titlescreen"],
+        "art:fanart": ["fanart", "fanarts", "background", "backgrounds"],
+        "art:box3d": ["3dboxes", "box3d", "3dbox", "box3d-front"],
+        "art:box2d": ["covers", "box2dfront", "box2d", "boxfront"],
+        "art:boxback": ["backcovers", "box2dback", "boxback"],
+        "art:physical": ["physicalmedia", "support", "cartridge", "cartridges", "disc"],
+        "art:miximage": ["miximages", "miximage"],
+        "art:logo": ["wheel", "marquees", "marquee", "logos", "logo"],
+        "art:manual": ["manuals", "manual"],
+    })
+    function dirOf(path) {
+        var s = String(path || "");
+        return s.substring(0, s.lastIndexOf("/"));
+    }
     function pickArt(key) {
         artKey = key;
         var currentFile = current(key);
         var startDir = "";
-        if (currentFile && String(currentFile).indexOf("/") === 0)
-            startDir = String(currentFile).substring(0, String(currentFile).lastIndexOf("/"));
-        else if (game && game.path && String(game.path).indexOf("/") === 0)
-            startDir = String(game.path).substring(0, String(game.path).lastIndexOf("/"));
+        if (currentFile && String(currentFile).indexOf("/") === 0) {
+            startDir = dirOf(currentFile);
+        }
+        else {
+            // that kind's folder, by any of its names, next to the game's other
+            // art (eg. ES-DE's downloaded_media/<system>/) or in its ROM folder
+            var roots = [];
+            for (var slot in origSlots) {
+                var files = origSlots[slot] || [];
+                for (var i = 0; i < files.length; i++) {
+                    if (String(files[i]).indexOf("/") === 0) {
+                        var r = dirOf(dirOf(files[i]));
+                        if (roots.indexOf(r) < 0)
+                            roots.push(r);
+                    }
+                }
+            }
+            var gameDir = (game && game.path && String(game.path).indexOf("/") === 0) ? dirOf(game.path) : "";
+            if (gameDir !== "") {
+                roots.push(gameDir + "/media");
+                roots.push(gameDir);
+            }
+            var candidates = [];
+            var names = artFolders[key] || [];
+            for (var ri = 0; ri < roots.length; ri++) {
+                for (var ni = 0; ni < names.length; ni++)
+                    candidates.push(roots[ri] + "/" + names[ni]);
+            }
+            startDir = Internal.settings.firstExistingDir(candidates) || gameDir;
+        }
         filePicker.fileExtensions = artFilter(key);
         filePicker.openAt(startDir);
         filePicker.focus = true;

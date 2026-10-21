@@ -885,6 +885,15 @@ QString Settings::saveCollectionMetadata(const QString& collection_name, const Q
 #endif
 }
 
+QString Settings::firstExistingDir(const QStringList& paths) const
+{
+    for (const QString& path : paths) {
+        if (!path.isEmpty() && QFileInfo(path).isDir())
+            return path;
+    }
+    return {};
+}
+
 QStringList Settings::libraryGenres(QObject* all_games) const
 {
     QStringList out;
