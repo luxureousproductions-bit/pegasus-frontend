@@ -581,7 +581,7 @@ FocusScope {
             out.push({ "kind": "section", "text": root.detailsLoading
                 ? qsTr("Per-game · reading...") + api.tr
                 : qsTr("Per-game · %1 set").arg(own) + api.tr });
-            var inherit = root.detailsLoading ? "" : qsTr("Collection's emulator") + api.tr;
+            var inherit = root.detailsLoading ? "" : qsTr("Global") + api.tr;
             for (var i = 0; i < root.games.length; i++) {
                 var cmd = root.gameCommands[root.games[i].path];
                 out.push({ "kind": "game", "text": root.games[i].title, "game": root.games[i],
@@ -796,7 +796,7 @@ FocusScope {
             if (orig)
                 out.push(orig);
             if (game)
-                out.push({ "kind": "inherit", "text": qsTr("Collection's emulator") + api.tr, "current": current === "" && !(orig && orig.current) });
+                out.push({ "kind": "inherit", "text": qsTr("Global (the collection's emulator)") + api.tr, "current": current === "" && !(orig && orig.current) });
             else if (!orig && c.command && c.currentLabel === "")
                 out.push({ "kind": "keep", "text": qsTr("Your metadata's command") + api.tr, "current": true });
 
@@ -1203,7 +1203,7 @@ FocusScope {
                         cursorVisible: commandDialog.visible
                         anchors.fill: parent
                         anchors.margins: vpx(12)
-                        onActiveFocusChanged: if (activeFocus) Qt.inputMethod.show()
+                        activeFocusOnPress: false  // no Android keyboard: Pegasus' own is below
                         Keys.onReturnPressed: insertRow.focus = true
                         KeyNavigation.down: insertRow
                     }
@@ -1253,7 +1253,9 @@ FocusScope {
                 // Pegasus' own keyboard: d-pad and A, or touch
                 OnScreenKeyboard {
                     id: cmdKeyboard
-                    width: parent.width
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    keyH: vpx(38)
+                    keyW: Math.min(vpx(62), (parent.width - vpx(28) - vpx(6) * 11) / 13.2)
                     target: cmdInput
                     onDone: commandDialog.act("save")
                     onLeaveUp: insertRow.focus = true
@@ -1278,7 +1280,6 @@ FocusScope {
                     layoutDirection: Qt.RightToLeft
                     spacing: vpx(12)
                     model: [
-                        { "name": "save", "text": qsTr("Save") + api.tr },
                         { "name": "cancel", "text": qsTr("Cancel") + api.tr },
                         { "name": "test", "text": qsTr("Test with a game") + api.tr },
                     ]

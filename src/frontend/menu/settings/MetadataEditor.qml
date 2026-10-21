@@ -212,6 +212,9 @@ FocusScope {
             "shortname": collDetails.shortname || c.shortName || "",
             "extensions": collDetails.extensions || "",
             "launch": collDetails.launch || "",
+            // the system tile's art, read by themes (XboxOSv2's tiles use it)
+            "cart:background": localPath(c.assets ? c.assets.background : ""),
+            "cart:logo": localPath(c.assets ? c.assets.logo : ""),
         };
     }
 
@@ -357,12 +360,30 @@ FocusScope {
         return out;
     }
 
+    // the collection's art keys as written in its metadata
+    readonly property var collectionArt: [
+        ["cart:background", qsTr("Tile background") + api.tr, "assets.background"],
+        ["cart:logo", qsTr("Logo") + api.tr, "assets.logo"],
+    ]
+    function collectionChanges() {
+        var out = {};
+        for (var key in edits) {
+            var mapped = key;
+            for (var i = 0; i < collectionArt.length; i++) {
+                if (collectionArt[i][0] === key)
+                    mapped = collectionArt[i][2];
+            }
+            out[mapped] = edits[key];
+        }
+        return out;
+    }
+
     function save() {
         if (!dirty)
             return true;
         var error = page === "game"
             ? Internal.settings.saveGameMetadata(collName, game.path || game.key, current("title"), toChanges())
-            : Internal.settings.saveCollectionMetadata(collName, edits);
+            : Internal.settings.saveCollectionMetadata(collName, collectionChanges());
         if (error !== "") {
             message = error;
             return false;
@@ -485,7 +506,7 @@ FocusScope {
                 var empty = f.empty || "—";
                 if (f.key === "launch") {
                     empty = root.page === "game"
-                        ? qsTr("the collection's") + api.tr
+                        ? qsTr("Global") + api.tr
                         : (root.collDetails.defaultLabel
                             ? qsTr("recommended: %1").arg(root.collDetails.defaultLabel) + api.tr
                             : qsTr("none, pick one in Emulators") + api.tr);
@@ -498,6 +519,16 @@ FocusScope {
                     out.push({ "kind": "info", "text": qsTr("File") + api.tr, "value": root.fileShown() });
             }
 
+            if (root.page === "collection") {
+                out.push({ "kind": "section", "text": qsTr("System tile") + api.tr });
+                for (i = 0; i < root.collectionArt.length; i++) {
+                    var ca = root.collectionArt[i];
+                    var caValue = root.current(ca[0]);
+                    out.push({ "kind": "art", "text": ca[1], "key": ca[0], "icon": false,
+                               "value": caValue === "" ? qsTr("the theme's own") + api.tr : root.fileName(caValue),
+                               "muted": caValue === "", "edited": ca[0] in root.edits, "done": ca[0] in root.saved });
+                }
+            }
             if (root.page === "game") {
                 out.push({ "kind": "section", "text": qsTr("Art and manual") + api.tr });
                 for (i = 0; i < root.artKinds.length; i++) {
@@ -756,6 +787,9 @@ FocusScope {
         var startDir = "";
         if (currentFile && String(currentFile).indexOf("/") === 0) {
             startDir = dirOf(currentFile);
+        }
+        else if (page === "collection") {
+            startDir = loc.file ? dirOf(loc.file) : "";
         }
         else {
             // that kind's folder, by any of its names, next to the game's other
@@ -1041,6 +1075,18 @@ FocusScope {
             }
         }
 
+        // Pegasus' own keyboard, along the bottom: d-pad and A, or touch
+        OnScreenKeyboard {
+            id: kb
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: vpx(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            z: 1
+            keyH: vpx(40)
+            onDone: fieldDialog.finish()
+            onLeaveUp: actionRow.focus = true
+        }
+
         Rectangle {
             width: Math.min(parent.width * 0.8, vpx(900))
             height: dialogColumn.height + vpx(40)
@@ -1103,7 +1149,7 @@ FocusScope {
                         anchors.rightMargin: vpx(14)
                         inputMethodHints: fieldDialog.field && (fieldDialog.field.type === "number" || fieldDialog.field.type === "rating")
                             ? Qt.ImhDigitsOnly : Qt.ImhNone
-                        onActiveFocusChanged: if (activeFocus) Qt.inputMethod.show()
+                        activeFocusOnPress: false  // no Android keyboard: Pegasus' own is below
                         Keys.onReturnPressed: fieldDialog.finish()
                         Keys.onEnterPressed: fieldDialog.finish()
                         KeyNavigation.down: kb
@@ -1115,7 +1161,7 @@ FocusScope {
                     id: multiBox
                     visible: fieldDialog.multiLine
                     width: parent.width
-                    height: Math.min(Math.max(vpx(110), multiInput.contentHeight + vpx(24)), root.height * 0.24)
+                    height: Math.min(Math.max(vpx(110), multiInput.contentHeight + vpx(24)), root.height * 0.2)
 
                     Rectangle {
                         anchors.fill: parent
@@ -1146,7 +1192,7 @@ FocusScope {
                             wrapMode: TextEdit.Wrap
                             cursorVisible: fieldDialog.visible
                             onCursorRectangleChanged: multiFlick.ensureVisible(cursorRectangle)
-                            onActiveFocusChanged: if (activeFocus) Qt.inputMethod.show()
+                            activeFocusOnPress: false
                             // the d-pad leaves the box from its last line
                             Keys.onDownPressed: {
                                 if (cursorRectangle.y + cursorRectangle.height >= contentHeight - 2) {
@@ -1171,8 +1217,7 @@ FocusScope {
                     spacing: vpx(8)
                     clip: true
                     model: visible ? root.genres : []
-                    KeyNavigation.up: multiBox
-                    KeyNavigation.down: kb
+                    KeyNavigation.down: actionRow
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {
                             event.accepted = true;
@@ -1202,18 +1247,6 @@ FocusScope {
                     }
                 }
 
-                // Pegasus' own keyboard: d-pad and A, or touch
-                OnScreenKeyboard {
-                    id: kb
-                    width: parent.width
-                    onDone: fieldDialog.finish()
-                    onLeaveUp: {
-                        if (pickRow.visible)
-                            pickRow.focus = true;
-                    }
-                    onLeaveDown: actionRow.focus = true
-                }
-
                 Text {
                     id: hint
                     width: parent.width
@@ -1232,11 +1265,11 @@ FocusScope {
                     layoutDirection: Qt.RightToLeft
                     spacing: vpx(12)
                     model: [
-                        { "name": "done", "text": qsTr("Done") + api.tr },
                         { "name": "cancel", "text": qsTr("Cancel") + api.tr },
                         { "name": "clear", "text": qsTr("Clear") + api.tr },
                     ]
-                    KeyNavigation.up: kb
+                    KeyNavigation.up: pickRow.visible ? pickRow : null
+                    KeyNavigation.down: kb
 
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {
