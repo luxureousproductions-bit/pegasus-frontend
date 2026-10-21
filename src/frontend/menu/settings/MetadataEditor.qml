@@ -36,7 +36,7 @@ FocusScope {
     enabled: focus
     visible: 0 < (x + width) && x < Window.window.width
 
-    property string page: "collections"  // collections, collection, game
+    property string page: "collections"  // collections, hidden, collection, game
     property string message: ""
     property bool anySaved: false        // the library is read again on the way out
 
@@ -54,7 +54,85 @@ FocusScope {
     property var savedTitles: ({})       // game path -> title saved this time
     property var genres: []              // every genre in the library, for quick picks
 
-    Component.onCompleted: list.currentIndex = 1  // the first collection, below the title
+    Component.onCompleted: list.currentIndex = 1  // the first option, below the title
+
+    // -- Library: hidden games and collections, Android sections -------------------
+
+    property var hidden: Internal.settings.hiddenItems()   // { collections, games }
+    property var kinds: Internal.settings.androidKinds()   // game key -> moved section
+    property bool mergeAndroid: Internal.settings.mergeAndroid
+    property bool libChanged: false      // hidden / moved / merged: read again on the way out
+
+    function isCollectionHidden(name) {
+        return hidden.collections.indexOf(name) >= 0;
+    }
+    function hiddenGamesOf(name) {
+        var out = [];
+        for (var i = 0; i < hidden.games.length; i++) {
+            if (hidden.games[i].collections.indexOf(name) >= 0)
+                out.push(hidden.games[i]);
+        }
+        return out;
+    }
+    function isGameHidden(key) {
+        for (var i = 0; i < hidden.games.length; i++) {
+            if (hidden.games[i].path === key)
+                return true;
+        }
+        return false;
+    }
+    function setCollectionHidden(name, hide) {
+        keepPosition(function() {
+            Internal.settings.setCollectionHidden(name, hide);
+            hidden = Internal.settings.hiddenItems();
+        });
+        libChanged = true;
+        message = hide ? qsTr("\"%1\" is hidden from every theme once you leave Library.").arg(name) + api.tr
+                       : qsTr("\"%1\" comes back once you leave Library.").arg(name) + api.tr;
+    }
+    function setGameHidden(key, title, hide) {
+        keepPosition(function() {
+            Internal.settings.setGameHidden(key, title, [collName], hide);
+            hidden = Internal.settings.hiddenItems();
+        });
+        libChanged = true;
+        message = hide ? qsTr("\"%1\" is hidden from every theme once you leave Library.").arg(title) + api.tr
+                       : qsTr("\"%1\" comes back once you leave Library.").arg(title) + api.tr;
+    }
+    function isAndroidCollection(c) {
+        if (!c)
+            return false;
+        var n = String(c.name).toLowerCase();
+        var sn = String(c.shortName || "").toLowerCase();
+        return n === "android" || n === "android games" || sn === "android" || sn === "androidgames";
+    }
+    function kindOf(g) {
+        return kinds[g.key] || g.kind || "Game";
+    }
+    // what to do with an Android entry
+    function androidActions(g) {
+        var hiddenNow = isGameHidden(g.key);
+        var k = kindOf(g);
+        var entries = [ { "act": "edit", "text": qsTr("Edit details and art...") + api.tr },
+                        { "act": hiddenNow ? "show" : "hide", "text": hiddenNow ? qsTr("Show it again") + api.tr : qsTr("Hide") + api.tr } ];
+        if (k !== "Game") entries.push({ "act": "Game", "text": qsTr("Move to Games") + api.tr });
+        if (k !== "Application") entries.push({ "act": "Application", "text": qsTr("Move to Apps") + api.tr });
+        if (k !== "Emulator") entries.push({ "act": "Emulator", "text": qsTr("Move to Emulators") + api.tr });
+        if (kinds[g.key]) entries.push({ "act": "auto", "text": qsTr("Back to automatic") + api.tr });
+        chooser.openFor(g.title, entries, function(act) {
+            if (act === "edit")
+                root.openGame(g);
+            else if (act === "hide" || act === "show")
+                root.setGameHidden(g.key, g.title, act === "hide");
+            else {
+                root.keepPosition(function() {
+                    Internal.settings.setAndroidKind(g.key, act === "auto" ? "" : act);
+                    root.kinds = Internal.settings.androidKinds();
+                });
+                root.libChanged = true;
+            }
+        });
+    }
 
     // -- What can be edited ------------------------------------------------------
 
@@ -222,15 +300,29 @@ FocusScope {
 
     readonly property var collections: {
         var out = [];
+        var seen = {};
         for (var i = 0; i < api.collections.count; i++) {
             var c = api.collections.get(i);
-            out.push({ "name": c.name, "count": c.games.count, "obj": c });
+            seen[c.name] = true;
+            out.push({ "name": c.name, "count": c.games.count, "obj": c, "loaded": true });
+        }
+        // hidden ones aren't in the library any more
+        for (var h = 0; h < hidden.collections.length; h++) {
+            if (!seen[hidden.collections[h]])
+                out.push({ "name": hidden.collections[h], "count": 0, "obj": null, "loaded": false });
         }
         out.sort(function(a, b) { return root.byName(a.name, b.name); });
         return out;
     }
 
     function openCollection(entry) {
+        if (!entry.loaded) {
+            chooser.openFor(qsTr("\"%1\" is hidden.").arg(entry.name) + api.tr,
+                [ { "act": "show", "text": qsTr("Show it again") + api.tr },
+                  { "act": "stay", "text": qsTr("Keep it hidden") + api.tr } ],
+                function(act) { if (act === "show") root.setCollectionHidden(entry.name, false); });
+            return;
+        }
         collName = entry.name;
         collObj = entry.obj;
         var list_games = Internal.settings.collectionGames(api.collections, entry.name);
@@ -295,6 +387,11 @@ FocusScope {
             }
             return;
         }
+        if (page === "hidden") {
+            page = "collections";
+            list.currentIndex = 2;
+            return;
+        }
         if (page === "collection") {
             var name = collName;
             page = "collections";
@@ -309,7 +406,7 @@ FocusScope {
             list.currentIndex = 0;
             return;
         }
-        if (anySaved)
+        if (anySaved || libChanged)
             Internal.settings.reloadLibrary();
         root.close();
     }
@@ -463,8 +560,9 @@ FocusScope {
 
     ScreenHeader {
         id: header
-        text: (page === "collections" ? qsTr("Settings > Edit metadata")
-             : page === "collection" ? qsTr("Edit metadata > %1").arg(root.collName)
+        text: (page === "collections" ? qsTr("Settings > Library")
+             : page === "hidden" ? qsTr("Library > Hidden")
+             : page === "collection" ? qsTr("Library > %1").arg(root.collName)
              : qsTr("%1 > %2").arg(root.collName).arg(root.current("title"))) + api.tr
         z: 2
     }
@@ -489,16 +587,59 @@ FocusScope {
             var out = [];
             var i;
             if (root.page === "collections") {
+                out.push({ "kind": "section", "text": qsTr("Options") + api.tr });
+                out.push({ "kind": "mergeandroid", "text": qsTr("Merge Android Games into Android") + api.tr,
+                           "value": root.mergeAndroid ? qsTr("On") + api.tr : qsTr("Off") + api.tr });
+                var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
+                out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
+                           "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
+                           "muted": hiddenCount === 0 });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
                 for (i = 0; i < root.collections.length; i++) {
                     var c = root.collections[i];
-                    out.push({ "kind": "coll", "text": c.name, "value": qsTr("%1 games").arg(c.count) + api.tr, "coll": c });
+                    var hiddenHere = root.hiddenGamesOf(c.name).length;
+                    var collHidden = root.isCollectionHidden(c.name);
+                    out.push({ "kind": "coll", "text": c.name, "coll": c, "hidden": collHidden,
+                               "value": collHidden ? qsTr("Hidden") + api.tr
+                                      : hiddenHere > 0 ? qsTr("%1 games · %2 hidden").arg(c.count).arg(hiddenHere) + api.tr
+                                      : qsTr("%1 games").arg(c.count) + api.tr });
                 }
+                return out;
+            }
+            if (root.page === "hidden") {
+                out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
+                for (i = 0; i < root.hidden.collections.length; i++)
+                    out.push({ "kind": "unhidecoll", "text": root.hidden.collections[i], "value": qsTr("Hidden") + api.tr, "hidden": true });
+                if (root.hidden.collections.length === 0)
+                    out.push({ "kind": "info", "text": qsTr("None") + api.tr, "value": "" });
+                out.push({ "kind": "section", "text": qsTr("Games") + api.tr });
+                var hg = root.hidden.games.slice().sort(function(a, b) { return root.byName(a.title, b.title); });
+                for (i = 0; i < hg.length; i++)
+                    out.push({ "kind": "unhidegame", "text": hg[i].title, "entry": hg[i], "hidden": true,
+                               "value": (hg[i].collections.length > 0 ? hg[i].collections[0] + " · " : "") + qsTr("Hidden") + api.tr });
+                if (hg.length === 0)
+                    out.push({ "kind": "info", "text": qsTr("None") + api.tr, "value": "" });
                 return out;
             }
 
             var fields = root.page === "game" ? root.gameFields : root.collectionFields;
+            if (root.page === "game") {
+                var gHidden = root.isGameHidden(root.game.key);
+                out.push({ "kind": "section", "text": qsTr("In your library") + api.tr });
+                out.push({ "kind": "hidegame", "text": qsTr("Show in themes") + api.tr, "hidden": gHidden,
+                           "value": gHidden ? qsTr("Hidden") + api.tr : qsTr("Shown") + api.tr });
+                if (root.isAndroidCollection(root.collObj)) {
+                    var gk = root.kindOf(root.game);
+                    out.push({ "kind": "section_android", "text": qsTr("Android section") + api.tr,
+                               "value": (gk === "Application" ? qsTr("Apps") : gk === "Emulator" ? qsTr("Emulators") : qsTr("Games")) + api.tr });
+                }
+            }
             out.push({ "kind": "section", "text": (root.page === "game" ? qsTr("Details") : qsTr("Collection")) + api.tr });
+            if (root.page === "collection") {
+                var cHidden = root.isCollectionHidden(root.collName);
+                out.push({ "kind": "hidecoll", "text": qsTr("Show in themes") + api.tr, "hidden": cHidden,
+                           "value": cHidden ? qsTr("Hidden") + api.tr : qsTr("Shown") + api.tr });
+            }
             for (i = 0; i < fields.length; i++) {
                 var f = fields[i];
                 var value = root.current(f.key);
@@ -553,13 +694,46 @@ FocusScope {
             out.push({ "kind": "save", "text": root.dirty ? qsTr("Save changes") + api.tr : qsTr("No changes to save") + api.tr, "value": "" });
 
             if (root.page === "collection") {
-                out.push({ "kind": "section", "text": qsTr("Games · %1").arg(root.games.length) + api.tr });
+                var android = root.isAndroidCollection(root.collObj);
+                var groups = android
+                    ? [ { "kind": "Game", "text": qsTr("Games") + api.tr, "rows": [] },
+                        { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [] },
+                        { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [] } ]
+                    : [ { "kind": "", "text": qsTr("Games") + api.tr, "rows": [] } ];
+                var known = {};
                 for (i = 0; i < root.games.length; i++) {
                     var g = root.games[i];
+                    known[g.key] = true;
                     var title = root.savedTitles[g.path] || g.title;
-                    out.push({ "kind": "game", "text": title, "game": g,
-                               "value": (root.savedTitles[g.path] !== undefined ? qsTr("edited · ") + api.tr : "") + root.sourceLabel(g.source),
-                               "done": root.savedTitles[g.path] !== undefined });
+                    var gameHidden = root.isGameHidden(g.key);
+                    var row = { "kind": "game", "text": android ? title + "  (" + root.sourceLabel(g.source) + ")" : title,
+                                "game": g, "hidden": gameHidden,
+                                "value": gameHidden ? qsTr("Hidden") + api.tr
+                                       : (root.savedTitles[g.path] !== undefined ? qsTr("edited · ") + api.tr : "")
+                                         + (android ? qsTr("Shown") + api.tr : root.sourceLabel(g.source)),
+                                "done": root.savedTitles[g.path] !== undefined };
+                    var gi = 0;
+                    if (android) {
+                        var k = root.kindOf(g);
+                        gi = k === "Application" ? 1 : k === "Emulator" ? 2 : 0;
+                    }
+                    groups[gi].rows.push(row);
+                }
+                // hidden before this time: not in the library any more
+                var gone = root.hiddenGamesOf(root.collName);
+                for (i = 0; i < gone.length; i++) {
+                    if (!known[gone[i].path])
+                        groups[0].rows.push({ "kind": "unhidegame", "text": gone[i].title, "entry": gone[i], "hidden": true,
+                                              "value": qsTr("Hidden") + api.tr });
+                }
+                for (var gs = 0; gs < groups.length; gs++) {
+                    if (android && groups[gs].rows.length === 0)
+                        continue;
+                    groups[gs].rows.sort(function(a, b) { return root.byName(a.text, b.text); });
+                    var hiddenN = groups[gs].rows.filter(function(r) { return r.hidden; }).length;
+                    out.push({ "kind": "section", "text": groups[gs].text + " · " + groups[gs].rows.length
+                               + (hiddenN > 0 ? qsTr(" · %1 hidden").arg(hiddenN) + api.tr : "") });
+                    out = out.concat(groups[gs].rows);
                 }
             }
             return out;
@@ -599,8 +773,41 @@ FocusScope {
             var row = rows[index];
             if (row.kind === "coll")
                 root.openCollection(row.coll);
-            else if (row.kind === "game")
-                root.openGame(row.game);
+            else if (row.kind === "game") {
+                if (root.isAndroidCollection(root.collObj))
+                    root.androidActions(row.game);
+                else
+                    root.openGame(row.game);
+            }
+            else if (row.kind === "mergeandroid") {
+                root.keepPosition(function() {
+                    Internal.settings.mergeAndroid = !root.mergeAndroid;
+                });
+                root.libChanged = true;
+                root.message = root.mergeAndroid
+                    ? qsTr("Android Games joins Android once you leave Library.") + api.tr
+                    : qsTr("Android Games stays its own collection once you leave Library.") + api.tr;
+            }
+            else if (row.kind === "hiddenlist") {
+                root.page = "hidden";
+                root.message = "";
+                list.currentIndex = 1;
+                list.positionViewAtBeginning();
+            }
+            else if (row.kind === "unhidecoll")
+                root.setCollectionHidden(row.text, false);
+            else if (row.kind === "unhidegame") {
+                Internal.settings.setGameHidden(row.entry.path, row.entry.title, row.entry.collections, false);
+                root.keepPosition(function() { root.hidden = Internal.settings.hiddenItems(); });
+                root.libChanged = true;
+                root.message = qsTr("\"%1\" comes back once you leave Library.").arg(row.entry.title) + api.tr;
+            }
+            else if (row.kind === "hidecoll")
+                root.setCollectionHidden(root.collName, !row.hidden);
+            else if (row.kind === "hidegame")
+                root.setGameHidden(root.game.key, root.current("title"), !row.hidden);
+            else if (row.kind === "section_android")
+                root.androidActions(root.game);
             else if (row.kind === "field")
                 fieldDialog.openFor(row.field);
             else if (row.kind === "art")
@@ -637,6 +844,13 @@ FocusScope {
             else if (api.keys.isDetails(event)) {
                 event.accepted = true;
                 secondary(currentIndex);
+            }
+            else if (api.keys.isFilters(event)) {
+                // Y: hide or show a game
+                event.accepted = true;
+                var row = currentIndex >= 0 && currentIndex < rows.length ? rows[currentIndex] : null;
+                if (row && row.kind === "game")
+                    root.setGameHidden(row.game.key, row.game.title, !row.hidden);
             }
         }
 
@@ -690,7 +904,7 @@ FocusScope {
                 id: rowLabel
                 visible: !parent.isSection && !parent.isSave
                 text: modelData.text
-                color: parent.isInfo ? "#999" : "#eee"
+                color: parent.isInfo ? "#999" : modelData.hidden ? "#999" : "#eee"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(21)
                 anchors.left: parent.left
@@ -703,6 +917,7 @@ FocusScope {
                 visible: !parent.isSection && !parent.isSave
                 text: modelData.value || ""
                 color: parent.isInfo ? "#999"
+                     : modelData.hidden ? "#e8b06a"
                      : modelData.edited ? "#5cc"
                      : modelData.done ? "#9d9"
                      : modelData.muted ? "#888" : "#c0c0c0"
@@ -733,8 +948,9 @@ FocusScope {
     Text {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "collections" ? qsTr("Pick a collection to edit it or one of its games.") + api.tr
-            : root.page === "collection" ? qsTr("A edit · X undo a change · B back") + api.tr
+            : root.page === "collections" ? qsTr("Edit, hide and sort your collections and games. Saved in Pegasus metadata files, so every theme shows it.") + api.tr
+            : root.page === "hidden" ? qsTr("A shows it again.") + api.tr
+            : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr
         height: implicitHeight
         color: "#ddd"

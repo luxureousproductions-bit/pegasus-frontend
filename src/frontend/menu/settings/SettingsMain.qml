@@ -138,14 +138,7 @@ FocusScope {
         },
         SettingsEntry {
             label: QT_TR_NOOP("Library...")
-            desc: QT_TR_NOOP("Hide games and collections from every theme, or show them again, and keep your Android collections together.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openLibrarySettings
-            section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Edit metadata...")
-            desc: QT_TR_NOOP("Change the details, art and files of your collections and games. Saved in Pegasus metadata files, so every theme shows it.")
+            desc: QT_TR_NOOP("Your collections and games: edit their details and art, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openMetadataEditor
             section: "gaming"

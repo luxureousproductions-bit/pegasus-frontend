@@ -38,6 +38,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QSet>
 #include <QSettings>
 #include <QStringBuilder>
@@ -596,9 +597,87 @@ void apply_default_launches(std::vector<model::Collection*>& collections)
 #endif
 }
 
+// title without region/version/disc tags, case and punctuation, so
+// "Crash Bandicoot (USA)" and "crash bandicoot" are the same game
+QString same_game_key(const QString& title)
+{
+    static const QRegularExpression rx_tags(QStringLiteral("\\s*[\\(\\[][^\\)\\]]*[\\)\\]]"));
+    static const QRegularExpression rx_disc(QStringLiteral("\\b(disc|disk|cd)\\s*\\d+\\b"), QRegularExpression::CaseInsensitiveOption);
+    QString t = title;
+    t.remove(rx_tags);
+    t.remove(rx_disc);
+    QString out;
+    for (const QChar c : t.toLower()) {
+        if (c.isLetterOrNumber())
+            out += c;
+    }
+    return out;
+}
+
+// A game that's both in your own metadata and in an ES-DE import of the same
+// collection (or found by Pegasus itself) shows once: yours, else ES-DE's,
+// else Pegasus'. Entries from the same source with one name all stay.
+void dedupe_collections(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
+{
+    QSet<model::Game*> dropped_somewhere;
+    for (model::Collection* const coll : collections) {
+        const std::vector<model::Game*>& current = coll->gameList()->entries();
+        HashMap<QString, std::vector<model::Game*>> by_name;
+        for (model::Game* const game : current)
+            by_name[same_game_key(game->title())].push_back(game);
+
+        QSet<model::Game*> drop;
+        for (const auto& pair : by_name) {
+            const std::vector<model::Game*>& same = pair.second;
+            if (same.size() < 2 || pair.first.isEmpty())
+                continue;
+            // the best one (yours first), then everything not yours goes
+            model::Game* best = same.front();
+            for (model::Game* const g : same) {
+                if (source_rank(*g) < source_rank(*best))
+                    best = g;
+            }
+            // only entries from a lower source go: two ES-DE entries of one
+            // name (eg. two regions) both stay
+            for (model::Game* const g : same) {
+                if (source_rank(*g) > source_rank(*best))
+                    drop.insert(g);
+            }
+        }
+        if (drop.isEmpty())
+            continue;
+
+        std::vector<model::Game*> kept;
+        kept.reserve(current.size());
+        for (model::Game* const game : current) {
+            if (!drop.contains(game))
+                kept.push_back(game);
+        }
+        coll->gameList()->update(std::move(kept));
+        for (model::Game* const game : drop) {
+            std::vector<model::Collection*> left;
+            for (model::Collection* const c : game->collectionsModel()->entries()) {
+                if (c != coll)
+                    left.push_back(c);
+            }
+            game->collectionsModel()->update(std::vector<model::Collection*>(left));
+            if (left.empty())
+                dropped_somewhere.insert(game);
+        }
+        Log::info(LOG_TAG, LOGMSG("`%1`: %2 duplicates left out").arg(coll->name(), QString::number(drop.size())));
+    }
+    if (dropped_somewhere.isEmpty())
+        return;
+    games.erase(std::remove_if(games.begin(), games.end(),
+        [&dropped_somewhere](model::Game* const game) { return dropped_somewhere.contains(game); }), games.end());
+    for (model::Game* const game : dropped_somewhere)
+        delete game;
+}
+
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
 {
     merge_android(collections, games, merge_android_enabled());
+    dedupe_collections(collections, games);
     apply_hidden(collections, games);
     apply_default_launches(collections);
 }
