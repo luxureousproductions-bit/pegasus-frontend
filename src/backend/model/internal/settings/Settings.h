@@ -166,6 +166,8 @@ public:
     Q_INVOKABLE QString saveGameMetadata(const QString& collection_name, const QString& game_path,
                                          const QString& game_title, const QVariantMap& changes);
     Q_INVOKABLE QString saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes);
+    /// { shortname, extensions, launch, defaultLabel, defaultCommand } of a collection
+    Q_INVOKABLE QVariantMap collectionDetails(const QString& collection_name) const;
     /// The first of these folders that exists, or empty
     Q_INVOKABLE QString firstExistingDir(const QStringList& paths) const;
     /// Every genre used in the library, A to Z

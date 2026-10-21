@@ -24,6 +24,8 @@
 #include <QVariantMap>
 #include <QStringList>
 #include <functional>
+#include <utility>
+#include <vector>
 
 
 namespace providers {
@@ -180,6 +182,26 @@ QString save_game_metadata(const QString& collection_name, const QString& game_p
                            const QString& game_title, const QVariantMap& changes);
 /// The same for a collection: name, shortname, summary, description, assets.<kind>
 QString save_collection_metadata(const QString& collection_name, const QVariantMap& changes);
+
+/// The emulator a collection uses when its metadata has no launch command:
+/// ES-DE's default for its system if installed, else the first installed one.
+/// `collections`: (name, short name); `rom_roots`: their ROM folders.
+struct DefaultLaunch {
+    QString label;
+    QString command;  ///< empty: nothing installed for it
+};
+std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString, QString>>& collections,
+                                            const QStringList& rom_roots);
+
+/// A collection's own lines, for Settings > Edit metadata
+struct CollectionDetails {
+    QString short_name;
+    QString extensions;
+    QString launch;           ///< from its metadata; empty if none
+    QString default_label;    ///< used when `launch` is empty
+    QString default_command;
+};
+CollectionDetails collection_details(const QString& collection_name);
 
 /// Starts `command` with a game file. Returns an error, or empty.
 QString test_emulator_command(const QString& command, const QString& game_path);

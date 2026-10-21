@@ -34,6 +34,7 @@
 #endif
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -545,10 +546,61 @@ void set_merge_android_enabled(bool value)
     file.setValue(QStringLiteral("library/mergeAndroid"), value);
 }
 
+// A collection without a launch command in your metadata uses the
+// recommended emulator of its system (what Settings > Emulators marks as
+// recommended, if it's installed), until you pick one. Nothing is written.
+void apply_default_launches(std::vector<model::Collection*>& collections)
+{
+#ifdef WITH_COMPAT_ESDE
+    std::vector<model::Collection*> todo;
+    std::vector<std::pair<QString, QString>> keys;
+    QStringList rom_roots;
+    for (model::Collection* const coll : collections) {
+        if (!coll->commonLaunchCmd().isEmpty() || is_android_collection(*coll))
+            continue;
+        // only when some game has nothing to launch with
+        bool needed = false;
+        for (model::Game* const game : coll->gameList()->entries()) {
+            if (game->launchCmd().isEmpty()) {
+                needed = true;
+                break;
+            }
+        }
+        if (!needed)
+            continue;
+        todo.push_back(coll);
+        keys.emplace_back(coll->name(), coll->shortName());
+        const QString basedir = coll->commonLaunchCmdBasedir();
+        rom_roots.append(basedir.isEmpty() ? QString() : QFileInfo(basedir).absolutePath());
+    }
+    if (todo.empty())
+        return;
+    const std::vector<providers::esde::DefaultLaunch> defaults = providers::esde::default_launches(keys, rom_roots);
+    for (size_t i = 0; i < todo.size() && i < defaults.size(); i++) {
+        if (defaults[i].command.isEmpty())
+            continue;
+        model::Collection* const coll = todo[i];
+        coll->setCommonLaunchCmd(defaults[i].command);
+        for (model::Game* const game : coll->gameList()->entries()) {
+            if (game->launchCmd().isEmpty()) {
+                game->setLaunchCmd(defaults[i].command);
+                if (game->launchCmdBasedir().isEmpty())
+                    game->setLaunchCmdBasedir(coll->commonLaunchCmdBasedir());
+            }
+        }
+        Log::info(LOG_TAG, LOGMSG("`%1` launches with %2 (recommended; none set in its metadata)")
+            .arg(coll->name(), defaults[i].label));
+    }
+#else
+    Q_UNUSED(collections);
+#endif
+}
+
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
 {
     merge_android(collections, games, merge_android_enabled());
     apply_hidden(collections, games);
+    apply_default_launches(collections);
 }
 
 } // namespace library

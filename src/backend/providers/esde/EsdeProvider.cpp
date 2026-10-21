@@ -2506,6 +2506,84 @@ std::vector<EmulatorCollection> emulator_collections()
 }
 
 
+std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString, QString>>& collections,
+                                            const QStringList& rom_roots)
+{
+    std::vector<DefaultLaunch> out(collections.size());
+    if (collections.empty())
+        return out;
+    const EmulatorSetup setup;
+    for (size_t i = 0; i < collections.size(); i++) {
+        const QString system = setup.system_for(collections[i].second, collections[i].first);
+        if (system.isEmpty())
+            continue;
+        const std::vector<EmulatorChoice> choices = setup.choices_for(system, i < static_cast<size_t>(rom_roots.size()) ? rom_roots.at(static_cast<int>(i)) : QString());
+        // ES-DE's default if it's installed, else the first installed
+        // standalone emulator, else the first installed one
+        const EmulatorChoice* pick = nullptr;
+        for (const EmulatorChoice& c : choices) {
+            if (c.installed && c.recommended) { pick = &c; break; }
+        }
+        for (size_t c = 0; !pick && c < choices.size(); c++) {
+            if (choices[c].installed && !choices[c].retroarch)
+                pick = &choices[c];
+        }
+        for (size_t c = 0; !pick && c < choices.size(); c++) {
+            if (choices[c].installed)
+                pick = &choices[c];
+        }
+        if (pick) {
+            out[i].label = pick->label;
+            out[i].command = pick->command;
+        }
+    }
+    return out;
+}
+
+
+CollectionDetails collection_details(const QString& collection_name)
+{
+    CollectionDetails out;
+    std::vector<MetaFile> files = files_defining(collection_name);
+    std::stable_sort(files.begin(), files.end(), [](const MetaFile& a, const MetaFile& b) {
+        const bool a_import = QFileInfo(a.path).fileName() == IMPORT_FILE_NAME;
+        const bool b_import = QFileInfo(b.path).fileName() == IMPORT_FILE_NAME;
+        return !a_import && b_import;
+    });
+    QString rom_root;
+    for (const MetaFile& file : files) {
+        for (const MetaBlock& block : file.blocks) {
+            if (!block.is_collection || block.name != collection_name)
+                continue;
+            if (rom_root.isEmpty())
+                rom_root = QFileInfo(file.dir).absolutePath();
+            const auto value = [&block](std::initializer_list<const char*> keys) {
+                for (const char* key : keys) {
+                    if (const MetaEntry* e = block.entry(QString::fromLatin1(key)))
+                        return e->values.join(QStringLiteral(", "));
+                }
+                return QString();
+            };
+            if (out.short_name.isEmpty())
+                out.short_name = value({ "shortname" });
+            if (out.extensions.isEmpty())
+                out.extensions = value({ "extensions", "extension" });
+            if (out.launch.isEmpty()) {
+                const MetaEntry* e = block.entry(QStringLiteral("launch"));
+                if (!e)
+                    e = block.entry(QStringLiteral("command"));
+                if (e)
+                    out.launch = e->values.join(QLatin1Char(' '));
+            }
+        }
+    }
+    const std::vector<DefaultLaunch> defaults = default_launches({ { collection_name, out.short_name } }, { rom_root });
+    out.default_label = defaults.front().label;
+    out.default_command = defaults.front().command;
+    return out;
+}
+
+
 std::vector<GameEmulator> game_emulators(const QString& collection_name)
 {
     std::vector<GameEmulator> out;
@@ -2672,6 +2750,10 @@ QStringList aliases_of(const QString& key)
     if (key == QLatin1String("developer") || key == QLatin1String("publisher")
         || key == QLatin1String("genre") || key == QLatin1String("tag"))
         return { key, key % QLatin1Char('s') };
+    if (key == QLatin1String("launch"))
+        return { QStringLiteral("launch"), QStringLiteral("command") };
+    if (key == QLatin1String("extensions"))
+        return { QStringLiteral("extensions"), QStringLiteral("extension") };
     return { key };
 }
 

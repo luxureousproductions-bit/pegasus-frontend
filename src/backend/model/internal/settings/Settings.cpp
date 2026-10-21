@@ -885,6 +885,23 @@ QString Settings::saveCollectionMetadata(const QString& collection_name, const Q
 #endif
 }
 
+QVariantMap Settings::collectionDetails(const QString& collection_name) const
+{
+#ifdef WITH_COMPAT_ESDE
+    const providers::esde::CollectionDetails d = providers::esde::collection_details(collection_name);
+    return QVariantMap {
+        { QStringLiteral("shortname"), d.short_name },
+        { QStringLiteral("extensions"), d.extensions },
+        { QStringLiteral("launch"), d.launch },
+        { QStringLiteral("defaultLabel"), d.default_label },
+        { QStringLiteral("defaultCommand"), d.default_command },
+    };
+#else
+    Q_UNUSED(collection_name);
+    return {};
+#endif
+}
+
 QString Settings::firstExistingDir(const QStringList& paths) const
 {
     for (const QString& path : paths) {
