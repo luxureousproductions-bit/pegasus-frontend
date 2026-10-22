@@ -99,6 +99,71 @@ FocusScope {
         message = hide ? qsTr("\"%1\" is hidden from every theme once you leave Library.").arg(title) + api.tr
                        : qsTr("\"%1\" comes back once you leave Library.").arg(title) + api.tr;
     }
+    // -- Launch commands: a list to pick from, a custom one at the bottom ---------
+
+    property var choices: []          // the open collection's emulators
+    property string choicesFor: ""
+    function launchPicker(field) {
+        if (choicesFor !== collName) {
+            choices = Internal.settings.emulatorChoices(collName, collDetails.shortname || "", collDetails.romRoot || "");
+            choicesFor = collName;
+        }
+        var currentCmd = String(current("launch") || "");
+        var entries = [];
+        var mark = function(text, on) { return on ? text + "   ✓" : text; };
+        if (page === "game") {
+            entries.push({ "act": "global", "text": mark(qsTr("Global (the collection's)") + api.tr, currentCmd === "") });
+        }
+        else if (collDetails.defaultLabel) {
+            entries.push({ "act": "global", "text": mark(qsTr("Recommended: %1 (until you pick one)").arg(collDetails.defaultLabel) + api.tr, currentCmd === "") });
+        }
+        for (var i = 0; i < choices.length; i++) {
+            var c = choices[i];
+            if (!c.installed)
+                continue;
+            entries.push({ "act": "cmd", "command": c.command,
+                           "text": mark(c.label + (c.recommended ? qsTr(" · recommended") + api.tr : ""),
+                                        currentCmd !== "" && sameCommand(c.command, currentCmd)) });
+        }
+        entries.push({ "act": "custom", "text": qsTr("Custom command...") + api.tr });
+        chooser.openFor(field.label, entries, function(act, entry) {
+            if (act === "global")
+                root.setEdit("launch", "");
+            else if (act === "cmd")
+                root.setEdit("launch", (root.page === "game" && entry.command === root.collectionLaunch) ? "" : entry.command);
+            else if (act === "custom")
+                fieldDialog.openFor(field);
+        });
+    }
+    function sameCommand(a, b) {
+        return String(a).replace(/\s+/g, " ").trim() === String(b).replace(/\s+/g, " ").trim();
+    }
+
+    // -- Pegasus X's data folder: picked art is copied there --------------------
+
+    property string dataDir: Internal.settings.dataDir
+    // the folder each kind of art goes in (ES-DE's names)
+    readonly property var artDataFolders: ({
+        "art:video": "videos", "art:screenshot": "screenshots", "art:titlescreen": "titlescreens",
+        "art:fanart": "fanart", "art:box3d": "3dboxes", "art:box2d": "covers", "art:boxback": "backcovers",
+        "art:physical": "physicalmedia", "art:miximage": "miximages", "art:logo": "marquees",
+        "art:manual": "manuals", "cart:background": "system", "cart:logo": "system",
+    })
+    function storeArt(key, path) {
+        if (dataDir === "")
+            return path;
+        var name = key === "cart:background" ? "background"
+                 : key === "cart:logo" ? "logo"
+                 : String(current("title") || (game ? game.title : "art"));
+        return Internal.settings.importArt(path, collName, artDataFolders[key] || "art", name);
+    }
+    function pickDataFolder() {
+        filePicker.pickFolders = true;
+        filePicker.fileExtensions = [];
+        filePicker.openAt(dataDir);
+        filePicker.focus = true;
+    }
+
     function isAndroidCollection(c) {
         if (!c)
             return false;
@@ -591,6 +656,9 @@ FocusScope {
                 out.push({ "kind": "mergeandroid", "text": qsTr("Merge Android Games into Android") + api.tr,
                            "value": root.mergeAndroid ? qsTr("On") + api.tr : qsTr("Off") + api.tr });
                 var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
+                out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
+                           "value": root.dataDir !== "" ? root.dataDir : qsTr("not set: art stays where you pick it") + api.tr,
+                           "muted": root.dataDir === "" });
                 out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
                            "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
                            "muted": hiddenCount === 0 });
@@ -808,8 +876,14 @@ FocusScope {
                 root.setGameHidden(root.game.key, root.current("title"), !row.hidden);
             else if (row.kind === "section_android")
                 root.androidActions(root.game);
-            else if (row.kind === "field")
-                fieldDialog.openFor(row.field);
+            else if (row.kind === "field") {
+                if (row.field.type === "command")
+                    root.launchPicker(row.field);
+                else
+                    fieldDialog.openFor(row.field);
+            }
+            else if (row.kind === "datadir")
+                root.pickDataFolder();
             else if (row.kind === "art")
                 root.pickArt(row.key);
             else if (row.kind === "addart")
@@ -1034,6 +1108,7 @@ FocusScope {
             }
             startDir = Internal.settings.firstExistingDir(candidates) || gameDir;
         }
+        filePicker.pickFolders = false;
         filePicker.fileExtensions = artFilter(key);
         filePicker.openAt(startDir);
         filePicker.focus = true;
@@ -1061,10 +1136,22 @@ FocusScope {
         Behavior on opacity { PropertyAnimation { duration: 300 } }
 
         onCancel: list.focus = true
+        dataFolder: root.dataDir
         onPickFile: {
-            root.setEdit(root.artKey, file_path);
+            if (pickFolders)
+                return;
+            // into the data folder, if there is one
+            root.setEdit(root.artKey, root.storeArt(root.artKey, file_path));
             list.focus = true;
         }
+        onPickFolder: {
+            Internal.settings.dataDir = dir_path;
+            root.dataDir = dir_path;
+            root.message = qsTr("Art you pick from now on is copied into %1.").arg(dir_path) + api.tr;
+            pickFolders = false;
+            list.focus = true;
+        }
+        onNewFolderRequested: nameDialog.openFor(parent_path)
     }
 
 
@@ -1094,7 +1181,7 @@ FocusScope {
             var e = entries[index];
             list.focus = true;
             if (cb && e)
-                cb(e.act);
+                cb(e.act, e);
         }
 
         Keys.onPressed: {
@@ -1532,6 +1619,104 @@ FocusScope {
                     }
                 }
             }
+        }
+    }
+
+    // -- A name for a new folder ---------------------------------------------------
+
+    FocusScope {
+        id: nameDialog
+
+        property string parentPath: ""
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+        z: 6
+
+        function openFor(path) {
+            parentPath = path;
+            nameInput.text = "";
+            nameKeyboard.row = 1;
+            nameKeyboard.col = 0;
+            focus = true;
+            nameKeyboard.focus = true;
+        }
+        function finish() {
+            var name = nameInput.text.trim().replace(/[\\/:*?<>|\u0022]/g, "_");
+            if (name === "")
+                return;
+            var path = parentPath + "/" + name;
+            if (Internal.settings.makeDir(path))
+                filePicker.openAt(path);
+            filePicker.focus = true;
+        }
+
+        Keys.onPressed: {
+            if (api.keys.isCancel(event) && !event.isAutoRepeat) {
+                event.accepted = true;
+                filePicker.focus = true;
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.5
+            MouseArea { anchors.fill: parent }
+        }
+        Rectangle {
+            width: Math.min(parent.width * 0.7, vpx(800))
+            height: nameColumn.height + vpx(40)
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: vpx(30)
+            color: "#444"
+            radius: vpx(8)
+            Column {
+                id: nameColumn
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: vpx(20)
+                spacing: vpx(12)
+                Text {
+                    width: parent.width
+                    text: qsTr("New folder in %1").arg(nameDialog.parentPath) + api.tr
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(18)
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideMiddle
+                }
+                Rectangle {
+                    width: parent.width
+                    height: vpx(52)
+                    color: "#333"
+                    border.color: "#3aa"
+                    border.width: vpx(2)
+                    TextInput {
+                        id: nameInput
+                        anchors.fill: parent
+                        anchors.leftMargin: vpx(14)
+                        anchors.rightMargin: vpx(14)
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(20)
+                        cursorVisible: nameDialog.visible
+                        activeFocusOnPress: false
+                        clip: true
+                    }
+                }
+            }
+        }
+        OnScreenKeyboard {
+            id: nameKeyboard
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: vpx(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            keyH: vpx(40)
+            target: nameInput
+            onDone: nameDialog.finish()
         }
     }
 }

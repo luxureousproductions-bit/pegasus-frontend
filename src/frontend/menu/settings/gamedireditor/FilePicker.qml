@@ -32,6 +32,12 @@ FocusScope {
     signal cancel
     signal pick(string dir_path)
     signal pickFile(string file_path)  // Pegasus X: the picked file itself
+    // Pegasus X: picking a folder instead of a file ("Use this folder"), and
+    // asking the host for a name to make a new one in the current folder
+    property bool pickFolders: false
+    signal pickFolder(string dir_path)
+    signal newFolderRequested(string parent_path)
+    readonly property string currentFolder: folderModel.folder
 
     anchors.fill: parent
 
@@ -55,8 +61,13 @@ FocusScope {
     // game directories and Pegasus X's data folder. LB also goes one folder up.
     property string dataFolder: ""
     readonly property var shortcuts: {
-        var out = [ { "t": qsTr("Drives") + api.tr, "act": "drives" },
-                    { "t": qsTr("Up a folder") + api.tr, "act": "up" } ];
+        var out = [];
+        if (pickFolders) {
+            out.push({ "t": qsTr("Use this folder") + api.tr, "act": "use" });
+            out.push({ "t": qsTr("New folder...") + api.tr, "act": "new" });
+        }
+        out.push({ "t": qsTr("Drives") + api.tr, "act": "drives" });
+        out.push({ "t": qsTr("Up a folder") + api.tr, "act": "up" });
         if (startFolder !== "")
             out.push({ "t": qsTr("Where it opened") + api.tr, "act": "go", "path": startFolder });
         if (dataFolder !== "")
@@ -67,6 +78,14 @@ FocusScope {
         return out;
     }
     function jump(entry) {
+        if (entry.act === "use") {
+            root.pickFolder(folderModel.folder);
+            return;
+        }
+        if (entry.act === "new") {
+            root.newFolderRequested(folderModel.folder);
+            return;
+        }
         if (entry.act === "up")
             enter("..");
         else if (entry.act === "drives") {
