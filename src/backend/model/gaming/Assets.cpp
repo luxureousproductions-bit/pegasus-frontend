@@ -16,6 +16,9 @@
 
 
 #include "Assets.h"
+#include <QStringBuilder>
+#include <QSet>
+#include <QFileInfo>
 
 #include <QUrl>
 
@@ -60,6 +63,43 @@ Assets& Assets::add_uri(AssetType key, QString url)
         target.append(std::move(url));
 
     return *this;
+}
+
+void Assets::remove_duplicate_names()
+{
+    // only lists with more than one file are looked at, so this costs
+    // next to nothing for most games
+    for (auto& pair : m_asset_lists) {
+        QStringList& list = pair.second;
+        if (list.size() < 2)
+            continue;
+        QSet<QString> names;
+        QSet<QString> sizes;  // "<bytes>.<ext>": the same file copied elsewhere
+        QStringList kept;
+        for (const QString& url : qAsConst(list)) {
+            const QString name = url.mid(url.lastIndexOf(QLatin1Char('/')) + 1).toLower();
+            if (!name.isEmpty() && names.contains(name))
+                continue;
+
+            QString local;
+            if (url.startsWith(QLatin1String("file:")))
+                local = QUrl(url).toLocalFile();
+            else if (url.startsWith(QLatin1Char('/')))
+                local = url;
+            if (!local.isEmpty()) {
+                const QFileInfo info(local);
+                if (info.exists()) {
+                    const QString size_key = QString::number(info.size()) % QLatin1Char('.') % info.suffix().toLower();
+                    if (sizes.contains(size_key))
+                        continue;
+                    sizes.insert(size_key);
+                }
+            }
+            names.insert(name);
+            kept.append(url);
+        }
+        list = kept;
+    }
 }
 
 } // namespace model

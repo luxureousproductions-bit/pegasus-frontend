@@ -276,15 +276,15 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
         android_list = all;
     }
     else {
-        QSet<QString> game_titles;
-        for (model::Game* const game : game_side)
-            game_titles.insert(game->title());
-        // Android Games is its own collection: its games aren't listed twice
-        for (model::Game* const game : app_side) {
-            if (!in_game_side.contains(game) && !game_titles.contains(game->title()))
+        // Android Games is its own collection: every entry in the Games
+        // section goes there (also apps you moved to Games in Settings >
+        // Library), the apps and emulators stay in Android
+        for (model::Game* const game : all) {
+            if (kind_of[game] == QLatin1String("Game"))
+                games_list.push_back(game);
+            else
                 android_list.push_back(game);
         }
-        games_list = game_side;
     }
     const std::vector<model::Game*> dropped_a = dedupe_by_title(android_list);
     const std::vector<model::Game*> dropped_g = dedupe_by_title(games_list);
@@ -314,7 +314,18 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
         target = nullptr;  // nothing left in it: goes with the merged ones below
     if (target)
         target->gameList()->update(std::vector<model::Game*>(android_list));
-    model::Collection* const games_target = (!merge_games && !games_list.empty()) ? game_sources.front() : nullptr;
+    model::Collection* games_target = nullptr;
+    if (!merge_games && !games_list.empty()) {
+        if (!game_sources.empty()) {
+            games_target = game_sources.front();
+        }
+        else {
+            games_target = new model::Collection(QStringLiteral("Android Games"));
+            games_target->setShortName(QStringLiteral("androidgames"));
+            games_target->setGames(std::vector<model::Game*>(games_list));
+            collections.push_back(games_target);
+        }
+    }
     if (games_target)
         games_target->gameList()->update(std::vector<model::Game*>(games_list));
 
@@ -678,6 +689,10 @@ void apply_library_rules(std::vector<model::Collection*>& collections, std::vect
 {
     merge_android(collections, games, merge_android_enabled());
     dedupe_collections(collections, games);
+    // the same picture found twice (eg. in your metadata and in a media
+    // folder, under two paths) shows once
+    for (model::Game* const game : games)
+        game->assetsMut().remove_duplicate_names();
     apply_hidden(collections, games);
     apply_default_launches(collections);
 }

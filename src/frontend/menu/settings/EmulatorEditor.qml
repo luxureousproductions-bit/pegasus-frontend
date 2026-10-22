@@ -199,11 +199,11 @@ FocusScope {
             return c.currentLabel !== "" ? c.currentLabel : qsTr("the collection's custom command") + api.tr;
         for (var i = 0; i < c.options.length; i++) {
             if (c.options[i].recommended && c.options[i].installed)
-                return qsTr("recommended: %1").arg(c.options[i].label) + api.tr;
+                return c.options[i].label;
         }
         for (var j = 0; j < c.options.length; j++) {
             if (c.options[j].installed && !c.options[j].retroarch)
-                return qsTr("recommended: %1").arg(c.options[j].label) + api.tr;
+                return c.options[j].label;
         }
         return qsTr("none set") + api.tr;
     }
@@ -600,7 +600,7 @@ FocusScope {
             for (var i = 0; i < root.games.length; i++) {
                 var cmd = root.gameCommands[root.games[i].path];
                 out.push({ "kind": "game", "text": root.games[i].title, "game": root.games[i],
-                           "own": !!cmd, "value": cmd ? root.labelOf(c, cmd) : inherit });
+                           "own": !!cmd, "value": cmd ? root.labelOf(c, cmd) : (inherit !== "" ? qsTr("Default: %1").arg(inherit) + api.tr : "") });
             }
             return out;
         }
@@ -811,7 +811,7 @@ FocusScope {
             if (orig)
                 out.push(orig);
             if (game)
-                out.push({ "kind": "inherit", "text": qsTr("Same as the collection: %1").arg(root.collectionAppName(c)) + api.tr, "current": current === "" && !(orig && orig.current) });
+                out.push({ "kind": "inherit", "text": qsTr("Default: %1").arg(root.collectionAppName(c)) + api.tr, "current": current === "" && !(orig && orig.current) });
             else if (!orig && c.command && c.currentLabel === "")
                 out.push({ "kind": "keep", "text": qsTr("Your metadata's command") + api.tr, "current": true });
 

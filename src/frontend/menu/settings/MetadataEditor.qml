@@ -128,10 +128,10 @@ FocusScope {
         var entries = [];
         var mark = function(text, on) { return on ? text + "   ✓" : text; };
         if (page === "game") {
-            entries.push({ "act": "global", "text": mark(qsTr("Same as the collection: %1").arg(collectionLaunchLabel) + api.tr, currentCmd === "") });
+            entries.push({ "act": "global", "text": mark(qsTr("Default: %1").arg(collectionLaunchLabel) + api.tr, currentCmd === "") });
         }
         else if (collDetails.defaultLabel) {
-            entries.push({ "act": "global", "text": mark(qsTr("Recommended: %1 (until you pick one)").arg(collDetails.defaultLabel) + api.tr, currentCmd === "") });
+            entries.push({ "act": "global", "text": mark(qsTr("Default: %1 (until you pick one)").arg(collDetails.defaultLabel) + api.tr, currentCmd === "") });
         }
         for (var i = 0; i < choices.length; i++) {
             var c = choices[i];
@@ -168,10 +168,12 @@ FocusScope {
     function storeArt(key, path) {
         if (dataDir === "")
             return path;
-        var name = key === "cart:background" ? "background"
-                 : key === "cart:logo" ? "logo"
+        var second = key.indexOf(p2) === 0;
+        var plain = second ? key.substring(p2.length) : key;
+        var name = plain === "cart:background" ? "background"
+                 : plain === "cart:logo" ? "logo"
                  : String(current("title") || (game ? game.title : "art"));
-        return Internal.settings.importArt(path, collName, artDataFolders[key] || "art", name);
+        return Internal.settings.importArt(path, second ? coll2Name : gameColl(), artDataFolders[plain] || "art", name);
     }
     function pickDataFolder() {
         filePicker.pickFolders = true;
@@ -235,6 +237,33 @@ FocusScope {
         { "key": "launch", "label": qsTr("Launch command") + api.tr, "type": "command" },
     ]
     property var collDetails: ({})   // the open collection's own lines (launch, extensions, default)
+    // Android with Merge off: Android Games is edited on the same page, its
+    // keys start with p2 ("g:name", "g:cart:logo")
+    readonly property string p2: "g:"
+    property string coll2Name: ""
+    property var coll2Obj: null
+    property var coll2Details: ({})
+    readonly property var coll2Fields: [
+        { "key": "g:name", "label": qsTr("Name") + api.tr, "type": "text" },
+        { "key": "g:shortname", "label": qsTr("Short name") + api.tr, "type": "text" },
+    ]
+    // the collection a game is saved in (on the Android page, Android or Android Games)
+    function gameColl() {
+        return (page === "game" && game && game.coll) ? game.coll : collName;
+    }
+    function isAndroidGamesCollection(c) {
+        if (!c)
+            return false;
+        return String(c.name).toLowerCase() === "android games" || String(c.shortName || "").toLowerCase() === "androidgames";
+    }
+    function findCollection(test) {
+        for (var i = 0; i < api.collections.count; i++) {
+            var c = api.collections.get(i);
+            if (test(c))
+                return c;
+        }
+        return null;
+    }
     property var gameCommands: ({})  // game path -> its own launch command
     // the command a game uses when it has none of its own
     readonly property string collectionLaunch: {
@@ -243,13 +272,12 @@ FocusScope {
         return own !== "" ? own : (collDetails.defaultCommand || "");
     }
     property var savedColl: ({})     // the collection's values saved this time
-    // what the collection launches with, by name: "recommended: GameNative"
+    // what the collection launches with, by name: "GameNative"
     readonly property string collectionLaunchLabel: {
         var own = (page === "collection" && ("launch" in edits)) ? edits["launch"]
                 : ("launch" in savedColl) ? savedColl["launch"] : (collDetails.launch || "");
         if (own === "")
-            return collDetails.defaultLabel ? qsTr("recommended: %1").arg(collDetails.defaultLabel) + api.tr
-                                            : qsTr("none set") + api.tr;
+            return collDetails.defaultLabel ? collDetails.defaultLabel : qsTr("none set") + api.tr;
         for (var i = 0; i < choices.length; i++) {
             if (sameCommand(choices[i].command, own))
                 return choices[i].label;
@@ -379,7 +407,7 @@ FocusScope {
         return o;
     }
     function readCollection(c) {
-        return {
+        var o = {
             "name": c.name,
             "shortname": collDetails.shortname || c.shortName || "",
             "extensions": collDetails.extensions || "",
@@ -388,6 +416,13 @@ FocusScope {
             "cart:background": localPath(c.assets ? c.assets.background : ""),
             "cart:logo": localPath(c.assets ? c.assets.logo : ""),
         };
+        if (coll2Obj) {
+            o[p2 + "name"] = coll2Obj.name;
+            o[p2 + "shortname"] = coll2Details.shortname || coll2Obj.shortName || "";
+            o[p2 + "cart:background"] = localPath(coll2Obj.assets ? coll2Obj.assets.background : "");
+            o[p2 + "cart:logo"] = localPath(coll2Obj.assets ? coll2Obj.assets.logo : "");
+        }
+        return o;
     }
 
     // -- Pages -----------------------------------------------------------------------
@@ -395,10 +430,15 @@ FocusScope {
     readonly property var collections: {
         var out = [];
         var seen = {};
+        var android = mergeAndroid ? null : findCollection(function(x) { return isAndroidCollection(x) && !isAndroidGamesCollection(x); });
+        var androidGames = android ? findCollection(isAndroidGamesCollection) : null;
         for (var i = 0; i < api.collections.count; i++) {
             var c = api.collections.get(i);
             seen[c.name] = true;
-            out.push({ "name": c.name, "count": c.games.count, "obj": c, "loaded": true });
+            if (androidGames && c === androidGames)
+                continue;  // on Android's page
+            var n = c.games.count + ((androidGames && c === android) ? androidGames.games.count : 0);
+            out.push({ "name": c.name, "count": n, "obj": c, "loaded": true });
         }
         // hidden ones aren't in the library any more
         for (var h = 0; h < hidden.collections.length; h++) {
@@ -419,7 +459,20 @@ FocusScope {
         }
         collName = entry.name;
         collObj = entry.obj;
-        var list_games = Internal.settings.collectionGames(api.collections, entry.name);
+        // Android, Merge off: Android Games too, on this page
+        var second = (!mergeAndroid && isAndroidCollection(entry.obj) && !isAndroidGamesCollection(entry.obj))
+            ? findCollection(isAndroidGamesCollection) : null;
+        coll2Obj = second;
+        coll2Name = second ? second.name : "";
+        coll2Details = second ? Internal.settings.collectionDetails(second.name) : ({});
+        var tag = function(list_in, name) {
+            for (var t = 0; t < list_in.length; t++)
+                list_in[t].coll = name;
+            return list_in;
+        };
+        var list_games = tag(Internal.settings.collectionGames(api.collections, entry.name), entry.name);
+        if (second)
+            list_games = list_games.concat(tag(Internal.settings.collectionGames(api.collections, second.name), second.name));
         list_games.sort(function(a, b) { return root.byName(a.title, b.title); });
         games = list_games;
         savedTitles = {};
@@ -427,7 +480,13 @@ FocusScope {
         collDetails = Internal.settings.collectionDetails(entry.name);
         choices = Internal.settings.emulatorChoices(entry.name, collDetails.shortname || "", collDetails.romRoot || "");
         choicesFor = entry.name;
-        gameCommands = Internal.settings.gameEmulators(entry.name);
+        var cmds = Internal.settings.gameEmulators(entry.name);
+        if (second) {
+            var cmds2 = Internal.settings.gameEmulators(second.name);
+            for (var ck in cmds2)
+                cmds[ck] = cmds2[ck];
+        }
+        gameCommands = cmds;
         orig = readCollection(entry.obj);
         saved = {};
         edits = {};
@@ -442,7 +501,7 @@ FocusScope {
         orig = readGame(entry.obj);
         saved = {};
         edits = {};
-        loc = Internal.settings.metadataLocation(collName, entry.path || entry.key);
+        loc = Internal.settings.metadataLocation(entry.coll || collName, entry.path || entry.key);
         message = "";
         page = "game";
         list.currentIndex = 1;
@@ -492,6 +551,8 @@ FocusScope {
             var name = collName;
             page = "collections";
             collName = "";
+            coll2Name = "";
+            coll2Obj = null;
             for (var j = 0; j < list.rows.length; j++) {
                 if (list.rows[j].text === name) {
                     list.currentIndex = j;
@@ -558,12 +619,17 @@ FocusScope {
         ["cart:background", qsTr("Tile background") + api.tr, "assets.background"],
         ["cart:logo", qsTr("Logo") + api.tr, "assets.logo"],
     ]
-    function collectionChanges() {
+    // prefix "": the open collection's changes; p2: Android Games'
+    function collectionChanges(prefix) {
         var out = {};
         for (var key in edits) {
-            var mapped = key;
+            var mine = prefix !== "" ? key.indexOf(prefix) === 0 : key.indexOf(p2) !== 0;
+            if (!mine)
+                continue;
+            var plain = key.substring(prefix.length);
+            var mapped = plain;
             for (var i = 0; i < collectionArt.length; i++) {
-                if (collectionArt[i][0] === key)
+                if (collectionArt[i][0] === plain)
                     mapped = collectionArt[i][2];
             }
             out[mapped] = edits[key];
@@ -574,9 +640,18 @@ FocusScope {
     function save() {
         if (!dirty)
             return true;
-        var error = page === "game"
-            ? Internal.settings.saveGameMetadata(collName, game.path || game.key, current("title"), toChanges())
-            : Internal.settings.saveCollectionMetadata(collName, collectionChanges());
+        var error = "";
+        if (page === "game") {
+            error = Internal.settings.saveGameMetadata(gameColl(), game.path || game.key, current("title"), toChanges());
+        }
+        else {
+            var mainChanges = collectionChanges("");
+            if (Object.keys(mainChanges).length > 0)
+                error = Internal.settings.saveCollectionMetadata(collName, mainChanges);
+            var secondChanges = coll2Name !== "" ? collectionChanges(p2) : {};
+            if (error === "" && Object.keys(secondChanges).length > 0)
+                error = Internal.settings.saveCollectionMetadata(coll2Name, secondChanges);
+        }
         if (error !== "") {
             message = error;
             return false;
@@ -611,6 +686,8 @@ FocusScope {
                 savedColl = merged;
                 if ("name" in merged)
                     collName = merged["name"];
+                if ((p2 + "name") in merged)
+                    coll2Name = merged[p2 + "name"];
                 if ("launch" in merged) {
                     // the collection's games without their own use it right away
                     for (var gi = 0; gi < games.length; gi++) {
@@ -622,7 +699,7 @@ FocusScope {
         });
         anySaved = true;
         message = qsTr("Saved in %1. Every theme shows it once you leave Edit metadata.").arg(where.split("/").slice(-2).join("/")) + api.tr;
-        loc = Internal.settings.metadataLocation(collName, page === "game" ? (game.path || game.key) : "");
+        loc = Internal.settings.metadataLocation(gameColl(), page === "game" ? (game.path || game.key) : "");
         return true;
     }
 
@@ -746,9 +823,9 @@ FocusScope {
                 var empty = f.empty || "—";
                 if (f.key === "launch") {
                     empty = root.page === "game"
-                        ? root.collectionLaunchLabel
+                        ? qsTr("Default: %1").arg(root.collectionLaunchLabel) + api.tr
                         : (root.collDetails.defaultLabel
-                            ? qsTr("recommended: %1").arg(root.collDetails.defaultLabel) + api.tr
+                            ? qsTr("Default: %1").arg(root.collDetails.defaultLabel) + api.tr
                             : qsTr("none, pick one in Emulators") + api.tr);
                 }
                 out.push({ "kind": "field", "text": f.label, "field": f,
@@ -767,6 +844,26 @@ FocusScope {
                     out.push({ "kind": "art", "text": ca[1], "key": ca[0], "icon": false,
                                "value": caValue === "" ? qsTr("the theme's own") + api.tr : root.fileName(caValue),
                                "muted": caValue === "", "edited": ca[0] in root.edits, "done": ca[0] in root.saved });
+                }
+                if (root.coll2Name !== "") {
+                    out.push({ "kind": "section", "text": qsTr("Android Games collection") + api.tr });
+                    var c2Hidden = root.isCollectionHidden(root.coll2Name);
+                    out.push({ "kind": "hidecoll2", "text": qsTr("Show in themes") + api.tr, "hidden": c2Hidden,
+                               "value": c2Hidden ? qsTr("Hidden") + api.tr : qsTr("Shown") + api.tr });
+                    for (i = 0; i < root.coll2Fields.length; i++) {
+                        var f2 = root.coll2Fields[i];
+                        var v2 = root.shown(f2, root.current(f2.key));
+                        out.push({ "kind": "field", "text": f2.label, "field": f2, "value": v2 !== "" ? v2 : "—",
+                                   "muted": v2 === "", "edited": f2.key in root.edits, "done": f2.key in root.saved });
+                    }
+                    for (i = 0; i < root.collectionArt.length; i++) {
+                        var key2 = root.p2 + root.collectionArt[i][0];
+                        var a2 = root.current(key2);
+                        out.push({ "kind": "art", "text": qsTr("Tile %1").arg(root.collectionArt[i][1].toLowerCase()) + api.tr,
+                                   "key": key2, "icon": false,
+                                   "value": a2 === "" ? qsTr("the theme's own") + api.tr : root.fileName(a2),
+                                   "muted": a2 === "", "edited": key2 in root.edits, "done": key2 in root.saved });
+                    }
                 }
             }
             if (root.page === "game") {
@@ -820,6 +917,8 @@ FocusScope {
                 }
                 // hidden before this time: not in the library any more
                 var gone = root.hiddenGamesOf(root.collName);
+                if (root.coll2Name !== "")
+                    gone = gone.concat(root.hiddenGamesOf(root.coll2Name));
                 for (i = 0; i < gone.length; i++) {
                     if (!known[gone[i].path])
                         groups[0].rows.push({ "kind": "unhidegame", "text": gone[i].title, "entry": gone[i], "hidden": true,
@@ -903,6 +1002,8 @@ FocusScope {
             }
             else if (row.kind === "hidecoll")
                 root.setCollectionHidden(root.collName, !row.hidden);
+            else if (row.kind === "hidecoll2")
+                root.setCollectionHidden(root.coll2Name, !row.hidden);
             else if (row.kind === "hidegame")
                 root.setGameHidden(root.game.key, root.current("title"), !row.hidden);
             else if (row.kind === "section_android")
@@ -1324,12 +1425,15 @@ FocusScope {
             }
             if (f.picks && root.genres.length === 0)
                 root.genres = Internal.settings.libraryGenres(api.allGames);
+            suggestBar.current = 0;
+            suggestBar.items = [];
             kb.target = multiLine ? multiInput : lineInput;
             kb.multiLine = multiLine;
             kb.row = 1;
             kb.col = 0;
             focus = true;
             kb.focus = true;
+            suggestBar.update();
         }
         function closeDialog() {
             Qt.inputMethod.hide();
@@ -1366,7 +1470,7 @@ FocusScope {
                     hint.text = qsTr("Type the date as YYYY-MM-DD (or just the year).") + api.tr;
                     return;
                 }
-                if ((f.key === "title" || f.key === "name") && value === "") {
+                if ((f.key === "title" || f.key === "name" || f.key === "g:name") && value === "") {
                     hint.text = qsTr("The name can't be empty.") + api.tr;
                     return;
                 }
@@ -1381,16 +1485,6 @@ FocusScope {
             closeDialog();
             root.setEdit(f.key, value);
         }
-        function addPick(text) {
-            var lines = multiInput.text.split("\n").map(function(x) { return x.trim(); }).filter(function(x) { return x !== ""; });
-            for (var i = 0; i < lines.length; i++) {
-                if (lines[i].toLowerCase() === text.toLowerCase())
-                    return;
-            }
-            lines.push(text);
-            multiInput.text = lines.join("\n");
-        }
-
         Keys.onPressed: {
             if (api.keys.isCancel(event) && !event.isAutoRepeat) {
                 event.accepted = true;
@@ -1418,7 +1512,136 @@ FocusScope {
             z: 1
             keyH: vpx(40)
             onDone: fieldDialog.finish()
-            onLeaveUp: actionRow.focus = true
+            onLeaveUp: (suggestBar.visible ? suggestBar : actionRow).focus = true
+        }
+
+        // genres you have, right above the keyboard, matching the line you're
+        // typing (a few at a time: no long row to scroll through)
+        FocusScope {
+            id: suggestBar
+
+            readonly property bool wanted: !!fieldDialog.field && !!fieldDialog.field.picks
+            readonly property var lowered: root.genres.map(function(x) { return String(x).toLowerCase(); })
+            property var items: []
+            property int current: 0
+            property bool pending: false
+
+            visible: wanted && items.length > 0
+            anchors.bottom: kb.top
+            anchors.bottomMargin: vpx(8)
+            anchors.horizontalCenter: kb.horizontalCenter
+            width: kb.width
+            height: vpx(42)
+            z: 1
+
+            // once per change of text or cursor, after the key is handled
+            function update() {
+                if (!wanted || pending)
+                    return;
+                pending = true;
+                Qt.callLater(refresh);
+            }
+            function lineBounds() {
+                var t = multiInput.text;
+                var c = multiInput.cursorPosition;
+                var start = t.lastIndexOf("\n", c - 1) + 1;
+                var end = t.indexOf("\n", c);
+                return { "start": start, "end": end < 0 ? t.length : end };
+            }
+            function refresh() {
+                pending = false;
+                if (!wanted) {
+                    items = [];
+                    return;
+                }
+                var t = multiInput.text;
+                var b = lineBounds();
+                var typed = t.substring(b.start, b.end).trim().toLowerCase();
+                // the other lines: already in the list
+                var have = {};
+                var lines = (t.substring(0, b.start) + t.substring(b.end)).split("\n");
+                for (var l = 0; l < lines.length; l++)
+                    have[lines[l].trim().toLowerCase()] = true;
+                var starts = [], inside = [];
+                var max = 7;
+                for (var i = 0; i < lowered.length && starts.length < max; i++) {
+                    var g = lowered[i];
+                    if (have[g] || g === typed)
+                        continue;
+                    if (typed === "" || g.indexOf(typed) === 0)
+                        starts.push(root.genres[i]);
+                    else if (inside.length < max && g.indexOf(typed) > 0)
+                        inside.push(root.genres[i]);
+                }
+                var next = starts.concat(inside).slice(0, max);
+                if (JSON.stringify(next) !== JSON.stringify(items))
+                    items = next;
+                if (current >= items.length)
+                    current = Math.max(0, items.length - 1);
+                if (items.length === 0 && activeFocus)
+                    kb.focus = true;
+            }
+            // the line you're on becomes the genre, then a new line for the next
+            function apply(index) {
+                var name = items[index];
+                if (name === undefined)
+                    return;
+                var t = multiInput.text;
+                var b = lineBounds();
+                var before = t.substring(0, b.start) + name;
+                if (b.end >= t.length) {
+                    multiInput.text = before + "\n";
+                    multiInput.cursorPosition = before.length + 1;
+                }
+                else {
+                    multiInput.text = before + t.substring(b.end);
+                    multiInput.cursorPosition = before.length + 1;
+                }
+                current = 0;
+                kb.focus = true;
+            }
+
+            Keys.onLeftPressed: { if (current > 0) current--; }
+            Keys.onRightPressed: { if (current < items.length - 1) current++; }
+            Keys.onUpPressed: actionRow.focus = true
+            Keys.onDownPressed: kb.focus = true
+            Keys.onPressed: {
+                if (api.keys.isAccept(event) && !event.isAutoRepeat) {
+                    event.accepted = true;
+                    apply(current);
+                }
+            }
+
+            Row {
+                anchors.centerIn: parent
+                spacing: vpx(8)
+                Repeater {
+                    model: suggestBar.items
+                    delegate: Rectangle {
+                        readonly property bool highlighted: suggestBar.activeFocus && index === suggestBar.current
+                        width: Math.min(suggestText.implicitWidth + vpx(24), vpx(220))
+                        height: suggestBar.height
+                        radius: vpx(6)
+                        color: highlighted ? "#3aa" : "#333"
+                        border.color: "#3aa"
+                        border.width: highlighted ? 0 : vpx(1)
+                        Text {
+                            id: suggestText
+                            width: Math.min(implicitWidth, vpx(196))
+                            text: modelData
+                            elide: Text.ElideRight
+                            color: parent.highlighted ? "#111" : "#9dd"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(17)
+                            anchors.centerIn: parent
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: suggestBar.apply(index)
+                        }
+                    }
+                }
+            }
         }
 
         Rectangle {
@@ -1525,58 +1748,20 @@ FocusScope {
                             font.pixelSize: vpx(18)
                             wrapMode: TextEdit.Wrap
                             cursorVisible: fieldDialog.visible
+                            onTextChanged: suggestBar.update()
+                            onCursorPositionChanged: suggestBar.update()
                             onCursorRectangleChanged: multiFlick.ensureVisible(cursorRectangle)
                             activeFocusOnPress: false
                             // the d-pad leaves the box from its last line
                             Keys.onDownPressed: {
                                 if (cursorRectangle.y + cursorRectangle.height >= contentHeight - 2) {
-                                    (fieldDialog.field && fieldDialog.field.picks && root.genres.length > 0 ? pickRow : kb).focus = true;
+                                    kb.focus = true;
                                     event.accepted = true;
                                 }
                                 else {
                                     event.accepted = false;
                                 }
                             }
-                        }
-                    }
-                }
-
-                // quick picks: genres already in the library
-                ListView {
-                    id: pickRow
-                    visible: !!fieldDialog.field && !!fieldDialog.field.picks && root.genres.length > 0
-                    width: parent.width
-                    height: visible ? vpx(36) : 0
-                    orientation: ListView.Horizontal
-                    spacing: vpx(8)
-                    clip: true
-                    model: visible ? root.genres : []
-                    KeyNavigation.down: actionRow
-                    Keys.onPressed: {
-                        if (api.keys.isAccept(event) && !event.isAutoRepeat) {
-                            event.accepted = true;
-                            fieldDialog.addPick(model[currentIndex]);
-                        }
-                    }
-                    delegate: Rectangle {
-                        readonly property bool highlighted: ListView.view.activeFocus && ListView.isCurrentItem
-                        width: pickText.implicitWidth + vpx(20)
-                        height: ListView.view.height
-                        radius: vpx(4)
-                        color: highlighted ? "#3aa" : "#333"
-                        border.color: "#3aa"
-                        border.width: highlighted ? 0 : vpx(1)
-                        Text {
-                            id: pickText
-                            text: modelData
-                            color: parent.highlighted ? "#111" : "#9dd"
-                            font.family: globalFonts.sans
-                            font.pixelSize: vpx(15)
-                            anchors.centerIn: parent
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: fieldDialog.addPick(modelData)
                         }
                     }
                 }
@@ -1602,8 +1787,7 @@ FocusScope {
                         { "name": "cancel", "text": qsTr("Cancel") + api.tr },
                         { "name": "clear", "text": qsTr("Clear") + api.tr },
                     ]
-                    KeyNavigation.up: pickRow.visible ? pickRow : null
-                    KeyNavigation.down: kb
+                    KeyNavigation.down: suggestBar.visible ? suggestBar : kb
 
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {

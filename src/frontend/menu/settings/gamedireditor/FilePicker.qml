@@ -65,8 +65,8 @@ FocusScope {
     }
 
     // Pegasus X: quick jumps, in a row above the list (d-pad up from the
-    // top of the list, or Y): the drives, one folder up (LB), the last folder
-    // (RB), a suggested one, the ES-DE folder and Pegasus X's data folder
+    // top of the list, or Y): the drives (RB), one folder up (B), the last
+    // folder (LB), a suggested one, the ES-DE folder and Pegasus X's data folder
     property string dataFolder: Internal.settings.dataDir
     readonly property var shortcuts: {
         var out = [];
@@ -74,10 +74,10 @@ FocusScope {
             out.push({ "t": qsTr("Use this folder") + api.tr, "act": "use" });
             out.push({ "t": qsTr("New folder...") + api.tr, "act": "new" });
         }
-        out.push({ "t": qsTr("Drives") + api.tr, "act": "drives" });
-        out.push({ "t": qsTr("Up a folder  LB") + api.tr, "act": "up" });
+        out.push({ "t": qsTr("Drives  RB") + api.tr, "act": "drives" });
+        out.push({ "t": qsTr("Up a folder  B") + api.tr, "act": "up" });
         if (Internal.settings.lastBrowseFolder !== "")
-            out.push({ "t": qsTr("Last folder  RB") + api.tr, "act": "go", "path": Internal.settings.lastBrowseFolder });
+            out.push({ "t": qsTr("Last folder  LB") + api.tr, "act": "go", "path": Internal.settings.lastBrowseFolder });
         if (startFolder !== "")
             out.push({ "t": qsTr("Suggested") + api.tr, "act": "go", "path": startFolder });
         if (Internal.settings.esdeImportDir !== "")
@@ -107,8 +107,11 @@ FocusScope {
         }
         list.focus = true;
     }
+    // the drive list (it has no ".." row)
+    readonly property bool onDrives: folderModel.folder !== undefined && folderModel.indexOfName("..") !== 0  // re-read when the folder changes
     function resetPosition() {
-        list.currentIndex = list.count > 1 ? 1 : 0;
+        // the first entry after ".."
+        list.currentIndex = (list.count > 1 && folderModel.indexOfName("..") === 0) ? 1 : 0;
         list.positionViewAtIndex(list.currentIndex, ListView.Center);
     }
     function enter(name) {
@@ -135,22 +138,37 @@ FocusScope {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isCancel(event)) {
+            // B: up a folder; on the drive list, out of the browser
+            event.accepted = true;
+            if (folderModel.indexOfName("..") !== 0) {
+                root.remember();
+                root.cancel();
+            }
+            else {
+                root.enter("..");
+                list.focus = true;
+            }
+        }
+        else if (api.keys.isDetails(event)) {
+            // X: out of the browser, from any folder
             event.accepted = true;
             root.remember();
             root.cancel();
         }
         else if (api.keys.isPrevPage(event)) {
-            event.accepted = true;
-            root.enter("..");
-        }
-        else if (api.keys.isNextPage(event)) {
-            // RB: back to the last folder
+            // LB: back to the last folder
             event.accepted = true;
             if (Internal.settings.lastBrowseFolder !== "") {
                 folderModel.cd(Internal.settings.lastBrowseFolder);
                 root.resetPosition();
                 list.focus = true;
             }
+        }
+        else if (api.keys.isNextPage(event)) {
+            // RB: the drives
+            event.accepted = true;
+            root.showDrives();
+            list.focus = true;
         }
         else if (api.keys.isFilters(event)) {
             event.accepted = true;
@@ -226,7 +244,8 @@ FocusScope {
 
                 Text {
                     id: pathText
-                    text: folderModel.folder + "   ·   " + qsTr("LB up · RB last folder · Y quick jumps") + api.tr
+                    text: folderModel.folder + "   ·   " + (root.onDrives ? qsTr("A open · B close · LB last folder · Y quick jumps")
+                                                             : qsTr("A open · B up · X close · LB last folder · RB drives · Y quick jumps")) + api.tr
                     width: parent.width
 
                     color: "#bbb"

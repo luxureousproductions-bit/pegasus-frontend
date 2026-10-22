@@ -75,6 +75,9 @@ public:
 
     Assets& add_file(AssetType, QString);
     Assets& add_uri(AssetType, QString);
+    /// Pegasus X: of the files with the same name in one kind of art, keeps
+    /// the first (the same picture found in two places)
+    void remove_duplicate_names();
 
 private:
     const QStringList& get(AssetType) const;
