@@ -21,6 +21,7 @@
 #include "Paths.h"
 #include "model/gaming/Collection.h"
 #include "model/gaming/CollectionListModel.h"
+#include "model/gaming/Assets.h"
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
 #include "model/gaming/GameFileListModel.h"
