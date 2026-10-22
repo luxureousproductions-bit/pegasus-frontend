@@ -86,6 +86,10 @@ QString package_of(const model::Game& game)
     const QString key = providers::library::game_key(game);
     if (key.startsWith(QLatin1String("android:")))
         return key.mid(8);
+    // the app an entry of yours was matched with (see dedupe_by_title)
+    const QString adopted = game.extraMap().value(QStringLiteral("pegasusx-package")).toString();
+    if (!adopted.isEmpty())
+        return adopted;
     static const QRegularExpression rx_component(QStringLiteral("-n\\s+([\\w.]+)/"));
     const QRegularExpressionMatch match = rx_component.match(game.launchCmd());
     return match.hasMatch() ? match.captured(1) : QString();
@@ -149,6 +153,16 @@ std::vector<model::Game*> dedupe_by_title(std::vector<model::Game*>& list)
                 match = pos;
                 if (kept_package[pos].isEmpty())
                     kept_package[pos] = package;
+            }
+        }
+        // the entry that stays stands for that one app from now on, also for
+        // the checks after this one (fork names, duplicates across sources):
+        // without this, your entry for Xendroid (no package of its own) was
+        // taken for the fork too, and the fork was dropped there
+        if (match != kept.size() && !kept_package[match].isEmpty()) {
+            for (model::Game* const g : { kept[match], game }) {
+                if (package_of(*g).isEmpty())
+                    g->extraMapMut().insert(QStringLiteral("pegasusx-package"), kept_package[match]);
             }
         }
         if (match == kept.size()) {

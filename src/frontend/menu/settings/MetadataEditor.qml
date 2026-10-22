@@ -184,13 +184,35 @@ FocusScope {
         else if (collDetails.defaultLabel) {
             entries.push({ "act": "global", "text": mark(qsTr("Default: %1 (until you pick one)").arg(collDetails.defaultLabel) + api.tr, currentCmd === "") });
         }
+        // the command your metadata had before Pegasus X changed it
+        var original = Internal.settings.originalLaunch(collName, page === "game" ? (game.path || game.key) : "");
+        if (original.known && original.command !== "")
+            entries.push({ "act": "cmd", "command": original.command,
+                           "text": mark(qsTr("Your metadata's command") + api.tr,
+                                        currentCmd !== "" && sameCommand(original.command, currentCmd)) });
+        var anyInstalled = false;
         for (var i = 0; i < choices.length; i++) {
             var c = choices[i];
             if (!c.installed)
                 continue;
+            anyInstalled = true;
             entries.push({ "act": "cmd", "command": c.command,
                            "text": mark(c.label + (c.recommended ? qsTr(" · recommended") + api.tr : ""),
                                         currentCmd !== "" && sameCommand(c.command, currentCmd)) });
+        }
+        // a system the list doesn't know: the apps in Android's Emulators section
+        if (!anyInstalled) {
+            var emus = libraryEmulators();
+            for (var e = 0; e < emus.length; e++)
+                entries.push({ "act": "cmd", "command": emus[e].command,
+                               "text": mark(emus[e].label + qsTr(" · Android emulator") + api.tr,
+                                            currentCmd !== "" && sameCommand(emus[e].command, currentCmd)) });
+        }
+        for (var m = 0; m < choices.length; m++) {
+            if (!choices[m].installed)
+                entries.push({ "act": "cmd", "command": choices[m].command,
+                               "text": mark(choices[m].label + qsTr(" · not installed") + api.tr,
+                                            currentCmd !== "" && sameCommand(choices[m].command, currentCmd)) });
         }
         entries.push({ "act": "custom", "text": qsTr("Custom command...") + api.tr });
         chooser.openFor(field.label, entries, function(act, entry) {
@@ -202,6 +224,39 @@ FocusScope {
                 fieldDialog.openFor(field);
         });
     }
+    // the apps in Android's Emulators section (Settings > Library), opened with the game file
+    function libraryEmulators() {
+        loadApps();
+        var out = [];
+        var seen = {};
+        var names = ["Android", "Android Games"];
+        for (var n = 0; n < names.length; n++) {
+            var list_in = Internal.settings.collectionGames(api.collections, names[n]);
+            for (var i = 0; i < list_in.length; i++) {
+                var e = list_in[i];
+                if (kindOf(e) !== "Emulator" || !e["package"] || seen[e["package"]])
+                    continue;
+                seen[e["package"]] = true;
+                for (var a = 0; a < apps.length; a++) {
+                    if (apps[a]["package"] === e["package"]) {
+                        out.push({ "label": e.title, "command": "am start --user 0 -n " + apps[a].component
+                                   + " -a android.intent.action.VIEW -d {file.documenturi}" });
+                        break;
+                    }
+                }
+            }
+        }
+        return out;
+    }
+    // starts a game with a command, to see that it works
+    function testWith(command, entry) {
+        if (!entry || command === "") {
+            message = qsTr("Pick an emulator first.") + api.tr;
+            return;
+        }
+        var error = Internal.settings.testEmulatorCommand(command, entry.path);
+        message = error === "" ? qsTr("Started \"%1\".").arg(entry.title) + api.tr : error;
+    }
     function sameCommand(a, b) {
         return String(a).replace(/\s+/g, " ").trim() === String(b).replace(/\s+/g, " ").trim();
     }
@@ -209,6 +264,25 @@ FocusScope {
     // -- Pegasus X's data folder: picked art is copied there --------------------
 
     property string dataDir: Internal.settings.dataDir
+
+    // ES-DE's list of Android emulators for each system (A updates it)
+    property string emuListInfo: Internal.settings.emulatorListInfo()
+    property bool emuListUpdating: false
+    function updateEmulatorList() {
+        if (emuListUpdating)
+            return;
+        emuListUpdating = true;
+        keepPosition(function() { emuListInfo = qsTr("Downloading the latest from ES-DE...") + api.tr; });
+        Internal.settings.updateEmulatorList();
+    }
+    Connections {
+        target: Internal.settings
+        function onEmulatorListUpdated(ok, text) {
+            root.emuListUpdating = false;
+            root.keepPosition(function() { root.emuListInfo = text; });
+            root.choicesFor = "";  // read again with the new list
+        }
+    }
     // the folder each kind of art goes in (ES-DE's names)
     readonly property var artDataFolders: ({
         "art:video": "videos", "art:screenshot": "screenshots", "art:titlescreen": "titlescreens",
@@ -287,7 +361,7 @@ FocusScope {
         { "key": "publisher", "label": qsTr("Publisher") + api.tr, "type": "list" },
         { "key": "genre", "label": qsTr("Genres") + api.tr, "type": "list", "picks": true },
         { "key": "description", "label": qsTr("Description") + api.tr, "type": "multi" },
-        { "key": "launch", "label": qsTr("Launch command") + api.tr, "type": "command" },
+        { "key": "launch", "label": qsTr("Emulator") + api.tr, "type": "command" },
         { "key": "release", "label": qsTr("Release date") + api.tr, "type": "date" },
         { "key": "players", "label": qsTr("Players") + api.tr, "type": "number" },
         { "key": "rating", "label": qsTr("Rating") + api.tr, "type": "rating" },
@@ -296,7 +370,7 @@ FocusScope {
         { "key": "name", "label": qsTr("Name") + api.tr, "type": "text" },
         { "key": "shortname", "label": qsTr("Short name") + api.tr, "type": "text" },
         { "key": "extensions", "label": qsTr("Extensions") + api.tr, "type": "text" },
-        { "key": "launch", "label": qsTr("Launch command") + api.tr, "type": "command" },
+        { "key": "launch", "label": qsTr("Emulator") + api.tr, "type": "command" },
     ]
     property var collDetails: ({})   // the open collection's own lines (launch, extensions, default)
     // Android with Merge off: Android Games is edited on the same page, its
@@ -927,6 +1001,7 @@ FocusScope {
             if (root.page === "collections") {
                 out.push({ "kind": "section", "text": qsTr("Options") + api.tr });
                 var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
+                out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
                 out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
                            "value": root.dataDir !== "" ? root.dataDir : qsTr("not set: art stays where you pick it") + api.tr,
                            "muted": root.dataDir === "" });
@@ -1008,9 +1083,17 @@ FocusScope {
                             ? qsTr("Default: %1").arg(root.collDetails.defaultLabel) + api.tr
                             : qsTr("none, pick one in Emulators") + api.tr);
                 }
-                out.push({ "kind": "field", "text": f.label, "field": f,
+                out.push({ "kind": "field", "field": f,
+                           "text": (f.key === "launch" && root.page === "game" && root.isAndroidCollection(root.collObj))
+                                   ? qsTr("App") + api.tr : f.label,
                            "value": text !== "" ? text : empty,
                            "muted": text === "", "edited": f.key in root.edits, "done": f.key in root.saved });
+                // try it right away
+                if (f.key === "launch" && !root.isAndroidCollection(root.collObj)
+                        && (root.page === "game" || root.games.length > 0))
+                    out.push({ "kind": "test", "text": root.page === "game" ? qsTr("Test this game") + api.tr
+                                                                            : qsTr("Test with a game") + api.tr,
+                               "value": root.page === "game" ? "" : root.games[0].title });
                 // the game's file, below its title
                 if (root.page === "game" && f.key === "title")
                     out.push({ "kind": "info", "text": qsTr("File") + api.tr, "value": root.fileShown() });
@@ -1214,6 +1297,14 @@ FocusScope {
                 else
                     fieldDialog.openFor(row.field);
             }
+            else if (row.kind === "test") {
+                if (root.page === "game")
+                    root.testWith(String(root.current("launch") || "") || root.collectionLaunch, root.game);
+                else
+                    root.testWith(root.collectionLaunch, root.games[0]);
+            }
+            else if (row.kind === "emulist")
+                root.updateEmulatorList();
             else if (row.kind === "datadir")
                 root.pickDataFolder();
             else if (row.kind === "art")

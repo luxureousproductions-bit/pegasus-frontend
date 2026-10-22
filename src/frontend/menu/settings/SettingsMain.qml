@@ -129,16 +129,8 @@ FocusScope {
             enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Emulators...")
-            desc: QT_TR_NOOP("Pick the emulator of each collection, or of single games. It's written into the collection's metadata file.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openEmulatorSettings
-            section: "gaming"
-            enabled: Internal.settings.esdeImportSupported
-        },
-        SettingsEntry {
             label: QT_TR_NOOP("Library...")
-            desc: QT_TR_NOOP("Your collections and games: edit their details and art, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
+            desc: QT_TR_NOOP("Your collections and games: edit their details, art and emulators, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openMetadataEditor
             section: "gaming"
