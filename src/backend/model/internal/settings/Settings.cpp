@@ -43,6 +43,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QDateTime>
 #include <QSettings>
 #include <QFile>
 #include <QRegularExpression>
@@ -965,10 +966,15 @@ QString Settings::importArt(const QString& source, const QString& collection_nam
     const QString dir = clean_data + QLatin1Char('/') + safe(collection_name) + QLatin1Char('/') + safe(kind_folder);
     if (!QDir().mkpath(dir))
         return source;
+    // A new name each time (the time it was picked): picture views keep a
+    // file they've shown by its path, so reusing the old name kept showing
+    // the old picture. (Earlier copies stay: the metadata may still point at
+    // one until the change is saved.)
+    const QString base = safe(name);
     const QString ext = QFileInfo(source).suffix();
-    const QString target = dir + QLatin1Char('/') + safe(name) + (ext.isEmpty() ? QString() : QLatin1Char('.') + ext);
-    if (QFileInfo::exists(target))
-        QFile::remove(target);
+    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmss"));
+    const QString target = dir + QLatin1Char('/') + base + QLatin1Char('~') + stamp
+        + (ext.isEmpty() ? QString() : QLatin1Char('.') + ext);
     if (!QFile::copy(source, target)) {
         Log::warning(LOGMSG("Could not copy `%1` to `%2`").arg(source, target));
         return source;

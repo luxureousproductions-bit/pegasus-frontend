@@ -108,6 +108,44 @@ const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
         { AssetType::ARCADE_MARQUEE, {
             QStringLiteral("screenmarquee"),
             QStringLiteral("screenmarqueesmall"),
+            QStringLiteral("screenmarquees"),
+        }},
+        // less common ones, so every kind of art has a home
+        { AssetType::ARCADE_BEZEL, {
+            QStringLiteral("bezel"),
+            QStringLiteral("bezels"),
+            QStringLiteral("border"),
+            QStringLiteral("borders"),
+        }},
+        { AssetType::ARCADE_PANEL, {
+            QStringLiteral("panel"),
+            QStringLiteral("panels"),
+            QStringLiteral("controlpanel"),
+            QStringLiteral("controlpanels"),
+        }},
+        { AssetType::ARCADE_CABINET_L, {
+            QStringLiteral("cabinetleft"),
+            QStringLiteral("cabinet_left"),
+        }},
+        { AssetType::ARCADE_CABINET_R, {
+            QStringLiteral("cabinetright"),
+            QStringLiteral("cabinet_right"),
+        }},
+        { AssetType::UI_BANNER, {
+            QStringLiteral("banner"),
+            QStringLiteral("banners"),
+        }},
+        { AssetType::UI_TILE, {
+            QStringLiteral("tile"),
+            QStringLiteral("tiles"),
+            QStringLiteral("icon"),
+            QStringLiteral("icons"),
+        }},
+        { AssetType::MUSIC, {
+            QStringLiteral("music"),
+            QStringLiteral("musics"),
+            QStringLiteral("soundtrack"),
+            QStringLiteral("soundtracks"),
         }},
         { AssetType::BACKGROUND, {
             QStringLiteral("fanart"),
@@ -135,11 +173,17 @@ const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
         }},
         { AssetType::BOX_FULL, {
             QStringLiteral("boxtexture"),
+            QStringLiteral("boxfull"),
+            QStringLiteral("fullbox"),
+            QStringLiteral("fullboxes"),
         }},
         { AssetType::BOX_SPINE, {
             QStringLiteral("box2dside"),
             QStringLiteral("spine"),
             QStringLiteral("spines"),
+            QStringLiteral("boxspine"),
+            QStringLiteral("boxside"),
+            QStringLiteral("sides"),
         }},
         { AssetType::CARTRIDGE, {
             QStringLiteral("support"),
@@ -162,6 +206,8 @@ const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
         { AssetType::POSTER, {
             QStringLiteral("poster"),
             QStringLiteral("posters"),
+            QStringLiteral("flyer"),
+            QStringLiteral("flyers"),
         }},
         { AssetType::SCREENSHOT, {
             QStringLiteral("screenshot"),
@@ -173,9 +219,14 @@ const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
             QStringLiteral("screenshottitle"),
             QStringLiteral("titlescreen"),
             QStringLiteral("titlescreens"),
+            QStringLiteral("title"),
+            QStringLiteral("titles"),
         }},
         { AssetType::UI_STEAMGRID, {
             QStringLiteral("steamgrid"),
+            QStringLiteral("steamgrids"),
+            QStringLiteral("grid"),
+            QStringLiteral("grids"),
             QStringLiteral("miximage"),
             QStringLiteral("miximages"),
             QStringLiteral("mixrbv1"),
