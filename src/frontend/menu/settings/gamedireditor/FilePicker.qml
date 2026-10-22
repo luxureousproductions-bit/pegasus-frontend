@@ -44,22 +44,30 @@ FocusScope {
     // Pegasus X: every file is listed (the ones that can't be picked greyed
     // out); a folder opens at its first entry, and backing out lands on the
     // folder you left instead of keeping the old row number
-    Component.onCompleted: root.resetPosition()
+    Component.onCompleted: root.showDrives()
 
-    // Pegasus X: opens in a given folder (eg. the game's media folder)
+    // Pegasus X: every browse starts on the drives; `path` (eg. the game's
+    // media folder) becomes the "Suggested" jump
     property string startFolder: ""
     function openAt(path) {
         startFolder = path || "";
-        if (path)
-            folderModel.cd(path);
-        root.resetPosition();
+        showDrives();
         list.focus = true;
+    }
+    function showDrives() {
+        folderModel.cd("/:pegasusx-drives:");  // no such folder: the drive list
+        root.resetPosition();
+    }
+    // the folder it was last used in, for next time
+    function remember() {
+        if (folderModel.folder !== "" && folderModel.folder !== "/")
+            Internal.settings.lastBrowseFolder = folderModel.folder;
     }
 
     // Pegasus X: quick jumps, in a row above the list (d-pad up from the
-    // top of the list, or Y): the drives, one folder up, where it opened, the
-    // game directories and Pegasus X's data folder. LB also goes one folder up.
-    property string dataFolder: ""
+    // top of the list, or Y): the drives, one folder up (LB), the last folder
+    // (RB), a suggested one, the ES-DE folder and Pegasus X's data folder
+    property string dataFolder: Internal.settings.dataDir
     readonly property var shortcuts: {
         var out = [];
         if (pickFolders) {
@@ -67,18 +75,20 @@ FocusScope {
             out.push({ "t": qsTr("New folder...") + api.tr, "act": "new" });
         }
         out.push({ "t": qsTr("Drives") + api.tr, "act": "drives" });
-        out.push({ "t": qsTr("Up a folder") + api.tr, "act": "up" });
+        out.push({ "t": qsTr("Up a folder  LB") + api.tr, "act": "up" });
+        if (Internal.settings.lastBrowseFolder !== "")
+            out.push({ "t": qsTr("Last folder  RB") + api.tr, "act": "go", "path": Internal.settings.lastBrowseFolder });
         if (startFolder !== "")
-            out.push({ "t": qsTr("Where it opened") + api.tr, "act": "go", "path": startFolder });
+            out.push({ "t": qsTr("Suggested") + api.tr, "act": "go", "path": startFolder });
+        if (Internal.settings.esdeImportDir !== "")
+            out.push({ "t": qsTr("ES-DE") + api.tr, "act": "go", "path": Internal.settings.esdeImportDir });
         if (dataFolder !== "")
             out.push({ "t": qsTr("Pegasus X data") + api.tr, "act": "go", "path": dataFolder });
-        var dirs = Internal.settings.gameDirs;
-        for (var i = 0; i < dirs.length; i++)
-            out.push({ "t": dirs[i].split("/").filter(function(x) { return x !== ""; }).pop() || dirs[i], "act": "go", "path": dirs[i] });
         return out;
     }
     function jump(entry) {
         if (entry.act === "use") {
+            root.remember();
             root.pickFolder(folderModel.folder);
             return;
         }
@@ -89,8 +99,7 @@ FocusScope {
         if (entry.act === "up")
             enter("..");
         else if (entry.act === "drives") {
-            folderModel.cd("/:pegasusx-drives:");  // no such folder: the drive list
-            resetPosition();
+            showDrives();
         }
         else {
             folderModel.cd(entry.path);
@@ -127,11 +136,21 @@ FocusScope {
             return;
         if (api.keys.isCancel(event)) {
             event.accepted = true;
+            root.remember();
             root.cancel();
         }
         else if (api.keys.isPrevPage(event)) {
             event.accepted = true;
             root.enter("..");
+        }
+        else if (api.keys.isNextPage(event)) {
+            // RB: back to the last folder
+            event.accepted = true;
+            if (Internal.settings.lastBrowseFolder !== "") {
+                folderModel.cd(Internal.settings.lastBrowseFolder);
+                root.resetPosition();
+                list.focus = true;
+            }
         }
         else if (api.keys.isFilters(event)) {
             event.accepted = true;
@@ -207,7 +226,7 @@ FocusScope {
 
                 Text {
                     id: pathText
-                    text: folderModel.folder + "   ·   " + qsTr("LB up a folder · Y quick jumps") + api.tr
+                    text: folderModel.folder + "   ·   " + qsTr("LB up · RB last folder · Y quick jumps") + api.tr
                     width: parent.width
 
                     color: "#bbb"
@@ -307,6 +326,7 @@ FocusScope {
                     return;
                 }
                 if (pickable) {
+                    root.remember();
                     root.pickFile(folderModel.folder + "/" + name);
                     root.pick(folderModel.folder);
                 }

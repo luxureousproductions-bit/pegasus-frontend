@@ -942,6 +942,32 @@ void Settings::setDataDir(const QString& dir)
     emit dataDirChanged();
 }
 
+QString Settings::lastBrowseFolder() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return file.value(QStringLiteral("browse/last")).toString();
+}
+
+void Settings::setLastBrowseFolder(const QString& dir)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("browse/last"), dir);
+    emit lastBrowseFolderChanged();
+}
+
+bool Settings::dataDirAsked() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return file.value(QStringLiteral("data/asked"), false).toBool();
+}
+
+void Settings::setDataDirAsked(bool value)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("data/asked"), value);
+    emit dataDirChanged();
+}
+
 bool Settings::makeDir(const QString& path) const
 {
     return !path.isEmpty() && QDir().mkpath(path);

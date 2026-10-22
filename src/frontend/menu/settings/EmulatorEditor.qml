@@ -194,6 +194,19 @@ FocusScope {
         }
         return qsTr("Custom command") + api.tr;
     }
+    function collectionAppName(c) {
+        if (c.command)
+            return c.currentLabel !== "" ? c.currentLabel : qsTr("the collection's custom command") + api.tr;
+        for (var i = 0; i < c.options.length; i++) {
+            if (c.options[i].recommended && c.options[i].installed)
+                return qsTr("recommended: %1").arg(c.options[i].label) + api.tr;
+        }
+        for (var j = 0; j < c.options.length; j++) {
+            if (c.options[j].installed && !c.options[j].retroarch)
+                return qsTr("recommended: %1").arg(c.options[j].label) + api.tr;
+        }
+        return qsTr("none set") + api.tr;
+    }
     function collectionText(c) {
         if (c.isAndroid)
             return qsTr("Each game opens its own app") + api.tr;
@@ -581,7 +594,9 @@ FocusScope {
             out.push({ "kind": "section", "text": root.detailsLoading
                 ? qsTr("Per-game · reading...") + api.tr
                 : qsTr("Per-game · %1 set").arg(own) + api.tr });
-            var inherit = root.detailsLoading ? "" : qsTr("Global") + api.tr;
+            // what the game launches with when it has none of its own: the
+            // collection's emulator, by name
+            var inherit = root.detailsLoading ? "" : root.collectionAppName(c);
             for (var i = 0; i < root.games.length; i++) {
                 var cmd = root.gameCommands[root.games[i].path];
                 out.push({ "kind": "game", "text": root.games[i].title, "game": root.games[i],
@@ -796,7 +811,7 @@ FocusScope {
             if (orig)
                 out.push(orig);
             if (game)
-                out.push({ "kind": "inherit", "text": qsTr("Global (the collection's emulator)") + api.tr, "current": current === "" && !(orig && orig.current) });
+                out.push({ "kind": "inherit", "text": qsTr("Same as the collection: %1").arg(root.collectionAppName(c)) + api.tr, "current": current === "" && !(orig && orig.current) });
             else if (!orig && c.command && c.currentLabel === "")
                 out.push({ "kind": "keep", "text": qsTr("Your metadata's command") + api.tr, "current": true });
 

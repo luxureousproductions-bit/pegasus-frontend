@@ -174,6 +174,14 @@ public:
 
     // Pegasus X's data folder: where art you pick (and later, scraped art) is kept
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
+    /// The folder a file browser was last used in (its "Last folder" jump)
+    Q_PROPERTY(QString lastBrowseFolder READ lastBrowseFolder WRITE setLastBrowseFolder NOTIFY lastBrowseFolderChanged)
+    QString lastBrowseFolder() const;
+    void setLastBrowseFolder(const QString&);
+    /// Asked once whether to set up the data folder
+    Q_PROPERTY(bool dataDirAsked READ dataDirAsked WRITE setDataDirAsked NOTIFY dataDirChanged)
+    bool dataDirAsked() const;
+    void setDataDirAsked(bool);
     QString dataDir() const;
     void setDataDir(const QString&);
     /// Makes a folder (and the ones above it); true if it exists now
@@ -218,6 +226,7 @@ signals:
     void libraryReloadRequested();
     void libraryRulesChanged();
     void dataDirChanged();
+    void lastBrowseFolderChanged();
 
 private:
     bool m_esde_import_running = false;

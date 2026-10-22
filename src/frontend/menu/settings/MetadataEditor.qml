@@ -54,7 +54,23 @@ FocusScope {
     property var savedTitles: ({})       // game path -> title saved this time
     property var genres: []              // every genre in the library, for quick picks
 
-    Component.onCompleted: list.currentIndex = 1  // the first option, below the title
+    Component.onCompleted: {
+        list.currentIndex = 1;  // the first option, below the title
+        // the first time: offer to set up the data folder
+        if (Internal.settings.dataDir === "" && !Internal.settings.dataDirAsked)
+            askDataFolder.start();
+    }
+    Timer {
+        id: askDataFolder
+        interval: 300
+        onTriggered: {
+            Internal.settings.dataDirAsked = true;
+            chooser.openFor(qsTr("Set up a Pegasus X data folder? It's where art you pick (and later, scraped art) is kept, in a folder you name, anywhere you like.") + api.tr, [
+                { "act": "now", "text": qsTr("Set it up now") + api.tr },
+                { "act": "later", "text": qsTr("Later (Library > Data folder)") + api.tr },
+            ], function(act) { if (act === "now") root.pickDataFolder(); });
+        }
+    }
 
     // -- Library: hidden games and collections, Android sections -------------------
 
@@ -112,7 +128,7 @@ FocusScope {
         var entries = [];
         var mark = function(text, on) { return on ? text + "   ✓" : text; };
         if (page === "game") {
-            entries.push({ "act": "global", "text": mark(qsTr("Global (the collection's)") + api.tr, currentCmd === "") });
+            entries.push({ "act": "global", "text": mark(qsTr("Same as the collection: %1").arg(collectionLaunchLabel) + api.tr, currentCmd === "") });
         }
         else if (collDetails.defaultLabel) {
             entries.push({ "act": "global", "text": mark(qsTr("Recommended: %1 (until you pick one)").arg(collDetails.defaultLabel) + api.tr, currentCmd === "") });
@@ -227,6 +243,19 @@ FocusScope {
         return own !== "" ? own : (collDetails.defaultCommand || "");
     }
     property var savedColl: ({})     // the collection's values saved this time
+    // what the collection launches with, by name: "recommended: GameNative"
+    readonly property string collectionLaunchLabel: {
+        var own = (page === "collection" && ("launch" in edits)) ? edits["launch"]
+                : ("launch" in savedColl) ? savedColl["launch"] : (collDetails.launch || "");
+        if (own === "")
+            return collDetails.defaultLabel ? qsTr("recommended: %1").arg(collDetails.defaultLabel) + api.tr
+                                            : qsTr("none set") + api.tr;
+        for (var i = 0; i < choices.length; i++) {
+            if (sameCommand(choices[i].command, own))
+                return choices[i].label;
+        }
+        return qsTr("the collection's custom command") + api.tr;
+    }
     // The names XboxOSv2's media carousel uses: editor key, label, the
     // Assets list it's read from, the metadata key it's written to, and for
     // the two boxes sharing one Pegasus slot, which of them ("3d" / "2d").
@@ -396,6 +425,8 @@ FocusScope {
         savedTitles = {};
         savedColl = {};
         collDetails = Internal.settings.collectionDetails(entry.name);
+        choices = Internal.settings.emulatorChoices(entry.name, collDetails.shortname || "", collDetails.romRoot || "");
+        choicesFor = entry.name;
         gameCommands = Internal.settings.gameEmulators(entry.name);
         orig = readCollection(entry.obj);
         saved = {};
@@ -715,7 +746,7 @@ FocusScope {
                 var empty = f.empty || "—";
                 if (f.key === "launch") {
                     empty = root.page === "game"
-                        ? qsTr("Global") + api.tr
+                        ? root.collectionLaunchLabel
                         : (root.collDetails.defaultLabel
                             ? qsTr("recommended: %1").arg(root.collDetails.defaultLabel) + api.tr
                             : qsTr("none, pick one in Emulators") + api.tr);
