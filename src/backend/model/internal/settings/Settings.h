@@ -162,6 +162,8 @@ public:
     /// Games. False when that can't be done live (back to automatic, or no
     /// Android Games collection yet): the library is read again instead.
     Q_INVOKABLE bool applyAndroidKind(QObject* collections, QObject* game, const QString& kind);
+    /// { command, package } a game launches with now (for Android entries, the app)
+    Q_INVOKABLE QVariantMap gameLaunchInfo(QObject* game) const;
     /// Removes the ES-DE import files of these folders; returns how many
     Q_INVOKABLE int deleteEsdeImport(const QStringList& folders);
     // Edit metadata

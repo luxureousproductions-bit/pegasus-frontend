@@ -153,6 +153,32 @@ std::vector<model::Game*> dedupe_by_title(std::vector<model::Game*>& list)
     return dropped;
 }
 
+// Two installed apps with the same name (eg. Xendroid and a fork of it):
+// both stay, the second as "Xendroid Fork" (more: "Fork 2", ...). The one
+// from your own metadata, else the first package A to Z, keeps the name.
+void name_forks(std::vector<model::Game*>& list)
+{
+    HashMap<QString, std::vector<model::Game*>> by_title;
+    for (model::Game* const game : list) {
+        if (!package_of(*game).isEmpty())
+            by_title[game->title().toLower()].push_back(game);
+    }
+    for (auto& pair : by_title) {
+        std::vector<model::Game*>& same = pair.second;
+        if (same.size() < 2)
+            continue;
+        std::stable_sort(same.begin(), same.end(), [](model::Game* a, model::Game* b) {
+            if (source_rank(*a) != source_rank(*b))
+                return source_rank(*a) < source_rank(*b);
+            return package_of(*a) < package_of(*b);
+        });
+        for (size_t i = 1; i < same.size(); i++) {
+            const QString suffix = i == 1 ? QStringLiteral(" Fork") : QStringLiteral(" Fork %1").arg(i);
+            same[i]->setTitle(same[i]->title() + suffix);
+        }
+    }
+}
+
 void merge_android(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games, bool merge_games)
 {
     std::vector<model::Collection*> app_sources;
@@ -289,6 +315,8 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
     }
     const std::vector<model::Game*> dropped_a = dedupe_by_title(android_list);
     const std::vector<model::Game*> dropped_g = dedupe_by_title(games_list);
+    name_forks(android_list);
+    name_forks(games_list);
 
     const auto order = [](std::vector<model::Game*>& list) {
         // plain A to Z: games, apps and emulators together, upper and lower
@@ -650,9 +678,13 @@ void dedupe_collections(std::vector<model::Collection*>& collections, std::vecto
                     best = g;
             }
             // only entries from a lower source go: two ES-DE entries of one
-            // name (eg. two regions) both stay
+            // name (eg. two regions) both stay, and so do two different
+            // installed apps (a fork: another package)
+            const QString best_package = package_of(*best);
             for (model::Game* const g : same) {
-                if (source_rank(*g) > source_rank(*best))
+                const QString package = package_of(*g);
+                const bool other_app = !package.isEmpty() && !best_package.isEmpty() && package != best_package;
+                if (source_rank(*g) > source_rank(*best) && !other_app)
                     drop.insert(g);
             }
         }

@@ -274,6 +274,9 @@ QVariantList Settings::emulatorCollections() const
     QVariantList out;
 #ifdef WITH_COMPAT_ESDE
     for (const auto& coll : providers::esde::emulator_collections()) {
+        // Android entries open their own apps: they're set in Settings > Library
+        if (coll.is_android)
+            continue;
         QVariantList options;
         for (const auto& option : coll.options) {
             options.append(QVariantMap {
@@ -471,6 +474,29 @@ QVariantMap Settings::androidGameApps(const QString& collection_name) const
     Q_UNUSED(collection_name);
 #endif
     return out;
+}
+
+QVariantMap Settings::gameLaunchInfo(QObject* game_obj) const
+{
+    const auto* const game = qobject_cast<model::Game*>(game_obj);
+    if (!game)
+        return {};
+    const QString command = game->launchCmd();
+    // the app it opens: "-n <package>/<activity>", else the entry is the app
+    static const QRegularExpression rx_component(QStringLiteral("-n\\s+([\\w.]+)/"));
+    QString package;
+    const QRegularExpressionMatch match = rx_component.match(command);
+    if (match.hasMatch())
+        package = match.captured(1);
+    else {
+        const QString key = providers::library::game_key(*game);
+        if (key.startsWith(QLatin1String("android:")))
+            package = key.mid(8);
+    }
+    return QVariantMap {
+        { QStringLiteral("command"), command },
+        { QStringLiteral("package"), package },
+    };
 }
 
 QString Settings::androidAppCommand(const QString& component) const

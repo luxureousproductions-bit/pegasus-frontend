@@ -119,7 +119,58 @@ FocusScope {
 
     property var choices: []          // the open collection's emulators
     property string choicesFor: ""
+    // Android entries: the app a game opens, by name
+    property var launchInfo: ({})     // the open game's { command, package }
+    property var apps: []             // installed apps, read once
+    function loadApps() {
+        if (apps.length === 0)
+            apps = Internal.settings.androidApps();
+    }
+    function packageOf(command) {
+        var m = /-n\s+([\w.]+)\//.exec(String(command || ""));
+        return m ? m[1] : "";
+    }
+    function appLabel(pkg) {
+        if (!pkg)
+            return game ? String(current("title") || game.title) : "";
+        loadApps();
+        for (var i = 0; i < apps.length; i++) {
+            if (apps[i]["package"] === pkg)
+                return apps[i].label;
+        }
+        return pkg;
+    }
+    function androidLaunchPicker(field) {
+        loadApps();
+        var currentCmd = String(current("launch") || "");
+        var mark = function(text, on) { return on ? text + "   ✓" : text; };
+        var entries = [];
+        var own = game && game["package"] ? game["package"] : "";
+        entries.push({ "act": "global", "text": mark((own ? qsTr("Default: %1").arg(appLabel(own))
+                                                          : qsTr("Default: %1").arg(appLabel(launchInfo["package"]))) + api.tr,
+                                                     currentCmd === "") });
+        var list_apps = apps.slice().sort(function(a, b) { return root.byName(a.label, b.label); });
+        for (var i = 0; i < list_apps.length; i++) {
+            var app = list_apps[i];
+            var cmd = Internal.settings.androidAppCommand(app.component);
+            entries.push({ "act": "cmd", "command": cmd,
+                           "text": mark(app.label + "   (" + app["package"] + ")", currentCmd !== "" && packageOf(currentCmd) === app["package"]) });
+        }
+        entries.push({ "act": "custom", "text": qsTr("Custom command...") + api.tr });
+        chooser.openFor(field.label, entries, function(act, entry) {
+            if (act === "global")
+                root.setEdit("launch", "");
+            else if (act === "cmd")
+                root.setEdit("launch", entry.command);
+            else if (act === "custom")
+                fieldDialog.openFor(field);
+        });
+    }
     function launchPicker(field) {
+        if (page === "game" && isAndroidCollection(collObj)) {
+            androidLaunchPicker(field);
+            return;
+        }
         if (choicesFor !== collName) {
             choices = Internal.settings.emulatorChoices(collName, collDetails.shortname || "", collDetails.romRoot || "");
             choicesFor = collName;
@@ -169,7 +220,7 @@ FocusScope {
         if (dataDir === "")
             return path;
         var second = key.indexOf(p2) === 0;
-        var plain = second ? key.substring(p2.length) : key;
+        var plain = artBase(second ? key.substring(p2.length) : key);
         var name = plain === "cart:background" ? "background"
                  : plain === "cart:logo" ? "logo"
                  : String(current("title") || (game ? game.title : "art"));
@@ -275,10 +326,10 @@ FocusScope {
     // the open game, with what you picked (before the library is read again)
     function missingNow() {
         var out = [];
-        if (current("art:box2d") === "" && current("art:box3d") === "") out.push(qsTr("box") + api.tr);
-        if (current("art:logo") === "") out.push(qsTr("logo") + api.tr);
-        if (current("art:screenshot") === "") out.push(qsTr("screenshot") + api.tr);
-        if (current("art:video") === "") out.push(qsTr("video") + api.tr);
+        if (!hasArt("art:box2d") && !hasArt("art:box3d")) out.push(qsTr("box") + api.tr);
+        if (!hasArt("art:logo")) out.push(qsTr("logo") + api.tr);
+        if (!hasArt("art:screenshot")) out.push(qsTr("screenshot") + api.tr);
+        if (!hasArt("art:video")) out.push(qsTr("video") + api.tr);
         return out;
     }
 
@@ -340,7 +391,44 @@ FocusScope {
         return /box3d|box_3d|3dbox/i.test(String(path));
     }
     property var origSlots: ({})  // metadata key -> every file the game has there now
+    // every file of a kind has its own key: "art:screenshot#0", "art:screenshot#1"
+    function artBase(key) {
+        var s = String(key);
+        var at = s.indexOf("#");
+        return at < 0 ? s : s.substring(0, at);
+    }
+    function artKind(key) {
+        var base = artBase(key);
+        for (var i = 0; i < artKinds.length; i++) {
+            if (artKinds[i][0] === base)
+                return artKinds[i];
+        }
+        return null;
+    }
+    // the keys of one kind, in order (files the game has, and ones you added)
+    function artKeysOf(base) {
+        var found = {};
+        var maps = [orig, saved, edits];
+        for (var m = 0; m < maps.length; m++) {
+            for (var k in maps[m]) {
+                if (k.indexOf(base + "#") === 0)
+                    found[k] = true;
+            }
+        }
+        return Object.keys(found).sort(function(a, b) {
+            return parseInt(a.substring(base.length + 1), 10) - parseInt(b.substring(base.length + 1), 10);
+        });
+    }
+    function hasArt(base) {
+        var keys = artKeysOf(base);
+        for (var i = 0; i < keys.length; i++) {
+            if (current(keys[i]) !== "")
+                return true;
+        }
+        return false;
+    }
     function artFilter(key) {
+        key = artBase(key);
         if (key === "art:video")
             return [".mp4", ".webm", ".mkv", ".avi", ".mov"];
         if (key === "art:manual")
@@ -428,15 +516,14 @@ FocusScope {
                 files = Array.isArray(g.extra.manual) ? g.extra.manual.slice() : [g.extra.manual];
             files = files.map(function(f) { return root.localPath(f); });
             slots[kind[3]] = files;
-            // the one shown: for the boxes, the 3D or the 2D one
-            var shownFile = "";
+            // each file its own row; the boxes: the 3D ones, the 2D ones
+            var n = 0;
             for (var j = 0; j < files.length; j++) {
                 if (kind[4] === "3d" && !is3d(files[j])) continue;
                 if (kind[4] === "2d" && is3d(files[j])) continue;
-                shownFile = files[j];
-                break;
+                o[kind[0] + "#" + n] = files[j];
+                n++;
             }
-            o[kind[0]] = shownFile;
         }
         origSlots = slots;
         return o;
@@ -465,7 +552,9 @@ FocusScope {
     readonly property var collections: {
         var out = [];
         var seen = {};
-        var android = mergeAndroid ? null : findCollection(function(x) { return isAndroidCollection(x) && !isAndroidGamesCollection(x); });
+        // Android Games is on Android's page whenever both are in the library
+        // (the Merge switch changes that once you leave Library)
+        var android = findCollection(function(x) { return isAndroidCollection(x) && !isAndroidGamesCollection(x); });
         var androidGames = android ? findCollection(isAndroidGamesCollection) : null;
         for (var i = 0; i < api.collections.count; i++) {
             var c = api.collections.get(i);
@@ -495,7 +584,7 @@ FocusScope {
         collName = entry.name;
         collObj = entry.obj;
         // Android, Merge off: Android Games too, on this page
-        var second = (!mergeAndroid && isAndroidCollection(entry.obj) && !isAndroidGamesCollection(entry.obj))
+        var second = (isAndroidCollection(entry.obj) && !isAndroidGamesCollection(entry.obj))
             ? findCollection(isAndroidGamesCollection) : null;
         coll2Obj = second;
         coll2Name = second ? second.name : "";
@@ -538,6 +627,7 @@ FocusScope {
     }
     function openGame(entry) {
         game = entry;
+        launchInfo = isAndroidCollection(collObj) ? Internal.settings.gameLaunchInfo(entry.obj) : ({});
         orig = readGame(entry.obj);
         saved = {};
         edits = {};
@@ -619,11 +709,7 @@ FocusScope {
                 out[key] = edits[key];
                 continue;
             }
-            var kind = null;
-            for (var i = 0; i < artKinds.length; i++) {
-                if (artKinds[i][0] === key)
-                    kind = artKinds[i];
-            }
+            var kind = artKind(key);
             if (!kind)
                 continue;
             var slot = kind[3];
@@ -640,8 +726,10 @@ FocusScope {
                     list[at] = value;
             }
             else if (value !== "") {
-                if (kind[4] === "3d")
-                    list.push(value);      // the 2D box stays the main one
+                // a first one becomes the main one (but the 2D box stays it);
+                // another of a kind goes after the ones there
+                if (kind[4] === "3d" || list.length > 0 && artKeysOf(kind[0]).indexOf(key) > 0)
+                    list.push(value);
                 else
                     list.unshift(value);
             }
@@ -789,8 +877,9 @@ FocusScope {
 
         anchors.top: header.bottom
         anchors.bottom: messageBar.top
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.7
+        // a game's or a collection's page: the list on the left, its art beside it
+        x: artPreview.split ? parent.width * 0.05 : (parent.width - width) / 2
+        width: artPreview.split ? parent.width * 0.5 : parent.width * 0.7
         clip: true
         focus: true
 
@@ -804,8 +893,6 @@ FocusScope {
             var i;
             if (root.page === "collections") {
                 out.push({ "kind": "section", "text": qsTr("Options") + api.tr });
-                out.push({ "kind": "mergeandroid", "text": qsTr("Merge Android Games into Android") + api.tr,
-                           "value": root.mergeAndroid ? qsTr("On") + api.tr : qsTr("Off") + api.tr });
                 var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
                 out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
                            "value": root.dataDir !== "" ? root.dataDir : qsTr("not set: art stays where you pick it") + api.tr,
@@ -858,13 +945,30 @@ FocusScope {
                 var cHidden = root.isCollectionHidden(root.collName);
                 out.push({ "kind": "hidecoll", "text": qsTr("Show in themes") + api.tr, "hidden": cHidden,
                            "value": cHidden ? qsTr("Hidden") + api.tr : qsTr("Shown") + api.tr });
+                if (root.isAndroidCollection(root.collObj))
+                    out.push({ "kind": "mergeandroid", "text": qsTr("Android games") + api.tr,
+                               "value": root.mergeAndroid ? qsTr("Inside Android (Games section)") + api.tr
+                                                          : qsTr("Their own collection: Android Games") + api.tr });
             }
             for (i = 0; i < fields.length; i++) {
                 var f = fields[i];
+                if (root.page === "collection" && root.isAndroidCollection(root.collObj)
+                        && (f.key === "launch" || f.key === "extensions"))
+                    continue;
                 var value = root.current(f.key);
                 var text = root.shown(f, value);
                 var empty = f.empty || "—";
-                if (f.key === "launch") {
+                if (f.key === "launch" && root.page === "game" && root.isAndroidCollection(root.collObj)) {
+                    var shownCmd = text !== "" ? text : (root.launchInfo.command || "");
+                    if (shownCmd !== "") {
+                        text = root.appLabel(root.packageOf(shownCmd) || root.launchInfo["package"]) + "  ·  " + shownCmd;
+                        empty = text;
+                    }
+                    else {
+                        empty = qsTr("No app") + api.tr;
+                    }
+                }
+                else if (f.key === "launch") {
                     empty = root.page === "game"
                         ? qsTr("Default: %1").arg(root.collectionLaunchLabel) + api.tr
                         : (root.collDetails.defaultLabel
@@ -913,13 +1017,18 @@ FocusScope {
                 out.push({ "kind": "section", "text": qsTr("Art and manual") + api.tr });
                 for (i = 0; i < root.artKinds.length; i++) {
                     var kind = root.artKinds[i];
-                    var art = root.current(kind[0]);
-                    if (art === "" && !(kind[0] in root.edits))
-                        continue;
-                    var isIcon = String(art).indexOf("image://") === 0;
-                    out.push({ "kind": "art", "text": kind[1], "key": kind[0], "icon": isIcon,
-                               "value": art === "" ? qsTr("removed") + api.tr : isIcon ? qsTr("the app's icon") + api.tr : root.fileName(art),
-                               "muted": art === "" || isIcon, "edited": kind[0] in root.edits, "done": kind[0] in root.saved });
+                    var kindKeys = root.artKeysOf(kind[0]);
+                    for (var kk = 0; kk < kindKeys.length; kk++) {
+                        var akey = kindKeys[kk];
+                        var art = root.current(akey);
+                        if (art === "" && !(akey in root.edits))
+                            continue;
+                        var isIcon = String(art).indexOf("image://") === 0;
+                        out.push({ "kind": "art", "text": kindKeys.length > 1 ? kind[1] + " " + (kk + 1) : kind[1],
+                                   "key": akey, "icon": isIcon,
+                                   "value": art === "" ? qsTr("removed") + api.tr : isIcon ? qsTr("the app's icon") + api.tr : root.fileName(art),
+                                   "muted": art === "" || isIcon, "edited": akey in root.edits, "done": akey in root.saved });
+                    }
                 }
                 out.push({ "kind": "addart", "text": qsTr("Add art or a manual...") + api.tr, "value": "" });
             }
@@ -1039,8 +1148,8 @@ FocusScope {
                 });
                 root.libChanged = true;
                 root.message = root.mergeAndroid
-                    ? qsTr("Android Games joins Android once you leave Library.") + api.tr
-                    : qsTr("Android Games stays its own collection once you leave Library.") + api.tr;
+                    ? qsTr("Android games move into Android once you leave Library.") + api.tr
+                    : qsTr("Android games get their own collection once you leave Library.") + api.tr;
             }
             else if (row.kind === "hiddenlist") {
                 root.page = "hidden";
@@ -1230,61 +1339,252 @@ FocusScope {
     }
 
 
-    // the picture of the art row you're on, beside the list
-    Rectangle {
+    // -- The art panel: beside the list on a game's and a collection's page -------
+
+    function toUrl(file) {
+        var f = String(file || "");
+        if (f === "")
+            return "";
+        if (/^(image|file|https?|qrc):/.test(f))
+            return f;
+        return f.indexOf("/") === 0 ? "file://" + f : "";
+    }
+    function firstOf(list) {
+        return (list && list.length > 0) ? String(list[0]) : "";
+    }
+    // what the panel shows for a row: { file, title, edited }
+    function previewFor(row) {
+        if (!row)
+            return {};
+        if (row.kind === "art")
+            return { "file": String(current(row.key) || ""), "title": row.text, "edited": !!row.edited, "own": true };
+        if (page === "game") {
+            var bases = ["art:box2d", "art:box3d", "art:screenshot", "art:titlescreen", "art:fanart", "art:miximage", "art:logo"];
+            for (var b = 0; b < bases.length; b++) {
+                var keys = artKeysOf(bases[b]);
+                for (var k = 0; k < keys.length; k++) {
+                    var f = String(current(keys[k]) || "");
+                    if (f !== "")
+                        return { "file": f, "title": artKind(keys[k])[1], "edited": keys[k] in edits };
+                }
+            }
+            return { "file": "", "title": "" };
+        }
+        if (page === "collection") {
+            if ((row.kind === "game") && row.game && row.game.obj && row.game.obj.assets) {
+                var a = row.game.obj.assets;
+                return { "file": firstOf(a.boxFrontList) || firstOf(a.screenshotList) || firstOf(a.logoList) || firstOf(a.backgroundList),
+                         "title": row.game.title };
+            }
+            var tile = String(current("cart:background") || current("cart:logo") || "");
+            return { "file": tile, "title": qsTr("System tile") + api.tr };
+        }
+        return {};
+    }
+
+    Item {
         id: artPreview
 
+        readonly property bool split: root.page === "game" || root.page === "collection"
         readonly property var row: (list.currentIndex >= 0 && list.currentIndex < list.rows.length) ? list.rows[list.currentIndex] : null
-        readonly property string file: (row && row.kind === "art") ? String(root.current(row.key) || "") : ""
+        readonly property var shown: root.previewFor(row)
+        readonly property string file: shown.file || ""
         readonly property bool isVideo: /\.(mp4|webm|mkv|avi|mov)$/i.test(file)
         readonly property bool isDoc: /\.(pdf|cbz|cbr)$/i.test(file)
+        // every picture of the open game, as rows of the list
+        readonly property var thumbs: {
+            var out = [];
+            if (root.page !== "game")
+                return out;
+            for (var i = 0; i < list.rows.length; i++) {
+                var r = list.rows[i];
+                if (r.kind === "art" && String(root.current(r.key) || "") !== "")
+                    out.push({ "index": i, "key": r.key, "label": r.text, "file": String(root.current(r.key)) });
+            }
+            return out;
+        }
 
-        visible: list.activeFocus && file !== ""
+        visible: split
         anchors.left: list.right
-        anchors.leftMargin: vpx(16)
+        anchors.leftMargin: vpx(28)
         anchors.right: parent.right
-        anchors.rightMargin: vpx(16)
-        anchors.verticalCenter: list.verticalCenter
-        height: width * 1.2 + previewCaption.height
-        color: "#222"
-        radius: vpx(6)
+        anchors.rightMargin: parent.width * 0.04
+        anchors.top: list.top
+        anchors.topMargin: vpx(20)
+        anchors.bottom: messageBar.top
+        anchors.bottomMargin: vpx(10)
 
-        Image {
-            id: previewImage
+        Rectangle {
+            id: frame
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.margins: vpx(8)
-            height: parent.width * 1.2 - vpx(16)
-            visible: !artPreview.isVideo && !artPreview.isDoc
-            source: (!visible || artPreview.file === "") ? ""
-                  : (artPreview.file.indexOf("image://") === 0 || artPreview.file.indexOf("file:") === 0) ? artPreview.file
-                  : "file://" + artPreview.file
-            sourceSize.width: vpx(320)
-            fillMode: Image.PreserveAspectFit
-            asynchronous: true
+            anchors.bottom: caption.top
+            anchors.bottomMargin: vpx(8)
+            radius: vpx(10)
+            color: "#151718"
+            border.color: artPreview.shown.edited ? "#e8b06a" : "#2c3134"
+            border.width: vpx(2)
+
+            Image {
+                id: bigImage
+                anchors.fill: parent
+                anchors.margins: vpx(14)
+                source: (artPreview.isVideo || artPreview.isDoc) ? "" : root.toUrl(artPreview.file)
+                sourceSize.width: vpx(700)
+                fillMode: Image.PreserveAspectFit
+                asynchronous: true
+                smooth: true
+                opacity: status === Image.Ready ? 1 : 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+            }
+            // a video or a manual: a tile with what it is
+            Column {
+                anchors.centerIn: parent
+                spacing: vpx(10)
+                visible: artPreview.isVideo || artPreview.isDoc || artPreview.file === "" || bigImage.status === Image.Error
+                Rectangle {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: vpx(84)
+                    height: width
+                    radius: width / 2
+                    color: "transparent"
+                    border.color: artPreview.file === "" ? "#444" : "#3aa"
+                    border.width: vpx(3)
+                    Text {
+                        anchors.centerIn: parent
+                        text: artPreview.isVideo ? "▶" : artPreview.isDoc ? "PDF" : artPreview.file === "" ? "—" : "?"
+                        color: artPreview.file === "" ? "#555" : "#5cc"
+                        font.family: globalFonts.sans
+                        font.pixelSize: artPreview.isDoc ? vpx(22) : vpx(34)
+                        font.bold: true
+                    }
+                }
+                Text {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    text: artPreview.isVideo ? qsTr("Video") + api.tr
+                        : artPreview.isDoc ? qsTr("Manual") + api.tr
+                        : artPreview.file === "" ? qsTr("No picture") + api.tr
+                        : qsTr("Can't show this file") + api.tr
+                    color: "#888"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(17)
+                }
+            }
+            // which picture this is
+            Rectangle {
+                visible: !!artPreview.shown.title
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.margins: vpx(10)
+                width: kindText.implicitWidth + vpx(20)
+                height: vpx(30)
+                radius: vpx(15)
+                color: "#cc1d2a30"
+                Text {
+                    id: kindText
+                    anchors.centerIn: parent
+                    text: artPreview.shown.title || ""
+                    color: "#9dd"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(15)
+                }
+            }
+            Rectangle {
+                visible: !!artPreview.shown.edited
+                anchors.top: parent.top
+                anchors.right: parent.right
+                anchors.margins: vpx(10)
+                width: newText.implicitWidth + vpx(20)
+                height: vpx(30)
+                radius: vpx(15)
+                color: "#e8b06a"
+                Text {
+                    id: newText
+                    anchors.centerIn: parent
+                    text: qsTr("New · not saved") + api.tr
+                    color: "#1a1a1a"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(15)
+                }
+            }
         }
+
         Text {
-            anchors.centerIn: previewImage
-            visible: artPreview.isVideo || artPreview.isDoc || previewImage.status === Image.Error
-            text: artPreview.isVideo ? qsTr("Video") + api.tr
-                : artPreview.isDoc ? qsTr("Manual") + api.tr
-                : qsTr("Can't show this file") + api.tr
-            color: "#999"
-            font.family: globalFonts.sans
-            font.pixelSize: vpx(16)
-        }
-        Text {
-            id: previewCaption
-            anchors.bottom: parent.bottom
+            id: caption
+            anchors.bottom: strip.visible ? strip.top : parent.bottom
+            anchors.bottomMargin: strip.visible ? vpx(10) : 0
             width: parent.width
-            text: (artPreview.row && artPreview.row.edited ? qsTr("New, not saved yet") : qsTr("Now")) + api.tr
-            color: artPreview.row && artPreview.row.edited ? "#e8b06a" : "#aaa"
-            font.family: globalFonts.sans
-            font.pixelSize: vpx(14)
+            text: artPreview.file === "" || artPreview.file.indexOf("image://") === 0 ? ""
+                : root.fileName(root.localPath(artPreview.file))
+            color: "#bbb"
+            elide: Text.ElideMiddle
             horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            padding: vpx(8)
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(15)
+        }
+
+        // every picture of the game: the one you're on is outlined, A on a
+        // row edits it, touch one to go to its row
+        ListView {
+            id: strip
+            visible: artPreview.thumbs.length > 1
+            anchors.bottom: parent.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: Math.min(parent.width, contentWidth)
+            height: vpx(64)
+            orientation: ListView.Horizontal
+            spacing: vpx(8)
+            interactive: contentWidth > parent.width
+            clip: true
+            model: artPreview.thumbs
+            currentIndex: {
+                for (var i = 0; i < artPreview.thumbs.length; i++) {
+                    if (artPreview.thumbs[i].index === list.currentIndex)
+                        return i;
+                }
+                return -1;
+            }
+            highlightRangeMode: ListView.ApplyRange
+            preferredHighlightBegin: width * 0.3
+            preferredHighlightEnd: width * 0.7
+            delegate: Rectangle {
+                readonly property bool isOn: index === strip.currentIndex
+                readonly property bool vid: /\.(mp4|webm|mkv|avi|mov|pdf|cbz|cbr)$/i.test(modelData.file)
+                width: vpx(88)
+                height: strip.height
+                radius: vpx(6)
+                color: "#1e2224"
+                border.color: isOn ? "#3aa" : "#2c3134"
+                border.width: isOn ? vpx(3) : vpx(1)
+                opacity: isOn ? 1 : 0.75
+                Image {
+                    anchors.fill: parent
+                    anchors.margins: vpx(4)
+                    visible: !parent.vid
+                    source: parent.vid ? "" : root.toUrl(modelData.file)
+                    sourceSize.width: vpx(160)
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    clip: true
+                }
+                Text {
+                    anchors.centerIn: parent
+                    visible: parent.vid
+                    text: /\.(pdf|cbz|cbr)$/i.test(modelData.file) ? "PDF" : "▶"
+                    color: "#5cc"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(20)
+                    font.bold: true
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: {
+                        list.currentIndex = modelData.index;
+                        list.focus = true;
+                    }
+                }
+            }
         }
     }
 
@@ -1349,7 +1649,7 @@ FocusScope {
                 roots.push(gameDir);
             }
             var candidates = [];
-            var names = artFolders[key] || [];
+            var names = artFolders[artBase(key)] || [];
             for (var ri = 0; ri < roots.length; ri++) {
                 for (var ni = 0; ni < names.length; ni++)
                     candidates.push(roots[ri] + "/" + names[ni]);
@@ -1364,15 +1664,20 @@ FocusScope {
     function addArt() {
         var entries = [];
         for (var i = 0; i < artKinds.length; i++) {
-            var value = current(artKinds[i][0]);
-            if (value === "" && !(artKinds[i][0] in edits))
-                entries.push({ "act": artKinds[i][0], "text": artKinds[i][1] });
+            var base = artKinds[i][0];
+            var keys = artKeysOf(base);
+            var next = 0;
+            for (var k = 0; k < keys.length; k++)
+                next = Math.max(next, parseInt(keys[k].substring(base.length + 1), 10) + 1);
+            entries.push({ "act": base + "#" + next,
+                           "text": hasArt(base) ? qsTr("%1 (another one)").arg(artKinds[i][1]) + api.tr : artKinds[i][1] });
         }
         chooser.openFor(qsTr("What kind?") + api.tr, entries, function(act) { root.pickArt(act); });
     }
 
     FilePicker {
         id: filePicker
+        z: 3  // over the page's header
 
         fileNames: []
         fileExtensions: [".png", ".jpg"]
@@ -1514,7 +1819,9 @@ FocusScope {
         id: fieldDialog
 
         property var field: null
-        readonly property bool multiLine: !!field && (field.type === "multi" || field.type === "list")
+        // a launch command wraps over several lines too (it's one line when saved)
+        readonly property bool multiLine: !!field && (field.type === "multi" || field.type === "list" || field.type === "command")
+        readonly property bool isCommand: !!field && field.type === "command"
 
         anchors.fill: parent
         enabled: focus
@@ -1529,7 +1836,9 @@ FocusScope {
                 text = text.replace("%", "");
             // a launch command starts from the one in use, to change from there
             if (f.type === "command" && text === "")
-                text = root.page === "game" ? root.collectionLaunch : (root.collDetails.defaultCommand || "");
+                text = root.page !== "game" ? (root.collDetails.defaultCommand || "")
+                     : root.isAndroidCollection(root.collObj) ? (root.launchInfo.command || "")
+                     : root.collectionLaunch;
             hint.text = "";
             if (multiLine) {
                 multiInput.text = text;
@@ -1544,7 +1853,7 @@ FocusScope {
             suggestBar.current = 0;
             suggestBar.items = [];
             kb.target = multiLine ? multiInput : lineInput;
-            kb.multiLine = multiLine;
+            kb.multiLine = multiLine && !isCommand;
             kb.row = 1;
             kb.col = 0;
             focus = true;
@@ -1569,7 +1878,7 @@ FocusScope {
                 value = raw.replace(/\s+$/, "");
             }
             else {
-                value = raw.trim();
+                value = (f.type === "command" ? raw.replace(/\s*\n\s*/g, " ") : raw).trim();
                 if (f.type === "number" && value !== "" && !/^\d+$/.test(value)) {
                     hint.text = qsTr("Type a number, eg. 2.") + api.tr;
                     return;
@@ -1592,7 +1901,9 @@ FocusScope {
                 }
                 // the same as what it uses anyway: nothing of its own
                 if (f.type === "command") {
-                    if (root.page === "game" && value === root.collectionLaunch)
+                    if (root.page === "game" && !root.isAndroidCollection(root.collObj) && value === root.collectionLaunch)
+                        value = "";
+                    if (root.page === "game" && root.isAndroidCollection(root.collObj) && value === (root.launchInfo.command || ""))
                         value = "";
                     if (root.page === "collection" && (root.collDetails.launch || "") === "" && value === (root.collDetails.defaultCommand || ""))
                         value = "";
@@ -1689,7 +2000,16 @@ FocusScope {
                     else if (inside.length < max && g.indexOf(typed) > 0)
                         inside.push(root.genres[i]);
                 }
-                var next = starts.concat(inside).slice(0, max);
+                var all = starts.concat(inside);
+                var next = [];
+                var used = 0;
+                for (var w = 0; w < all.length; w++) {
+                    var chip = Math.min(suggestMetrics.advanceWidth(all[w]) + vpx(24), vpx(220)) + vpx(8);
+                    if (used + chip > width)
+                        break;
+                    used += chip;
+                    next.push(all[w]);
+                }
                 if (JSON.stringify(next) !== JSON.stringify(items))
                     items = next;
                 if (current >= items.length)
@@ -1728,6 +2048,11 @@ FocusScope {
                 }
             }
 
+            FontMetrics {
+                id: suggestMetrics
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(17)
+            }
             Row {
                 anchors.centerIn: parent
                 spacing: vpx(8)
@@ -1834,7 +2159,9 @@ FocusScope {
                     id: multiBox
                     visible: fieldDialog.multiLine
                     width: parent.width
-                    height: Math.min(Math.max(vpx(110), multiInput.contentHeight + vpx(24)), root.height * 0.2)
+                    height: fieldDialog.isCommand
+                        ? Math.min(Math.max(vpx(170), multiInput.contentHeight + vpx(24)), root.height * 0.32)
+                        : Math.min(Math.max(vpx(110), multiInput.contentHeight + vpx(24)), root.height * 0.2)
 
                     Rectangle {
                         anchors.fill: parent
