@@ -79,10 +79,16 @@ bool is_android_games_collection(const model::Collection& coll)
         || coll.name().toLower() == QLatin1String("android games");
 }
 
+// the app an entry is, or opens: its android: file, else the "-n <package>/"
+// of its launch command (your own entry for an app often has only that)
 QString package_of(const model::Game& game)
 {
     const QString key = providers::library::game_key(game);
-    return key.startsWith(QLatin1String("android:")) ? key.mid(8) : QString();
+    if (key.startsWith(QLatin1String("android:")))
+        return key.mid(8);
+    static const QRegularExpression rx_component(QStringLiteral("-n\\s+([\\w.]+)/"));
+    const QRegularExpressionMatch match = rx_component.match(game.launchCmd());
+    return match.hasMatch() ? match.captured(1) : QString();
 }
 
 bool has_entry(const QStringList& list, const QString& value)
@@ -123,21 +129,32 @@ std::vector<model::Game*> dedupe_by_title(std::vector<model::Game*>& list)
 {
     HashMap<QString, std::vector<size_t>> at;  // title -> positions in `kept`
     std::vector<model::Game*> kept;
+    std::vector<QString> kept_package;  // the app each kept entry stands for
     std::vector<model::Game*> dropped;
     for (model::Game* const game : list) {
         const QString package = package_of(*game);
         std::vector<size_t>& same_title = at[game->title()];
         size_t match = kept.size();
+        // the same app first; an entry without a package stands for one app
+        // only (the first it meets), so a fork of the same name still stays
         for (const size_t pos : same_title) {
-            const QString other = package_of(*kept[pos]);
-            if (package.isEmpty() || other.isEmpty() || package == other) {
+            if (!package.isEmpty() && kept_package[pos] == package) {
                 match = pos;
                 break;
+            }
+        }
+        for (size_t i = 0; match == kept.size() && i < same_title.size(); i++) {
+            const size_t pos = same_title[i];
+            if (package.isEmpty() || kept_package[pos].isEmpty()) {
+                match = pos;
+                if (kept_package[pos].isEmpty())
+                    kept_package[pos] = package;
             }
         }
         if (match == kept.size()) {
             same_title.push_back(kept.size());
             kept.push_back(game);
+            kept_package.push_back(package);
             continue;
         }
         model::Game*& current = kept[match];
@@ -723,9 +740,14 @@ void apply_library_rules(std::vector<model::Collection*>& collections, std::vect
     merge_android(collections, games, merge_android_enabled());
     dedupe_collections(collections, games);
     // the same picture found twice (eg. in your metadata and in a media
-    // folder, under two paths) shows once
-    for (model::Game* const game : games)
+    // folder, under two paths) shows once; art you removed in Settings >
+    // Library stays out, wherever else it's listed (eg. an ES-DE import)
+    for (model::Game* const game : games) {
         game->assetsMut().remove_duplicate_names();
+        const QStringList removed = game->extraMap().value(QStringLiteral("pegasusx-hidden-art")).toStringList();
+        if (!removed.isEmpty())
+            game->assetsMut().remove_listed(removed);
+    }
     apply_hidden(collections, games);
     apply_default_launches(collections);
 }

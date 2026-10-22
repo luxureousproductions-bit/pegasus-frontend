@@ -93,7 +93,34 @@ Window {
 
                 return apiThemePath;
             }
-            onApiThemePathChanged: source = Qt.binding(getThemeFile)
+            // Pegasus X: changing themes used to build the new one right away,
+            // under the open menu, while the old one was still being torn
+            // down (its videos and pictures still held). Now the old theme
+            // goes first, its memory is collected, and the new one is built
+            // once you leave the menu.
+            property bool swapPending: false
+            onApiThemePathChanged: {
+                source = "";
+                swapPending = true;
+                themeSwap.restart();
+            }
+            function finishSwap() {
+                if (!swapPending || mainMenu.focus)
+                    return;
+                swapPending = false;
+                gc();
+                splashScreen.restoreMenu = false;
+                splashScreen.focus = true;  // until the new theme is ready
+                source = Qt.binding(getThemeFile);
+            }
+            Timer {
+                id: themeSwap
+                interval: 120
+                onTriggered: {
+                    gc();
+                    theme.finishSwap();
+                }
+            }
 
             Keys.onPressed: {
                 if (api.keys.isCancel(event) || api.keys.isMenu(event)) {
@@ -134,7 +161,10 @@ Window {
         Connections {
             target: mainMenu.item
 
-            function onClose() { theme.focus = true; }
+            function onClose() {
+                theme.focus = true;
+                theme.finishSwap();  // a theme picked in the menu loads now
+            }
 
             function onRequestShutdown() {
                 powerDialog.source = "dialogs/ShutdownDialog.qml"

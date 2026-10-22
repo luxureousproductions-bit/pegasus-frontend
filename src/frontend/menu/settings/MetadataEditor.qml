@@ -701,9 +701,25 @@ FocusScope {
     // edits -> what's written: art goes back into its slot's whole list,
     // replacing only the file that was shown (the others, eg. more
     // screenshots, stay)
+    // art you removed: "<kind>|<file>", kept in the game's entry so the file
+    // stays out even when another metadata file (eg. an ES-DE import, or a
+    // media folder) lists it too
+    function hiddenArtNow() {
+        var list = [];
+        if (game && game.obj && game.obj.extra && game.obj.extra["pegasusx-hidden-art"]) {
+            var had = game.obj.extra["pegasusx-hidden-art"];
+            list = Array.isArray(had) ? had.slice() : [String(had)];
+        }
+        if (game && hiddenArtSaved[game.path])
+            list = hiddenArtSaved[game.path].slice();
+        return list;
+    }
+    property var hiddenArtSaved: ({})   // game path -> its list, saved this time
     function toChanges() {
         var out = {};
         var slots = {};
+        var hiddenArt = hiddenArtNow();
+        var hiddenBefore = JSON.stringify(hiddenArt);
         for (var key in edits) {
             if (key.indexOf("art:") !== 0) {
                 out[key] = edits[key];
@@ -719,6 +735,16 @@ FocusScope {
             var before = (key in saved) ? saved[key] : orig[key];
             var at = before ? list.indexOf(before) : -1;
             var value = edits[key];
+            if (kind[3].indexOf("assets.") === 0) {
+                var kindName = kind[3].substring(7);
+                // a file you pick again comes back
+                if (value !== "")
+                    hiddenArt = hiddenArt.filter(function(h) { return h !== kindName + "|" + value; });
+                // the one it replaces, or that you removed, stays out
+                if (before && value !== before && String(before).indexOf("image://") !== 0
+                        && hiddenArt.indexOf(kindName + "|" + before) < 0)
+                    hiddenArt.push(kindName + "|" + before);
+            }
             if (at >= 0) {
                 if (value === "")
                     list.splice(at, 1);
@@ -736,6 +762,8 @@ FocusScope {
         }
         for (var s in slots)
             out[s] = slots[s].filter(function(f) { return f && String(f).indexOf("image://") !== 0; });
+        if (JSON.stringify(hiddenArt) !== hiddenBefore)
+            out["x-pegasusx-hidden-art"] = hiddenArt;
         // one text: a new description replaces the summary too
         if ("description" in out)
             out["summary"] = "";
@@ -794,6 +822,11 @@ FocusScope {
         var merged = Object.assign({}, saved);
         for (var key in edits)
             merged[key] = edits[key];
+        if (page === "game" && ("x-pegasusx-hidden-art" in written)) {
+            var hiddenMap = Object.assign({}, hiddenArtSaved);
+            hiddenMap[game.path] = written["x-pegasusx-hidden-art"];
+            hiddenArtSaved = hiddenMap;
+        }
         var where = loc.file || "";
         keepPosition(function() {
             saved = merged;

@@ -102,4 +102,42 @@ void Assets::remove_duplicate_names()
     }
 }
 
+void Assets::remove_listed(const QStringList& entries)
+{
+    static const HashMap<QString, AssetType> kinds {
+        { QStringLiteral("box_front"), AssetType::BOX_FRONT },
+        { QStringLiteral("box_back"), AssetType::BOX_BACK },
+        { QStringLiteral("cartridge"), AssetType::CARTRIDGE },
+        { QStringLiteral("logo"), AssetType::LOGO },
+        { QStringLiteral("steam"), AssetType::UI_STEAMGRID },
+        { QStringLiteral("background"), AssetType::BACKGROUND },
+        { QStringLiteral("screenshot"), AssetType::SCREENSHOT },
+        { QStringLiteral("titlescreen"), AssetType::TITLESCREEN },
+        { QStringLiteral("video"), AssetType::VIDEO },
+    };
+    const auto name_of = [](const QString& path) {
+        return path.mid(path.lastIndexOf(QLatin1Char('/')) + 1).toLower();
+    };
+    for (const QString& entry : entries) {
+        const int bar = entry.indexOf(QLatin1Char('|'));
+        if (bar <= 0)
+            continue;
+        const auto kind = kinds.find(entry.left(bar).trimmed());
+        if (kind == kinds.cend())
+            continue;
+        const QString name = name_of(entry.mid(bar + 1).trimmed());
+        if (name.isEmpty())
+            continue;
+        const auto list = m_asset_lists.find(kind->second);
+        if (list == m_asset_lists.end())
+            continue;
+        QStringList kept;
+        for (const QString& url : qAsConst(list->second)) {
+            if (name_of(url) != name)
+                kept.append(url);
+        }
+        list->second = kept;
+    }
+}
+
 } // namespace model
