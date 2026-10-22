@@ -49,6 +49,8 @@ FocusScope {
     // Pegasus X: every browse starts on the drives; `path` (eg. the game's
     // media folder) becomes the "Suggested" jump
     property string startFolder: ""
+    // picking a picture: the highlighted one is shown beside the list
+    readonly property bool picturePicker: !pickFolders && fileExtensions.indexOf(".png") >= 0
     function openAt(path) {
         startFolder = path || "";
         showDrives();
@@ -76,8 +78,12 @@ FocusScope {
         }
         out.push({ "t": qsTr("Drives  RB") + api.tr, "act": "drives" });
         out.push({ "t": qsTr("Up a folder  B") + api.tr, "act": "up" });
-        if (Internal.settings.lastBrowseFolder !== "")
-            out.push({ "t": qsTr("Last folder  LB") + api.tr, "act": "go", "path": Internal.settings.lastBrowseFolder });
+        // the last 5 folders: the newest is LB's
+        var recent = Internal.settings.recentBrowseFolders;
+        for (var r = 0; r < recent.length; r++) {
+            var folderName = recent[r].substring(recent[r].lastIndexOf("/") + 1) || recent[r];
+            out.push({ "t": r === 0 ? qsTr("Last folder  LB") + api.tr : folderName, "act": "go", "path": recent[r] });
+        }
         if (startFolder !== "")
             out.push({ "t": qsTr("Suggested") + api.tr, "act": "go", "path": startFolder });
         if (Internal.settings.esdeImportDir !== "")
@@ -306,7 +312,10 @@ FocusScope {
 
                 ListView {
                     id: list
-                    anchors.fill: parent
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    width: root.picturePicker ? parent.width * 0.6 : parent.width
                     clip: true
 
                     model: folderModel
@@ -324,6 +333,47 @@ FocusScope {
                     preferredHighlightBegin: height * 0.5 - vpx(18) * 1.25
                     preferredHighlightEnd: height * 0.5 + vpx(18) * 1.25
                     highlightMoveDuration: 0
+                    onCurrentIndexChanged: previewDelay.restart()
+                }
+
+                // the highlighted picture, once the cursor stops on it
+                Timer {
+                    id: previewDelay
+                    interval: 150
+                    onTriggered: {
+                        var item = list.currentItem;
+                        preview.source = (root.picturePicker && item && item.isPicture)
+                            ? "file://" + folderModel.folder + "/" + item.fileName : "";
+                    }
+                }
+                Item {
+                    visible: root.picturePicker
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.left: list.right
+                    anchors.right: parent.right
+                    anchors.margins: vpx(12)
+
+                    Image {
+                        id: preview
+                        anchors.fill: parent
+                        anchors.bottomMargin: previewName.height
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize.width: vpx(400)
+                        asynchronous: true
+                    }
+                    Text {
+                        id: previewName
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        text: preview.source != "" && preview.status === Image.Ready
+                            ? qsTr("%1 × %2").arg(preview.implicitWidth).arg(preview.implicitHeight) + api.tr : ""
+                        color: "#999"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(14)
+                        horizontalAlignment: Text.AlignHCenter
+                        padding: vpx(4)
+                    }
                 }
             }
         }
@@ -334,6 +384,8 @@ FocusScope {
 
         Rectangle {
             readonly property bool highlighted: ListView.isCurrentItem || mouseArea.containsMouse
+            readonly property string fileName: name
+            readonly property bool isPicture: !isDir && /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name)
 
             color: highlighted ? "#566" : "transparent"
             width: ListView.view.width

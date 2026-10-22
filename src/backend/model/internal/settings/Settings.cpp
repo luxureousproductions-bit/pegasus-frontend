@@ -848,6 +848,72 @@ void Settings::setAndroidKind(const QString& key, const QString& kind)
     emit libraryRulesChanged();
 }
 
+bool Settings::applyAndroidKind(QObject* collections, QObject* game_obj, const QString& kind)
+{
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    if (!game || !list || kind.isEmpty())
+        return false;
+
+    model::Collection* android = nullptr;
+    model::Collection* android_games = nullptr;
+    for (int i = 0; i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        const QString name = coll->name().toLower();
+        const QString short_name = coll->shortName().toLower();
+        if (name == QLatin1String("android games") || short_name == QLatin1String("androidgames"))
+            android_games = coll;
+        else if (name == QLatin1String("android") || short_name == QLatin1String("android"))
+            android = coll;
+    }
+    const bool is_game = kind == QLatin1String("Game");
+    model::Collection* const target = (mergeAndroid() || !is_game) ? android : android_games;
+    if (!target)
+        return false;
+
+    // the section tags, as the library rules set them
+    QStringList& tags = game->tagList();
+    QStringList& genres = game->genreList();
+    for (const QString& other : { QStringLiteral("Game"), QStringLiteral("Emulator"), QStringLiteral("Application") }) {
+        tags.removeAll(other);
+        genres.removeAll(other);
+    }
+    tags.append(kind);
+    if (!is_game)
+        genres.append(kind);
+
+    // into the target collection, A to Z; out of the other Android one
+    model::Collection* const other = (target == android) ? android_games : android;
+    if (other && other->gameList()->indexOf(game) >= 0) {
+        std::vector<model::Game*> rest;
+        for (model::Game* const g : other->gameList()->entries()) {
+            if (g != game)
+                rest.push_back(g);
+        }
+        other->gameList()->update(std::move(rest));
+    }
+    std::vector<model::Game*> games = target->gameList()->entries();
+    if (std::find(games.cbegin(), games.cend(), game) == games.cend())
+        games.push_back(game);
+    std::stable_sort(games.begin(), games.end(), [](model::Game* a, model::Game* b) {
+        return a->title().compare(b->title(), Qt::CaseInsensitive) < 0;
+    });
+    // a new list even when only the tags changed: themes read them again
+    target->gameList()->update(std::move(games));
+
+    std::vector<model::Collection*> colls;
+    for (model::Collection* const coll : game->collectionsModel()->entries()) {
+        if (coll != other && coll != target)
+            colls.push_back(coll);
+    }
+    colls.push_back(target);
+    std::sort(colls.begin(), colls.end(), model::sort_collections);
+    game->collectionsModel()->update(std::move(colls));
+    return true;
+}
+
 QVariantMap Settings::metadataLocation(const QString& collection_name, const QString& game_path) const
 {
 #ifdef WITH_COMPAT_ESDE
@@ -952,7 +1018,23 @@ void Settings::setLastBrowseFolder(const QString& dir)
 {
     QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
     file.setValue(QStringLiteral("browse/last"), dir);
+    QStringList recent = file.value(QStringLiteral("browse/recent")).toStringList();
+    recent.removeAll(dir);
+    recent.prepend(dir);
+    while (recent.size() > 5)
+        recent.removeLast();
+    file.setValue(QStringLiteral("browse/recent"), recent);
     emit lastBrowseFolderChanged();
+}
+
+QStringList Settings::recentBrowseFolders() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    QStringList recent = file.value(QStringLiteral("browse/recent")).toStringList();
+    const QString last = file.value(QStringLiteral("browse/last")).toString();
+    if (!last.isEmpty() && !recent.contains(last))
+        recent.prepend(last);  // from before the list was kept
+    return recent;
 }
 
 bool Settings::dataDirAsked() const

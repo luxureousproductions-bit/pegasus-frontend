@@ -208,11 +208,22 @@ FocusScope {
             else if (act === "hide" || act === "show")
                 root.setGameHidden(g.key, g.title, act === "hide");
             else {
+                var live = false;
                 root.keepPosition(function() {
                     Internal.settings.setAndroidKind(g.key, act === "auto" ? "" : act);
                     root.kinds = Internal.settings.androidKinds();
+                    // into its section now, themes and Emulators included
+                    live = act !== "auto" && Internal.settings.applyAndroidKind(api.collections, g.obj, act);
                 });
-                root.libChanged = true;
+                if (live) {
+                    if (root.coll2Name !== "")
+                        g.coll = act === "Game" ? root.coll2Name : root.collName;
+                    root.message = qsTr("\"%1\" moved.").arg(g.title) + api.tr;
+                }
+                else {
+                    root.libChanged = true;
+                    root.message = qsTr("\"%1\" moves once you leave Library.").arg(g.title) + api.tr;
+                }
             }
         });
     }
@@ -247,6 +258,30 @@ FocusScope {
         { "key": "g:name", "label": qsTr("Name") + api.tr, "type": "text" },
         { "key": "g:shortname", "label": qsTr("Short name") + api.tr, "type": "text" },
     ]
+    // -- Missing art: games without a box, logo, screenshot or video --------------
+    property bool missingOnly: false
+    property var missingMap: ({})    // game path -> ["box", "logo", ...]
+    function missingOf(obj) {
+        var a = obj ? obj.assets : null;
+        if (!a)
+            return [];
+        var out = [];
+        if (a.boxFrontList.length === 0) out.push(qsTr("box") + api.tr);
+        if (a.logoList.length === 0) out.push(qsTr("logo") + api.tr);
+        if (a.screenshotList.length === 0) out.push(qsTr("screenshot") + api.tr);
+        if (a.videoList.length === 0) out.push(qsTr("video") + api.tr);
+        return out;
+    }
+    // the open game, with what you picked (before the library is read again)
+    function missingNow() {
+        var out = [];
+        if (current("art:box2d") === "" && current("art:box3d") === "") out.push(qsTr("box") + api.tr);
+        if (current("art:logo") === "") out.push(qsTr("logo") + api.tr);
+        if (current("art:screenshot") === "") out.push(qsTr("screenshot") + api.tr);
+        if (current("art:video") === "") out.push(qsTr("video") + api.tr);
+        return out;
+    }
+
     // the collection a game is saved in (on the Android page, Android or Android Games)
     function gameColl() {
         return (page === "game" && game && game.coll) ? game.coll : collName;
@@ -474,6 +509,11 @@ FocusScope {
         if (second)
             list_games = list_games.concat(tag(Internal.settings.collectionGames(api.collections, second.name), second.name));
         list_games.sort(function(a, b) { return root.byName(a.title, b.title); });
+        var miss = {};
+        for (var mi = 0; mi < list_games.length; mi++)
+            miss[list_games[mi].path] = missingOf(list_games[mi].obj);
+        missingMap = miss;
+        missingOnly = false;
         games = list_games;
         savedTitles = {};
         savedColl = {};
@@ -671,6 +711,9 @@ FocusScope {
             saved = merged;
             edits = {};
             if (page === "game") {
+                var missNow = Object.assign({}, missingMap);
+                missNow[game.path] = root.missingNow();
+                missingMap = missNow;
                 var titles = Object.assign({}, savedTitles);
                 titles[game.path] = root.current("title");
                 savedTitles = titles;
@@ -896,15 +939,28 @@ FocusScope {
                         { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [] },
                         { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [] } ]
                     : [ { "kind": "", "text": qsTr("Games") + api.tr, "rows": [] } ];
+                var missingCount = 0;
+                for (i = 0; i < root.games.length; i++) {
+                    if ((root.missingMap[root.games[i].path] || []).length > 0)
+                        missingCount++;
+                }
+                out.push({ "kind": "section", "text": qsTr("Show") + api.tr });
+                out.push({ "kind": "missingfilter", "text": qsTr("Games to list") + api.tr,
+                           "value": root.missingOnly ? qsTr("Missing art only · %1").arg(missingCount) + api.tr
+                                                     : qsTr("All · %1 missing art").arg(missingCount) + api.tr });
                 var known = {};
                 for (i = 0; i < root.games.length; i++) {
                     var g = root.games[i];
                     known[g.key] = true;
+                    var gMissing = root.missingMap[g.path] || [];
+                    if (root.missingOnly && gMissing.length === 0)
+                        continue;
                     var title = root.savedTitles[g.path] || g.title;
                     var gameHidden = root.isGameHidden(g.key);
                     var row = { "kind": "game", "text": android ? title + "  (" + root.sourceLabel(g.source) + ")" : title,
                                 "game": g, "hidden": gameHidden,
                                 "value": gameHidden ? qsTr("Hidden") + api.tr
+                                       : root.missingOnly ? qsTr("no %1").arg(gMissing.join(" · ")) + api.tr
                                        : (root.savedTitles[g.path] !== undefined ? qsTr("edited · ") + api.tr : "")
                                          + (android ? qsTr("Shown") + api.tr : root.sourceLabel(g.source)),
                                 "done": root.savedTitles[g.path] !== undefined };
@@ -920,7 +976,7 @@ FocusScope {
                 if (root.coll2Name !== "")
                     gone = gone.concat(root.hiddenGamesOf(root.coll2Name));
                 for (i = 0; i < gone.length; i++) {
-                    if (!known[gone[i].path])
+                    if (!root.missingOnly && !known[gone[i].path])
                         groups[0].rows.push({ "kind": "unhidegame", "text": gone[i].title, "entry": gone[i], "hidden": true,
                                               "value": qsTr("Hidden") + api.tr });
                 }
@@ -1002,6 +1058,8 @@ FocusScope {
             }
             else if (row.kind === "hidecoll")
                 root.setCollectionHidden(root.collName, !row.hidden);
+            else if (row.kind === "missingfilter")
+                root.keepPosition(function() { root.missingOnly = !root.missingOnly; });
             else if (row.kind === "hidecoll2")
                 root.setCollectionHidden(root.coll2Name, !row.hidden);
             else if (row.kind === "hidegame")
@@ -1171,6 +1229,64 @@ FocusScope {
         bottomPadding: vpx(16)
     }
 
+
+    // the picture of the art row you're on, beside the list
+    Rectangle {
+        id: artPreview
+
+        readonly property var row: (list.currentIndex >= 0 && list.currentIndex < list.rows.length) ? list.rows[list.currentIndex] : null
+        readonly property string file: (row && row.kind === "art") ? String(root.current(row.key) || "") : ""
+        readonly property bool isVideo: /\.(mp4|webm|mkv|avi|mov)$/i.test(file)
+        readonly property bool isDoc: /\.(pdf|cbz|cbr)$/i.test(file)
+
+        visible: list.activeFocus && file !== ""
+        anchors.left: list.right
+        anchors.leftMargin: vpx(16)
+        anchors.right: parent.right
+        anchors.rightMargin: vpx(16)
+        anchors.verticalCenter: list.verticalCenter
+        height: width * 1.2 + previewCaption.height
+        color: "#222"
+        radius: vpx(6)
+
+        Image {
+            id: previewImage
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.margins: vpx(8)
+            height: parent.width * 1.2 - vpx(16)
+            visible: !artPreview.isVideo && !artPreview.isDoc
+            source: (!visible || artPreview.file === "") ? ""
+                  : (artPreview.file.indexOf("image://") === 0 || artPreview.file.indexOf("file:") === 0) ? artPreview.file
+                  : "file://" + artPreview.file
+            sourceSize.width: vpx(320)
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+        }
+        Text {
+            anchors.centerIn: previewImage
+            visible: artPreview.isVideo || artPreview.isDoc || previewImage.status === Image.Error
+            text: artPreview.isVideo ? qsTr("Video") + api.tr
+                : artPreview.isDoc ? qsTr("Manual") + api.tr
+                : qsTr("Can't show this file") + api.tr
+            color: "#999"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(16)
+        }
+        Text {
+            id: previewCaption
+            anchors.bottom: parent.bottom
+            width: parent.width
+            text: (artPreview.row && artPreview.row.edited ? qsTr("New, not saved yet") : qsTr("Now")) + api.tr
+            color: artPreview.row && artPreview.row.edited ? "#e8b06a" : "#aaa"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(14)
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            padding: vpx(8)
+        }
+    }
 
     // -- Art -------------------------------------------------------------------------
 

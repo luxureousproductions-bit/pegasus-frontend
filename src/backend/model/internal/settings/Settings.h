@@ -157,6 +157,11 @@ public:
     Q_INVOKABLE QVariantMap androidKinds() const;
     /// Moves an Android entry to a section; an empty kind: back to automatic
     Q_INVOKABLE void setAndroidKind(const QString& key, const QString& kind);
+    /// Puts a moved Android entry in its section right away, without reading
+    /// the library again: its tags, and with Merge off, Android or Android
+    /// Games. False when that can't be done live (back to automatic, or no
+    /// Android Games collection yet): the library is read again instead.
+    Q_INVOKABLE bool applyAndroidKind(QObject* collections, QObject* game, const QString& kind);
     /// Removes the ES-DE import files of these folders; returns how many
     Q_INVOKABLE int deleteEsdeImport(const QStringList& folders);
     // Edit metadata
@@ -178,6 +183,9 @@ public:
     Q_PROPERTY(QString lastBrowseFolder READ lastBrowseFolder WRITE setLastBrowseFolder NOTIFY lastBrowseFolderChanged)
     QString lastBrowseFolder() const;
     void setLastBrowseFolder(const QString&);
+    /// The last 5 folders file browsers were used in, newest first
+    Q_PROPERTY(QStringList recentBrowseFolders READ recentBrowseFolders NOTIFY lastBrowseFolderChanged)
+    QStringList recentBrowseFolders() const;
     /// Asked once whether to set up the data folder
     Q_PROPERTY(bool dataDirAsked READ dataDirAsked WRITE setDataDirAsked NOTIFY dataDirChanged)
     bool dataDirAsked() const;
