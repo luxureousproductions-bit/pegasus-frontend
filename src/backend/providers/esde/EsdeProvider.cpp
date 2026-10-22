@@ -2541,6 +2541,16 @@ std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString,
 }
 
 
+std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root)
+{
+    const EmulatorSetup setup;
+    const QString system = setup.system_for(short_name, collection_name);
+    if (system.isEmpty())
+        return {};
+    return setup.choices_for(system, rom_root);
+}
+
+
 CollectionDetails collection_details(const QString& collection_name)
 {
     CollectionDetails out;
@@ -2578,6 +2588,7 @@ CollectionDetails collection_details(const QString& collection_name)
         }
     }
     const std::vector<DefaultLaunch> defaults = default_launches({ { collection_name, out.short_name } }, { rom_root });
+    out.rom_root = rom_root;
     out.default_label = defaults.front().label;
     out.default_command = defaults.front().command;
     return out;
@@ -2913,8 +2924,19 @@ bool own_files_merge(OwnFiles* own, const model::Game& game, const QStringList& 
         }
     }
     const QDir base(file.dir);
+    // your entry comes first: ES-DE only fills in what it doesn't have
+    const auto has = [&](const QString& key) {
+        QStringList keys = aliases_of(key);
+        if (key == QLatin1String("description") || key == QLatin1String("summary"))
+            keys << QStringLiteral("description") << QStringLiteral("summary");
+        for (const MetaEntry& e : file.blocks.at(block).entries) {
+            if (keys.contains(e.key))
+                return true;
+        }
+        return false;
+    };
     const auto put = [&](const QString& key, const QStringList& values) {
-        if (values.isEmpty() || kept.contains(key))
+        if (values.isEmpty() || kept.contains(key) || has(key))
             return;
         file.set_entry(block, aliases_of(key), key, values);
     };
@@ -2922,7 +2944,7 @@ bool own_files_merge(OwnFiles* own, const model::Game& game, const QStringList& 
         return text.trimmed().split(QLatin1Char('\n'));
     };
 
-    // ES-DE's details: added where yours has none, replaced where they differ
+    // ES-DE's details: added only where yours has none
     put(QStringLiteral("developer"), game.developerListConst());
     put(QStringLiteral("publisher"), game.publisherListConst());
     put(QStringLiteral("genre"), game.genreListConst());

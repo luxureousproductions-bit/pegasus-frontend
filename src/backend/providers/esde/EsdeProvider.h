@@ -193,6 +193,9 @@ struct DefaultLaunch {
 std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString, QString>>& collections,
                                             const QStringList& rom_roots);
 
+/// The emulators of a collection's system (as in Settings > Emulators)
+std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root);
+
 /// A collection's own lines, for Settings > Edit metadata
 struct CollectionDetails {
     QString short_name;
@@ -200,6 +203,7 @@ struct CollectionDetails {
     QString launch;           ///< from its metadata; empty if none
     QString default_label;    ///< used when `launch` is empty
     QString default_command;
+    QString rom_root;         ///< the folder above its metadata file's
 };
 CollectionDetails collection_details(const QString& collection_name);
 

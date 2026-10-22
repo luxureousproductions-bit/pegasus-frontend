@@ -168,6 +168,20 @@ public:
     Q_INVOKABLE QString saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes);
     /// { shortname, extensions, launch, defaultLabel, defaultCommand } of a collection
     Q_INVOKABLE QVariantMap collectionDetails(const QString& collection_name) const;
+    /// The emulators of a collection's system: [{ label, command, installed, recommended, retroarch }]
+    Q_INVOKABLE QVariantList emulatorChoices(const QString& collection_name, const QString& short_name,
+                                             const QString& rom_root) const;
+
+    // Pegasus X's data folder: where art you pick (and later, scraped art) is kept
+    Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
+    QString dataDir() const;
+    void setDataDir(const QString&);
+    /// Makes a folder (and the ones above it); true if it exists now
+    Q_INVOKABLE bool makeDir(const QString& path) const;
+    /// A copy of `source` in the data folder (<data>/<collection>/<kind>/<name>.<ext>),
+    /// or `source` itself if there's no data folder, it's already in it, or copying fails
+    Q_INVOKABLE QString importArt(const QString& source, const QString& collection_name,
+                                  const QString& kind_folder, const QString& name) const;
     /// The first of these folders that exists, or empty
     Q_INVOKABLE QString firstExistingDir(const QStringList& paths) const;
     /// Every genre used in the library, A to Z
@@ -203,6 +217,7 @@ signals:
     void providerReloadingRequested();
     void libraryReloadRequested();
     void libraryRulesChanged();
+    void dataDirChanged();
 
 private:
     bool m_esde_import_running = false;

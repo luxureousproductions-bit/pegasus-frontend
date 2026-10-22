@@ -41,10 +41,43 @@ FocusScope {
     Component.onCompleted: root.resetPosition()
 
     // Pegasus X: opens in a given folder (eg. the game's media folder)
+    property string startFolder: ""
     function openAt(path) {
+        startFolder = path || "";
         if (path)
             folderModel.cd(path);
         root.resetPosition();
+        list.focus = true;
+    }
+
+    // Pegasus X: quick jumps, in a row above the list (d-pad up from the
+    // top of the list, or Y): the drives, one folder up, where it opened, the
+    // game directories and Pegasus X's data folder. LB also goes one folder up.
+    property string dataFolder: ""
+    readonly property var shortcuts: {
+        var out = [ { "t": qsTr("Drives") + api.tr, "act": "drives" },
+                    { "t": qsTr("Up a folder") + api.tr, "act": "up" } ];
+        if (startFolder !== "")
+            out.push({ "t": qsTr("Where it opened") + api.tr, "act": "go", "path": startFolder });
+        if (dataFolder !== "")
+            out.push({ "t": qsTr("Pegasus X data") + api.tr, "act": "go", "path": dataFolder });
+        var dirs = Internal.settings.gameDirs;
+        for (var i = 0; i < dirs.length; i++)
+            out.push({ "t": dirs[i].split("/").filter(function(x) { return x !== ""; }).pop() || dirs[i], "act": "go", "path": dirs[i] });
+        return out;
+    }
+    function jump(entry) {
+        if (entry.act === "up")
+            enter("..");
+        else if (entry.act === "drives") {
+            folderModel.cd("/:pegasusx-drives:");  // no such folder: the drive list
+            resetPosition();
+        }
+        else {
+            folderModel.cd(entry.path);
+            resetPosition();
+        }
+        list.focus = true;
     }
     function resetPosition() {
         list.currentIndex = list.count > 1 ? 1 : 0;
@@ -71,9 +104,19 @@ FocusScope {
     }
 
     Keys.onPressed: {
-        if (api.keys.isCancel(event) && !event.isAutoRepeat) {
+        if (event.isAutoRepeat)
+            return;
+        if (api.keys.isCancel(event)) {
             event.accepted = true;
             root.cancel();
+        }
+        else if (api.keys.isPrevPage(event)) {
+            event.accepted = true;
+            root.enter("..");
+        }
+        else if (api.keys.isFilters(event)) {
+            event.accepted = true;
+            (jumpRow.activeFocus ? list : jumpRow).focus = true;
         }
     }
 
@@ -145,7 +188,7 @@ FocusScope {
 
                 Text {
                     id: pathText
-                    text: folderModel.folder
+                    text: folderModel.folder + "   ·   " + qsTr("LB up a folder · Y quick jumps") + api.tr
                     width: parent.width
 
                     color: "#bbb"
@@ -158,9 +201,49 @@ FocusScope {
                     elide: Text.ElideMiddle
                 }
             }
+            ListView {
+                id: jumpRow
+                anchors.top: path.bottom
+                anchors.topMargin: vpx(8)
+                width: parent.width
+                height: vpx(38)
+                orientation: ListView.Horizontal
+                spacing: vpx(8)
+                clip: true
+                model: root.shortcuts
+                KeyNavigation.down: list
+                Keys.onPressed: {
+                    if (api.keys.isAccept(event) && !event.isAutoRepeat) {
+                        event.accepted = true;
+                        root.jump(root.shortcuts[currentIndex]);
+                    }
+                }
+                delegate: Rectangle {
+                    readonly property bool highlighted: ListView.view.activeFocus && ListView.isCurrentItem
+                    width: jumpText.implicitWidth + vpx(24)
+                    height: ListView.view.height
+                    radius: vpx(4)
+                    color: highlighted ? "#3aa" : "#2b2b2b"
+                    border.color: "#3aa"
+                    border.width: highlighted ? 0 : vpx(1)
+                    Text {
+                        id: jumpText
+                        anchors.centerIn: parent
+                        text: modelData.t
+                        color: parent.highlighted ? "#111" : "#9dd"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(16)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: root.jump(modelData)
+                    }
+                }
+            }
             Rectangle {
                 width: parent.width
-                anchors.top: path.bottom
+                anchors.top: jumpRow.bottom
+                anchors.topMargin: vpx(8)
                 anchors.bottom: parent.bottom
                 color: "#333"
 
@@ -171,6 +254,13 @@ FocusScope {
 
                     model: folderModel
                     delegate: fileDelegate
+                    // up from the top row: the quick jumps
+                    Keys.onUpPressed: {
+                        if (currentIndex <= 0)
+                            jumpRow.focus = true;
+                        else
+                            decrementCurrentIndex();
+                    }
 
                     focus: true
                     highlightRangeMode: ListView.ApplyRange

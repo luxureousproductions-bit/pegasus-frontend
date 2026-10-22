@@ -44,6 +44,9 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QSettings>
+#include <QFile>
+#include <QRegularExpression>
+#include <QDir>
 #include <QThreadPool>
 #include <QtConcurrent/QtConcurrent>
 #include <QFileInfo>
@@ -895,11 +898,83 @@ QVariantMap Settings::collectionDetails(const QString& collection_name) const
         { QStringLiteral("launch"), d.launch },
         { QStringLiteral("defaultLabel"), d.default_label },
         { QStringLiteral("defaultCommand"), d.default_command },
+        { QStringLiteral("romRoot"), d.rom_root },
     };
 #else
     Q_UNUSED(collection_name);
     return {};
 #endif
+}
+
+QVariantList Settings::emulatorChoices(const QString& collection_name, const QString& short_name,
+                                       const QString& rom_root) const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& c : providers::esde::collection_choices(collection_name, short_name, rom_root)) {
+        out.append(QVariantMap {
+            { QStringLiteral("label"), c.label },
+            { QStringLiteral("command"), c.command },
+            { QStringLiteral("installed"), c.installed },
+            { QStringLiteral("recommended"), c.recommended },
+            { QStringLiteral("retroarch"), c.retroarch },
+        });
+    }
+#else
+    Q_UNUSED(collection_name);
+    Q_UNUSED(short_name);
+    Q_UNUSED(rom_root);
+#endif
+    return out;
+}
+
+QString Settings::dataDir() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return file.value(QStringLiteral("data/dir")).toString();
+}
+
+void Settings::setDataDir(const QString& dir)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("data/dir"), dir);
+    emit dataDirChanged();
+}
+
+bool Settings::makeDir(const QString& path) const
+{
+    return !path.isEmpty() && QDir().mkpath(path);
+}
+
+QString Settings::importArt(const QString& source, const QString& collection_name,
+                            const QString& kind_folder, const QString& name) const
+{
+    const QString data = dataDir();
+    if (data.isEmpty() || source.isEmpty() || !QFileInfo(source).isFile())
+        return source;
+    const QString clean_data = QDir::cleanPath(data);
+    if (QDir::cleanPath(source).startsWith(clean_data + QLatin1Char('/')))
+        return source;  // already there
+
+    // names that work on every file system
+    const auto safe = [](QString text) {
+        static const QRegularExpression rx_bad(QStringLiteral("[\\\\/:*?\"<>|]"));
+        text.replace(rx_bad, QStringLiteral("_"));
+        return text.simplified();
+    };
+    const QString dir = clean_data + QLatin1Char('/') + safe(collection_name) + QLatin1Char('/') + safe(kind_folder);
+    if (!QDir().mkpath(dir))
+        return source;
+    const QString ext = QFileInfo(source).suffix();
+    const QString target = dir + QLatin1Char('/') + safe(name) + (ext.isEmpty() ? QString() : QLatin1Char('.') + ext);
+    if (QFileInfo::exists(target))
+        QFile::remove(target);
+    if (!QFile::copy(source, target)) {
+        Log::warning(LOGMSG("Could not copy `%1` to `%2`").arg(source, target));
+        return source;
+    }
+    Log::info(LOGMSG("Art copied to `%1`").arg(target));
+    return target;
 }
 
 QString Settings::firstExistingDir(const QStringList& paths) const
