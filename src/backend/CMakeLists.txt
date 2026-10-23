@@ -22,6 +22,9 @@ add_library(pegasus-backend
     ProcessLauncher.h
     ScriptRunner.cpp
     ScriptRunner.h
+    Scraper.cpp
+    Scraper.h
+    ScraperKeys.h
 )
 
 add_subdirectory(imggen)

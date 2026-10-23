@@ -36,6 +36,8 @@
 #include "providers/esde/EsdeProvider.h"
 #include "providers/LibraryRules.h"
 #include "ScraperKeys.h"
+#include "Scraper.h"
+#include "model/gaming/Assets.h"
 #endif
 
 #include <QCursor>
@@ -1210,6 +1212,138 @@ void Settings::checkScraperAccounts()
             finish();
         });
     }
+}
+
+QString Settings::startScraper(QObject* collections)
+{
+    if (m_scraper && m_scraper->running())
+        return tr("The scraper is already running.");
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    if (!list)
+        return tr("No library to scrape.");
+    const QVariantMap settings = scraperSettings();
+    const QStringList systems = settings.value(QStringLiteral("systems")).toStringList();
+    const QString filter = settings.value(QStringLiteral("games")).toString();
+    if (systems.isEmpty())
+        return tr("Pick the systems to scrape first.");
+    const QString source = settings.value(QStringLiteral("source")).toString();
+    const bool has_ss = scraperHasScreenScraper();
+    const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
+    if (source == QLatin1String("steamgriddb") && !has_sgdb)
+        return tr("Enter your SteamGridDB API key in Account settings first.");
+    if (source == QLatin1String("screenscraper") && !has_ss && !has_sgdb)
+        return tr("ScreenScraper isn't in this build yet. Pick SteamGridDB, or add your SteamGridDB key.");
+
+    const auto local = [](const QString& url) {
+        return url.startsWith(QLatin1String("file:")) ? QUrl(url).toLocalFile() : url;
+    };
+    static const QRegularExpression rx_3d(QStringLiteral("box3d|box_3d|3dbox"), QRegularExpression::CaseInsensitiveOption);
+    std::vector<scraper::Job> jobs;
+    QSet<QString> seen;
+    for (int i = 0; i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll || !systems.contains(coll->name()))
+            continue;
+        const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
+        for (model::Game* const game : coll->gameList()->entries()) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            if (files.empty())
+                continue;
+            const QString path = files.front()->path();
+            if (seen.contains(path))
+                continue;
+            const model::Assets& assets = game->assets();
+            const bool no_details = game->description().isEmpty() && game->summary().isEmpty() && game->developerListConst().isEmpty();
+            const auto real = [](const QStringList& l) {
+                for (const QString& f : l) { if (!f.startsWith(QLatin1String("image://"))) return true; }
+                return false;
+            };
+            const bool no_image = !real(assets.boxFrontList()) && assets.screenshotList().isEmpty();
+            const bool no_video = assets.videoList().isEmpty();
+            bool take = true;
+            if (filter == QLatin1String("favorites")) take = game->isFavorite();
+            else if (filter == QLatin1String("nometadata")) take = no_details;
+            else if (filter == QLatin1String("noimage")) take = no_image;
+            else if (filter == QLatin1String("novideo")) take = no_video;
+            else if (filter == QLatin1String("missing")) take = no_details || no_image || no_video || assets.logoList().isEmpty();
+            if (!take)
+                continue;
+            seen.insert(path);
+
+            scraper::Job job;
+            job.collection = coll->name();
+            job.system = system;
+            job.title = game->title();
+            job.path = path;
+            job.has_description = !game->description().isEmpty() || !game->summary().isEmpty();
+            job.has_developer = !game->developerListConst().isEmpty();
+            job.has_publisher = !game->publisherListConst().isEmpty();
+            job.has_genre = !game->genreListConst().isEmpty();
+            job.has_release = game->releaseDate().isValid();
+            job.has_players = game->playerCount() > 1;
+            job.has_rating = game->rating() > 0.0f;
+            job.title_is_file_name = !path.startsWith(QLatin1String("android:"))
+                && QFileInfo(path).completeBaseName().compare(game->title(), Qt::CaseInsensitive) == 0;
+            const std::vector<std::pair<const char*, const QStringList*>> slot_lists {
+                { "assets.box_front", &assets.boxFrontList() }, { "assets.box_back", &assets.boxBackList() },
+                { "assets.cartridge", &assets.cartridgeList() }, { "assets.screenshot", &assets.screenshotList() },
+                { "assets.titlescreen", &assets.titlescreenList() }, { "assets.background", &assets.backgroundList() },
+                { "assets.logo", &assets.logoList() }, { "assets.video", &assets.videoList() },
+                { "assets.steam", &assets.steamList() },
+            };
+            for (const auto& entry : slot_lists) {
+                QStringList files_now;
+                for (const QString& f : *entry.second) {
+                    if (!f.startsWith(QLatin1String("image://")))
+                        files_now.append(local(f));
+                }
+                job.slots.insert(QLatin1String(entry.first), files_now);
+                if (QLatin1String(entry.first) == QLatin1String("assets.box_front")) {
+                    for (const QString& f : files_now) {
+                        if (rx_3d.match(f).hasMatch()) job.has_box3d = true;
+                        else job.has_box2d = true;
+                    }
+                }
+            }
+            const QVariant manual = game->extraMap().value(QStringLiteral("manual"));
+            job.slots.insert(QStringLiteral("x-manual"), manual.toStringList());
+            jobs.push_back(std::move(job));
+        }
+    }
+    if (jobs.empty())
+        return tr("No games to scrape with these settings.");
+
+    QString data = dataDir();
+    if (data.isEmpty())
+        data = paths::writableConfigDir() + QStringLiteral("/media");
+
+    if (!m_scraper) {
+        m_scraper = new scraper::Scraper(this);
+        connect(m_scraper, &scraper::Scraper::progress, this, &Settings::scraperProgress);
+        connect(m_scraper, &scraper::Scraper::finished, this, [this](QVariantMap state){
+            emit scraperFinished(state);
+            // the library shows it: right away, unless Library is open (it
+            // reads the library again when you leave it)
+            if (!m_library_open && state.value(QStringLiteral("saved")).toInt() > 0)
+                reloadLibrary();
+        });
+    }
+    m_scraper->start(std::move(jobs), settings,
+                     has_ss ? unmask(PEGASUSX_SS_DEVID, PEGASUSX_SS_DEVID_LEN) : QString(),
+                     has_ss ? unmask(PEGASUSX_SS_DEVPASSWORD, PEGASUSX_SS_DEVPASSWORD_LEN) : QString(),
+                     data);
+    return {};
+}
+
+void Settings::stopScraper()
+{
+    if (m_scraper)
+        m_scraper->stop();
+}
+
+QVariantMap Settings::scraperState() const
+{
+    return m_scraper ? m_scraper->state() : QVariantMap { { QStringLiteral("running"), false } };
 }
 
 int Settings::emulatorListAgeDays() const

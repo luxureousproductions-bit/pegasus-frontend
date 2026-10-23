@@ -29,6 +29,8 @@
 
 class QNetworkAccessManager;
 
+namespace scraper { class Scraper; }
+
 namespace model {
 
 /// Provides a settings interface for the frontend layer
@@ -194,6 +196,15 @@ public:
     /// Asks ScreenScraper and SteamGridDB whether the logins work
     /// (scraperAccountsChecked)
     Q_INVOKABLE void checkScraperAccounts();
+    /// Scrapes the games the Scraper settings pick (systems and filter);
+    /// returns an error, or empty when it started (scraperProgress, scraperFinished)
+    Q_INVOKABLE QString startScraper(QObject* collections);
+    Q_INVOKABLE void stopScraper();
+    /// { running, done, total, current, title, result, ok, saved, notFound, failed, stopReason }
+    Q_INVOKABLE QVariantMap scraperState() const;
+    /// Settings > Library is open: it reads the library again when you leave;
+    /// otherwise a finished scrape does it
+    Q_PROPERTY(bool libraryOpen MEMBER m_library_open)
 
     // Pegasus X's data folder: where art you pick (and later, scraped art) is kept
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
@@ -233,6 +244,8 @@ public:
 signals:
     /// { ss: text, ssOk, sgdb: text, sgdbOk }
     void scraperAccountsChecked(QVariantMap result);
+    void scraperProgress(QVariantMap state);
+    void scraperFinished(QVariantMap state);
     void fullscreenChanged();
     void mouseSupportChanged();
     void verifyFilesChanged();
@@ -259,6 +272,8 @@ signals:
 private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
+    scraper::Scraper* m_scraper = nullptr;
+    bool m_library_open = false;
     QVariantList m_emu_cache;
     QVariantList m_android_apps_cache;
 };

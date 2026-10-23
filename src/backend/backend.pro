@@ -21,6 +21,7 @@ SOURCES += \
     Paths.cpp \
     AppSettings.cpp \
     Log.cpp \
+    Scraper.cpp \
 
 HEADERS += \
     Backend.h \
@@ -32,6 +33,8 @@ HEADERS += \
     Paths.h \
     AppSettings.h \
     Log.h \
+    Scraper.h \
+    ScraperKeys.h \
 
 include(imggen/imggen.pri)
 include(model/model.pri)

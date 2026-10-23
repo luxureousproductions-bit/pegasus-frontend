@@ -29,7 +29,7 @@ FocusScope {
 
     anchors.fill: parent
 
-    property string page: "main"   // main, systems, accounts, content, miximage, other
+    property string page: "main"   // main, systems, accounts, content, miximage, other, running
     property var s: Internal.settings.scraperSettings()
     property string message: ""
     property var accounts: ({})    // what the last check said
@@ -54,7 +54,37 @@ FocusScope {
             root.keepPosition(function() { root.accounts = result; });
         }
     }
-    Component.onCompleted: checkAccounts()
+    Component.onCompleted: {
+        checkAccounts();
+        // still scraping from before: its progress
+        var st = Internal.settings.scraperState();
+        if (st.running) {
+            run = st;
+            page = "running";
+        }
+    }
+
+    // -- Scraping ------------------------------------------------------------------
+
+    property var run: ({})         // the scraper's last state
+    property var results: []       // the last games: { title, result, ok }
+    Connections {
+        target: Internal.settings
+        function onScraperProgress(state) {
+            // a game finished: on top of the list
+            if (state.title && (state.done || 0) > (root.run.done || 0)) {
+                var next = [ { "title": state.title, "result": state.result, "ok": state.ok } ].concat(root.results);
+                root.results = next.slice(0, 8);
+            }
+            root.run = state;
+        }
+        function onScraperFinished(state) {
+            root.run = state;
+            root.message = state.stopReason
+                ? state.stopReason + " · " + qsTr("%1 saved").arg(state.saved) + api.tr
+                : qsTr("Done: %1 saved, %2 not found, %3 failed.").arg(state.saved).arg(state.notFound).arg(state.failed) + api.tr;
+        }
+    }
 
     function keepPosition(change) {
         var index = list.currentIndex;
@@ -178,11 +208,16 @@ FocusScope {
             message = qsTr("Pick the systems to scrape first.") + api.tr;
             return;
         }
-        if (s.source === "screenscraper" && !s.hasScreenScraper) {
-            message = qsTr("ScreenScraper isn't in this build yet: its developer login is missing.") + api.tr;
+        var error = Internal.settings.startScraper(api.collections);
+        if (error !== "") {
+            message = error;
             return;
         }
-        message = qsTr("%1 games to scrape. Scraping itself comes in the next build.").arg(gameCount) + api.tr;
+        results = [];
+        run = Internal.settings.scraperState();
+        message = "";
+        page = "running";
+        list.currentIndex = 0;
     }
 
     readonly property var rows: {
@@ -238,6 +273,22 @@ FocusScope {
             out.push({ "kind": "info", "text": qsTr("Made by ScreenScraper from the game's art, ready to show.") + api.tr, "value": "" });
             return out;
         }
+        if (page === "running") {
+            var total = run.total || 0;
+            out.push({ "kind": "progress", "text": run.running
+                ? qsTr("%1 of %2").arg(run.done || 0).arg(total) + api.tr
+                : qsTr("Finished · %1 of %2").arg(run.done || 0).arg(total) + api.tr,
+                "value": run.running && run.current ? run.current : "" });
+            out.push({ "kind": "info", "text": qsTr("Saved · not found · failed") + api.tr,
+                       "value": (run.saved || 0) + " · " + (run.notFound || 0) + " · " + (run.failed || 0) });
+            out.push({ "kind": "section", "text": qsTr("Last games") + api.tr });
+            for (i = 0; i < results.length; i++)
+                out.push({ "kind": "info", "text": results[i].title, "value": results[i].result, "ok": results[i].ok });
+            if (results.length === 0)
+                out.push({ "kind": "info", "text": qsTr("Starting...") + api.tr, "value": "" });
+            out.push({ "kind": run.running ? "stop" : "done", "text": run.running ? qsTr("Stop") + api.tr : qsTr("Back to the scraper") + api.tr });
+            return out;
+        }
         if (page === "other") {
             out.push({ "kind": "choice", "key": "region", "text": qsTr("Region") + api.tr, "choices": regionChoices });
             out.push({ "kind": "choice", "key": "language", "text": qsTr("Preferred language") + api.tr, "choices": languageChoices });
@@ -264,6 +315,7 @@ FocusScope {
         "main": qsTr("Library > Scraper"), "systems": qsTr("Scraper > Systems"),
         "accounts": qsTr("Scraper > Accounts"), "content": qsTr("Scraper > Content"),
         "miximage": qsTr("Scraper > Miximages"), "other": qsTr("Scraper > Other settings"),
+        "running": qsTr("Scraper > Scraping"),
     })
 
     // -- Doing things ------------------------------------------------------------
@@ -277,7 +329,8 @@ FocusScope {
             list.currentIndex = 1;
     }
     function back() {
-        if (page === "main") {
+        // scraping goes on in the background: back from its page leaves it running
+        if (page === "main" || page === "running") {
             root.close();
             return;
         }
@@ -319,6 +372,8 @@ FocusScope {
         else if (row.kind === "none") set("systems", []);
         else if (row.kind === "text") textDialog.openFor(row);
         else if (row.kind === "start") startScraper();
+        else if (row.kind === "stop") Internal.settings.stopScraper();
+        else if (row.kind === "done") { page = "main"; message = ""; list.currentIndex = 0; }
     }
 
     Keys.onPressed: {
@@ -328,7 +383,7 @@ FocusScope {
             event.accepted = true;
             back();
         }
-        else if (event.key === 1048587 || event.key === Qt.Key_F5) {
+        else if ((event.key === 1048587 || event.key === Qt.Key_F5) && page !== "running") {
             // Start: start scraping, from any page
             event.accepted = true;
             startScraper();
@@ -397,13 +452,35 @@ FocusScope {
         delegate: Item {
             readonly property bool isSection: modelData.kind === "section"
             readonly property bool isInfo: modelData.kind === "info"
-            readonly property bool isStart: modelData.kind === "start"
+            readonly property bool isStart: modelData.kind === "start" || modelData.kind === "stop" || modelData.kind === "done"
+            readonly property bool isProgress: modelData.kind === "progress"
             readonly property bool steps: modelData.kind === "choice" || modelData.kind === "number"
             readonly property bool highlighted: !isSection && !isInfo
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
 
             width: ListView.view.width
-            height: isSection ? sectionText.height : isStart ? vpx(76) : isInfo ? vpx(42) : vpx(22) * 2.4
+            height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isInfo ? vpx(42) : vpx(22) * 2.4
+
+            // how far it is
+            Rectangle {
+                visible: parent.isProgress
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.leftMargin: vpx(30)
+                anchors.rightMargin: vpx(30)
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: vpx(12)
+                height: vpx(8)
+                radius: vpx(4)
+                color: "#333"
+                Rectangle {
+                    height: parent.height
+                    radius: parent.radius
+                    color: "#3aa"
+                    width: parent.width * ((root.run.total || 0) > 0 ? (root.run.done || 0) / root.run.total : 0)
+                    Behavior on width { NumberAnimation { duration: 250 } }
+                }
+            }
 
             Text {
                 id: sectionText
@@ -422,7 +499,7 @@ FocusScope {
                 width: Math.min(parent.width * 0.5, vpx(380))
                 height: vpx(50)
                 radius: vpx(6)
-                color: parent.highlighted ? "#3aa" : "#2a5f5f"
+                color: parent.highlighted ? "#3aa" : modelData.kind === "stop" ? "#5f2a2a" : "#2a5f5f"
                 Text {
                     anchors.centerIn: parent
                     text: modelData.text

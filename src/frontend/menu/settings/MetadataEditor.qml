@@ -55,6 +55,7 @@ FocusScope {
     property var genres: []              // every genre in the library, for quick picks
 
     Component.onCompleted: {
+        Internal.settings.libraryOpen = true;  // a finished scrape waits for you to leave
         list.currentIndex = 1;  // the first option, below the title
         // the first time: offer to set up the data folder
         if (Internal.settings.dataDir === "" && !Internal.settings.dataDirAsked)
@@ -802,7 +803,8 @@ FocusScope {
             list.currentIndex = 0;
             return;
         }
-        if (anySaved || libChanged)
+        Internal.settings.libraryOpen = false;
+        if (anySaved || libChanged || Internal.settings.scraperState().saved > 0)
             Internal.settings.reloadLibrary();
         root.close();
     }
