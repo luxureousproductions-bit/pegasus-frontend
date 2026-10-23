@@ -4,7 +4,7 @@
 name: Compile check - Linux, Windows
 on:
   push:
-    branches: [pegasusx-perf]
+    branches: [Pegasus-X, pegasusx-perf]
   workflow_dispatch:
 
 jobs:
