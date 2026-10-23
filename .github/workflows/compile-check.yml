@@ -1,0 +1,60 @@
+# Pegasus X: compiles the desktop builds (Linux, Windows) of a branch and runs
+# the tests on Linux, so changes made for Android are known to still build
+# elsewhere. Nothing is packaged or published.
+name: Compile check - Linux, Windows
+on:
+  push:
+    branches: [pegasusx-perf]
+  workflow_dispatch:
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive', fetch-depth: 0}
+      - name: Install Qt 5.15
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qtbase5-dev qtbase5-private-dev qtdeclarative5-dev \
+            qtmultimedia5-dev libqt5svg5-dev libqt5gamepad5-dev qttools5-dev-tools \
+            qml-module-qtquick2 qml-module-qttest xvfb
+      - name: Build
+        run: |
+          mkdir build && cd build
+          qmake ..
+          make -j"$(nproc)" 2>&1 | tee ../build.log
+      - name: Test
+        run: cd build && xvfb-run -a make check 2>&1 | tail -n 60
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E "error:|Error [0-9]|undefined reference" build.log | head -n 15 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive', fetch-depth: 0}
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: '5.15.2'
+          arch: 'win64_mingw81'
+          modules: 'qtgamepad'
+          tools: 'tools_mingw,qt.tools.win64_mingw810'
+      - name: Build
+        shell: bash
+        run: |
+          export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
+          mkdir build && cd build
+          qmake ..
+          mingw32-make -j4 2>&1 | tee ../build.log
+      - name: Report build errors
+        if: failure()
+        shell: bash
+        run: |
+          grep -E "error:|Error [0-9]|undefined reference" build.log | head -n 15 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
