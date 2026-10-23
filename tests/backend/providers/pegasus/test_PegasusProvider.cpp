@@ -263,7 +263,13 @@ void test_PegasusProvider::with_meta()
         QCOMPARE(game.launchCmdBasedir(), common_basedir);
         QCOMPARE(game.filesModel()->count(), 1);
 
-        QCOMPARE(game.extraMap().size(), 1);
+        // (Pegasus X adds its own keys, eg. pegasusx-source: not counted)
+        int own_extras = 0;
+        for (auto e = game.extraMap().cbegin(); e != game.extraMap().cend(); ++e) {
+            if (!e.key().startsWith(QLatin1String("pegasusx-")))
+                own_extras++;
+        }
+        QCOMPARE(own_extras, 1);
         const auto it = game.extraMap().find(QStringLiteral("something"));
         QVERIFY(it != game.extraMap().cend());
         QCOMPARE(it->value<QStringList>(), QStringList() << QStringLiteral("ignored"));
