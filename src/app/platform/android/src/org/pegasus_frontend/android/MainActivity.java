@@ -392,7 +392,9 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
             return e.toString() + ": " + e.getMessage();
         }
 
-        return null;
+        // Pegasus X: success is an empty text, not null; a null result now
+        // means something went wrong before getting here (see run_am_call)
+        return "";
     }
 
     // Pegasus X: for each "package/activity" entry, the component to launch

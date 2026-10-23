@@ -263,6 +263,16 @@ QString run_am_call(const QStringList& args)
     static constexpr auto JNI_METHOD = "launchAmCommand";
     static constexpr auto JNI_SIGNATURE = "([Ljava/lang/String;)Ljava/lang/String;";
     const auto result_obj = QAndroidJniObject::callStaticObjectMethod(jni_classname(), JNI_METHOD, JNI_SIGNATURE, jni_arr);
+    // Pegasus X: an exception Java didn't catch is cleared by Qt and leaves
+    // no result, which used to look like a successful launch; the theme
+    // never heard of the failure (api.eventLaunchError)
+    if (jni_env->ExceptionCheck()) {
+        jni_env->ExceptionDescribe();
+        jni_env->ExceptionClear();
+        return QStringLiteral("java.lang.RuntimeException: the launch failed inside Android");
+    }
+    if (!result_obj.isValid())
+        return QStringLiteral("java.lang.RuntimeException: Android gave no answer to the launch");
     return result_obj.toString();
 }
 

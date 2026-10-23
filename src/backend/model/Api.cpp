@@ -106,7 +106,8 @@ void ApiObject::onGameLaunchOk()
 
 void ApiObject::onGameLaunchError(QString msg)
 {
-    Q_ASSERT(m_launch_game_file);
+    // Pegasus X: always reaches the theme, also for an error that didn't
+    // come from a launch it asked for (themes clear "resume after game" on it)
     m_launch_game_file = nullptr;
     emit eventLaunchError(msg);
 }
