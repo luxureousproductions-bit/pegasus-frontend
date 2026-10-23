@@ -81,6 +81,54 @@ void save_map_maybe(const QVariantMap& map, const QString& settings_dir, const Q
     }
 }
 
+// Pegasus X: the theme's name from its theme.cfg ("name: XboxOSv2")
+QString theme_cfg_name(const QString& theme_root_dir)
+{
+    QFile file(theme_root_dir % QStringLiteral("theme.cfg"));
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    while (!file.atEnd()) {
+        const QString line = QString::fromUtf8(file.readLine()).trimmed();
+        if (!line.startsWith(QLatin1String("name"), Qt::CaseInsensitive))
+            continue;
+        const int colon = line.indexOf(QLatin1Char(':'));
+        if (colon < 0 || line.leftRef(colon).trimmed().compare(QLatin1String("name"), Qt::CaseInsensitive) != 0)
+            continue;
+        return line.mid(colon + 1).trimmed();
+    }
+    return {};
+}
+
+// a name as a file name: letters, digits, '-', '_', '.' and spaces
+QString file_safe(const QString& name)
+{
+    QString out;
+    for (const QChar c : name) {
+        if (c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_') || c == QLatin1Char('.') || c == QLatin1Char(' '))
+            out += c;
+    }
+    return out.trimmed();
+}
+
+// Pegasus X: a theme folder unpacked under another name (GitHub's "Download
+// ZIP" gives XboxOSv2-main, XboxOSv2-refresh, ...) starts from the settings
+// kept under the theme's name, copied once to the new folder's file. The
+// old file is never removed.
+void adopt_settings_by_name(const QString& settings_dir, const QString& theme_id, const QString& theme_root_dir)
+{
+    const QString own_path = json_path_for(settings_dir, theme_id);
+    if (QFileInfo::exists(own_path))
+        return;
+    const QString name_id = file_safe(theme_cfg_name(theme_root_dir));
+    if (name_id.isEmpty() || name_id == theme_id)
+        return;
+    const QString name_path = json_path_for(settings_dir, name_id);
+    if (!QFileInfo::exists(name_path))
+        return;
+    if (QFile::copy(name_path, own_path))
+        Log::info(LOGMSG("Theme settings: `%1` started from `%2` (the theme's name)").arg(theme_id + QStringLiteral(".json"), name_id + QStringLiteral(".json")));
+}
+
 QVariantMap load_map_maybe(const QString& settings_dir, const QString& theme_id)
 {
     if (theme_id.isEmpty())
@@ -204,6 +252,7 @@ void Memory::changeTheme(const QString& theme_root_dir)
     // the old theme's pending changes go to its own file first
     flushNow();
     m_current_theme = theme_root_dir.mid(dir_name_start, dir_name_len);
+    adopt_settings_by_name(m_settings_dir, m_current_theme, theme_root_dir);
 
     m_data = load_map_maybe(m_settings_dir, m_current_theme);
     emit dataChanged();
