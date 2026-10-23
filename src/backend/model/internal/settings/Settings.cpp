@@ -1297,7 +1297,7 @@ QString Settings::startScraper(QObject* collections)
                     if (!f.startsWith(QLatin1String("image://")))
                         files_now.append(local(f));
                 }
-                job.slots.insert(QLatin1String(entry.first), files_now);
+                job.slot_files.insert(QLatin1String(entry.first), files_now);
                 if (QLatin1String(entry.first) == QLatin1String("assets.box_front")) {
                     for (const QString& f : files_now) {
                         if (rx_3d.match(f).hasMatch()) job.has_box3d = true;
@@ -1306,7 +1306,7 @@ QString Settings::startScraper(QObject* collections)
                 }
             }
             const QVariant manual = game->extraMap().value(QStringLiteral("manual"));
-            job.slots.insert(QStringLiteral("x-manual"), manual.toStringList());
+            job.slot_files.insert(QStringLiteral("x-manual"), manual.toStringList());
             jobs.push_back(std::move(job));
         }
     }

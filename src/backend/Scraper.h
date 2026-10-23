@@ -52,7 +52,7 @@ struct Job {
     bool has_players = false;
     bool has_rating = false;
     bool title_is_file_name = false;
-    QVariantMap slots;       ///< metadata key ("assets.screenshot", "x-manual") -> its files now
+    QVariantMap slot_files;       ///< metadata key ("assets.screenshot", "x-manual") -> its files now
     bool has_box2d = false;
     bool has_box3d = false;
 };

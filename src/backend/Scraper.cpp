@@ -415,7 +415,7 @@ bool Scraper::slotFree(const Job& job, const Media& media) const
         return !job.has_box2d;
     if (media.kind == QLatin1String("3d"))
         return !job.has_box3d;
-    return job.slots.value(media.slot).toStringList().isEmpty();
+    return job.slot_files.value(media.slot).toStringList().isEmpty();
 }
 
 void Scraper::next()
@@ -786,7 +786,7 @@ void Scraper::downloadNext()
             // into the slot: the new file first (the 3D box after the 2D one),
             // the others stay unless you overwrite
             QStringList list = m_changes.contains(media.slot) ? m_changes.value(media.slot).toStringList()
-                                                               : job.slots.value(media.slot).toStringList();
+                                                               : job.slot_files.value(media.slot).toStringList();
             if (m_settings.value(QStringLiteral("overwrite")).toBool() && !m_changes.contains(media.slot)) {
                 // replaced: the old files of that kind go
                 QStringList kept;
