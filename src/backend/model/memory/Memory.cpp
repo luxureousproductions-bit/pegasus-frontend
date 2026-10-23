@@ -20,8 +20,11 @@
 #include "Log.h"
 #include "Paths.h"
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJSValue>
@@ -41,7 +44,11 @@ QString json_path_for(const QString& settings_dir, const QString& theme_id)
 
 void save_map_maybe(const QVariantMap& map, const QString& settings_dir, const QString& theme_id)
 {
-    if (map.isEmpty() || theme_id.isEmpty())
+    if (theme_id.isEmpty())
+        return;
+    // nothing to keep and nothing kept before: no file needed (but a theme
+    // that unset its last key gets an empty file, not its old settings back)
+    if (map.isEmpty() && !QFileInfo::exists(json_path_for(settings_dir, theme_id)))
         return;
 
     if (!QDir(settings_dir).mkpath(QStringLiteral("."))) {
@@ -50,8 +57,11 @@ void save_map_maybe(const QVariantMap& map, const QString& settings_dir, const Q
         return;
     }
 
+    // Pegasus X: written to a temporary file that replaces the old one only
+    // when complete, so the app being killed mid-write can't leave broken
+    // JSON behind (which used to reset every theme setting)
     const QString json_path = json_path_for(settings_dir, theme_id);
-    QFile json_file(json_path);
+    QSaveFile json_file(json_path);
     if (!json_file.open(QIODevice::WriteOnly)) {
         Log::warning(LOGMSG("could not save theme settings file `%1`: %2")
             .arg(json_path, json_file.errorString()));
@@ -61,6 +71,12 @@ void save_map_maybe(const QVariantMap& map, const QString& settings_dir, const Q
     const auto json_doc = QJsonDocument::fromVariant(map);
     if (json_file.write(json_doc.toJson(QJsonDocument::Compact)) < 0) {
         Log::warning(LOGMSG("failed to write theme settings file `%1`: %2")
+            .arg(json_path, json_file.errorString()));
+        json_file.cancelWriting();
+        return;
+    }
+    if (!json_file.commit()) {
+        Log::warning(LOGMSG("failed to save theme settings file `%1`: %2")
             .arg(json_path, json_file.errorString()));
     }
 }
@@ -102,11 +118,42 @@ Memory::Memory(QObject* parent)
 Memory::Memory(QString settings_dir, QObject* parent)
     : QObject(parent)
     , m_settings_dir(std::move(settings_dir))
-{}
+{
+    m_save_timer.setSingleShot(true);
+    m_save_timer.setInterval(400);
+    connect(&m_save_timer, &QTimer::timeout, this, &Memory::flushNow);
+
+    // written right away when the app may not get another chance
+    if (QCoreApplication::instance()) {
+        connect(QCoreApplication::instance(), &QCoreApplication::aboutToQuit, this, &Memory::flushNow);
+        if (auto* const gui = qobject_cast<QGuiApplication*>(QCoreApplication::instance())) {
+            connect(gui, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state){
+                if (state == Qt::ApplicationSuspended || state == Qt::ApplicationInactive
+                    || state == Qt::ApplicationHidden)
+                    flushNow();
+            });
+        }
+    }
+}
 
 void Memory::flush() const
 {
     save_map_maybe(m_data, m_settings_dir, m_current_theme);
+}
+
+void Memory::markDirty()
+{
+    m_dirty = true;
+    m_save_timer.start();  // restarts: a burst of changes is one save
+}
+
+void Memory::flushNow()
+{
+    m_save_timer.stop();
+    if (!m_dirty)
+        return;
+    m_dirty = false;
+    flush();
 }
 
 QVariant Memory::get(const QString& key) const
@@ -137,7 +184,7 @@ void Memory::set(const QString& key, QVariant value)
     m_data[key] = std::move(value);
     emit dataChanged();
 
-    flush();
+    markDirty();
 }
 
 void Memory::unset(const QString& key)
@@ -145,7 +192,7 @@ void Memory::unset(const QString& key)
     m_data.remove(key);
     emit dataChanged();
 
-    flush();
+    markDirty();
 }
 
 void Memory::changeTheme(const QString& theme_root_dir)
@@ -154,6 +201,8 @@ void Memory::changeTheme(const QString& theme_root_dir)
     const int dir_name_start = theme_root_dir.lastIndexOf('/', -2) + 1;
     const int dir_name_len = theme_root_dir.length() - dir_name_start - 1;
     Q_ASSERT(dir_name_len > 0);
+    // the old theme's pending changes go to its own file first
+    flushNow();
     m_current_theme = theme_root_dir.mid(dir_name_start, dir_name_len);
 
     m_data = load_map_maybe(m_settings_dir, m_current_theme);

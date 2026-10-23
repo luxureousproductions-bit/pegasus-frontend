@@ -18,6 +18,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTimer>
 #include <QVariantMap>
 
 
@@ -36,6 +37,11 @@ public:
 
     void changeTheme(const QString&);
 
+public slots:
+    /// Pegasus X: writes pending changes now (before a game starts, when
+    /// Android puts the app in the background, on quit)
+    void flushNow();
+
 signals:
     // NOTE: because QVariantMap cannot be changed on the QML side (QTBUG-59474),
     // get/set functions were introduced. Because of this however, sending a
@@ -46,7 +52,11 @@ private:
     const QString m_settings_dir;
     QString m_current_theme;
     QVariantMap m_data;
+    // Pegasus X: changes are written a moment later, many in a row as one
+    QTimer m_save_timer;
+    bool m_dirty = false;
 
     void flush() const;
+    void markDirty();
 };
 } // namespace model

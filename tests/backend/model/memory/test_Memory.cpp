@@ -161,6 +161,8 @@ void test_Memory::jsvalue()
     QCOMPARE(c.memory()->get("test").userType(), qMetaTypeId<QVariantMap>());
     QCOMPARE(c.memory()->get("test").value<QVariantMap>(), jsval_outer.toVariant());
 
+    // saving waits a moment (a burst of changes is one save): now
+    c.memory()->flushNow();
     QCOMPARE(QFileInfo::exists(json_path), true);
     QFile json_file(json_path);
     json_file.open(QFile::ReadOnly);

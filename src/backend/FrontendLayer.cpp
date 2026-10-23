@@ -82,6 +82,10 @@ void FrontendLayer::teardown()
 {
     Q_ASSERT(m_engine);
 
+    // Pegasus X: the theme's pending api.memory changes are written first
+    if (QObject* const memory = m_api_public->property("memory").value<QObject*>())
+        QMetaObject::invokeMethod(memory, "flushNow", Qt::DirectConnection);
+
     // signal forwarding
     connect(m_engine, &QQmlApplicationEngine::destroyed,
             this, &FrontendLayer::teardownComplete);

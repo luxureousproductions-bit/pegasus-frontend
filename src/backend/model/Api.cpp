@@ -89,6 +89,8 @@ void ApiObject::onGameFileLaunchRequested()
         return;
 
     m_launch_game_file = static_cast<model::GameFile*>(QObject::sender());
+    // Pegasus X: theme settings are on disk before the game takes over
+    m_memory.flushNow();
     emit launchGameFile(m_launch_game_file);
 }
 
