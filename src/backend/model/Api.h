@@ -26,6 +26,7 @@
 #include "providers/ProviderManager.h"
 #include "utils/QmlHelpers.h"
 
+#include <QHash>
 #include <QObject>
 
 
@@ -69,6 +70,12 @@ public:
     // shown with `image://pdf/<page>/<encodeURIComponent(path)>`.
     Q_INVOKABLE int pdfPageCount(const QString& path) const;
 
+    // Pegasus X: the first of these paths that is a file (as it's spelled on
+    // disk), or "". Only a stat per path, no PDF opened; folder names match
+    // in any case ("Manuals", "manual") on Linux too. Remembered for the
+    // session, per list.
+    Q_INVOKABLE QString findManual(const QStringList& paths) const;
+
 signals:
     // loading
     void gamedataReady();
@@ -110,6 +117,8 @@ private:
 
     // used to trigger re-rendering of texts on locale change
     QString emptyString() const { return QString(); }
+
+    mutable QHash<QString, QString> m_manual_cache;
 
     CollectionListModel* m_collections = nullptr;
     GameListModel* m_all_games = nullptr;

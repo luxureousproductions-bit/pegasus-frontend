@@ -18,7 +18,11 @@
 #include "Api.h"
 
 #include "Log.h"
+#include "utils/PathCase.h"
 #include "model/gaming/GameFile.h"
+
+#include <QFileInfo>
+#include <QUrl>
 
 #ifdef Q_OS_ANDROID
 #include "platform/AndroidHelpers.h"
@@ -129,6 +133,8 @@ QVariantMap ApiObject::frontendInfo() const
     QStringList features {
         // api.memory saves are coalesced and atomic (temp file + rename)
         QStringLiteral("atomicMemory"),
+        // api.findManual: a manual found with a stat per path
+        QStringLiteral("findManual"),
     };
 #ifdef Q_OS_ANDROID
     // api.pdfPageCount and image://pdf/ render manuals
@@ -142,6 +148,27 @@ QVariantMap ApiObject::frontendInfo() const
         { QStringLiteral("build"), PEGASUSX_BUILD },
         { QStringLiteral("features"), features },
     };
+}
+
+QString ApiObject::findManual(const QStringList& paths) const
+{
+    const QString key = paths.join(QLatin1Char('\n'));
+    const auto cached = m_manual_cache.constFind(key);
+    if (cached != m_manual_cache.cend())
+        return cached.value();
+
+    QString found;
+    for (QString path : paths) {
+        if (path.startsWith(QLatin1String("file:")))
+            path = QUrl(path).toLocalFile();
+        const QString real = pathcase::resolve(path);
+        if (!real.isEmpty() && QFileInfo(real).isFile()) {
+            found = real;
+            break;
+        }
+    }
+    m_manual_cache.insert(key, found);
+    return found;
 }
 
 int ApiObject::pdfPageCount(const QString& path) const

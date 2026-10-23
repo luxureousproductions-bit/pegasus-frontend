@@ -8,6 +8,7 @@ HEADERS += \
     $$PWD/KeySequenceTools.h \
     $$PWD/MoveOnly.h \
     $$PWD/NoCopyNoMove.h \
+    $$PWD/PathCase.h \
     $$PWD/PathTools.h \
     $$PWD/QmlHelpers.h \
     $$PWD/SqliteDb.h \
@@ -20,6 +21,7 @@ SOURCES += \
     $$PWD/FakeQKeyEvent.cpp \
     $$PWD/FolderListModel.cpp \
     $$PWD/KeySequenceTools.cpp \
+    $$PWD/PathCase.cpp \
     $$PWD/PathTools.cpp \
     $$PWD/SqliteDb.cpp \
     $$PWD/StringHelpers.cpp

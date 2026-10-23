@@ -12,6 +12,8 @@ target_sources(pegasus-backend PRIVATE
     KeySequenceTools.h
     MoveOnly.h
     NoCopyNoMove.h
+    PathCase.cpp
+    PathCase.h
     PathTools.cpp
     PathTools.h
     QmlHelpers.h
