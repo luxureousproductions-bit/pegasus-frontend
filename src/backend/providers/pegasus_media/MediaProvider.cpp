@@ -23,6 +23,7 @@
 #include "model/gaming/GameFile.h"
 #include "types/AssetType.h"
 #include "providers/SearchContext.h"
+#include "utils/PathCase.h"
 #include "utils/PathTools.h"
 
 #include <QDir>
@@ -104,7 +105,10 @@ Provider& MediaProvider::run(SearchContext& sctx)
 
     for (const QString& dir_base : sctx.pegasus_game_dirs()) {
         for (const QLatin1String& media_subdir_name : MEDIA_SUBDIRS) {
-            const QString media_dir = dir_base % media_subdir_name;
+            // Pegasus X: "Media" too on case-sensitive storage
+            const QString media_dir = pathcase::resolve(dir_base % media_subdir_name);
+            if (media_dir.isEmpty())
+                continue;
 
             QDirIterator dir_it(media_dir, dir_filters, dir_flags);
             while (dir_it.hasNext()) {
@@ -116,7 +120,7 @@ Provider& MediaProvider::run(SearchContext& sctx)
                 if (lookup_it == lookup_map.cend())
                     continue;
 
-                const AssetType asset_type = detect_asset_type(fileinfo.completeBaseName(), fileinfo.suffix());
+                const AssetType asset_type = detect_asset_type(fileinfo.completeBaseName(), fileinfo.suffix().toLower());
                 if (asset_type == AssetType::UNKNOWN)
                     continue;
 

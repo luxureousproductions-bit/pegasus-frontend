@@ -33,6 +33,7 @@
 #include "utils/CommandTokenizer.h"
 #include "utils/GameFileText.h"
 #include "utils/HashMap.h"
+#include "utils/PathCase.h"
 #include "utils/PathTools.h"
 
 #include <QDir>
@@ -593,10 +594,12 @@ bool has_extension(const QString& filename, const QStringList& extensions)
     return false;
 }
 
-void find_media(const QString& system_media_dir, const QString& system_dir,
+void find_media(const QString& wanted_media_dir, const QString& system_dir,
                 const HashMap<QString, model::Game*>& extless_path_to_game, size_t& found_assets)
 {
-    if (!QFileInfo(system_media_dir).isDir())
+    // Pegasus X: "Downloaded_Media/PSX" too on case-sensitive storage
+    const QString system_media_dir = pathcase::resolve(wanted_media_dir);
+    if (system_media_dir.isEmpty() || !QFileInfo(system_media_dir).isDir())
         return;
 
     HashMap<QString, QString> existing_dirs;  // lowercase -> actual folder name

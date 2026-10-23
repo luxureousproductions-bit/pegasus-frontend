@@ -22,6 +22,7 @@
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
 #include "providers/SearchContext.h"
+#include "utils/PathCase.h"
 #include "utils/PathTools.h"
 
 #include <QDir>
@@ -260,9 +261,11 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
     size_t found_assets_cnt = 0;
     for (const QString& root_dir : sctx.pegasus_game_dirs()) {
         for (const QString& media_dir_subpath : MEDIA_DIRS) {
-            const QString game_media_dir = root_dir % media_dir_subpath;
-            if (!QFileInfo::exists(game_media_dir))
+            // Pegasus X: "Media" or "Skraper" too on case-sensitive storage
+            const QString found_media_dir = pathcase::resolve(root_dir % media_dir_subpath);
+            if (found_media_dir.isEmpty())
                 continue;
+            const QString game_media_dir = found_media_dir % QLatin1Char('/');
 
             // Map the lowercase name of each folder to its actual name, so eg.
             // both "Covers" and "covers" are found on case-sensitive storage

@@ -123,6 +123,13 @@ AssetType str_to_type(const QString& str)
     if (it != map.cend())
         return it->second;
 
+    // Pegasus X: any case ("BoxFront", "COVERS"), so file and folder names
+    // spelled differently are found on Linux like on Android and Windows
+    for (const auto& entry : map) {
+        if (entry.first.compare(str, Qt::CaseInsensitive) == 0)
+            return entry.second;
+    }
+
     for (const auto& it : map) {
         if (str.startsWith(it.first))
             return it.second;
