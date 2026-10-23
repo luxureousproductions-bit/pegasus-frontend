@@ -18,7 +18,9 @@
 #include "Scraper.h"
 
 #include "Log.h"
+#ifdef WITH_COMPAT_ESDE
 #include "providers/esde/EsdeProvider.h"
+#endif
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -817,7 +819,12 @@ void Scraper::save()
         return;
     }
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
+#ifdef WITH_COMPAT_ESDE
     const QString error = providers::esde::save_game_metadata(job.collection, job.path, title, m_changes);
+#else
+    // metadata editing is Android only for now
+    const QString error = tr("saving isn't supported on this platform yet");
+#endif
     if (!error.isEmpty()) {
         m_failed++;
         finishGame(error, false);

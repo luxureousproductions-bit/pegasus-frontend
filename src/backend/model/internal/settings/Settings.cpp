@@ -32,12 +32,14 @@
 #include "platform/AndroidHelpers.h"
 #endif
 
-#ifdef WITH_COMPAT_ESDE
-#include "providers/esde/EsdeProvider.h"
+// built on every platform
 #include "providers/LibraryRules.h"
 #include "ScraperKeys.h"
 #include "Scraper.h"
 #include "model/gaming/Assets.h"
+// Android only (ES-DE import, emulators, metadata editing)
+#ifdef WITH_COMPAT_ESDE
+#include "providers/esde/EsdeProvider.h"
 #endif
 
 #include <QCursor>

@@ -21,6 +21,7 @@ jobs:
             qml-module-qtquick2 qml-module-qttest xvfb
       - name: Build
         run: |
+          set -o pipefail
           mkdir build && cd build
           qmake ..
           make -j"$(nproc)" 2>&1 | tee ../build.log
@@ -54,6 +55,7 @@ jobs:
       - name: Build
         shell: bash
         run: |
+          set -o pipefail
           export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
           mkdir build && cd build
           qmake ..
