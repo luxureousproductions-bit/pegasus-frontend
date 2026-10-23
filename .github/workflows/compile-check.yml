@@ -25,7 +25,15 @@ jobs:
           qmake ..
           make -j"$(nproc)" 2>&1 | tee ../build.log
       - name: Test
-        run: cd build && xvfb-run -a make check 2>&1 | tail -n 60
+        run: |
+          set -o pipefail
+          cd build && xvfb-run -a make -k check 2>&1 | tee ../test.log | tail -n 60
+      - name: Report tests
+        if: always()
+        run: |
+          [ -f test.log ] || exit 0
+          echo "::notice::$(grep -c '^Totals' test.log) test programs ran, $(grep -c '^FAIL!' test.log) failures"
+          grep -E "^FAIL!" test.log | head -n 10 | while IFS= read -r line; do echo "::error::${line}"; done
       - name: Report build errors
         if: failure()
         run: |
@@ -42,7 +50,6 @@ jobs:
         with:
           version: '5.15.2'
           arch: 'win64_mingw81'
-          modules: 'qtgamepad'
           tools: 'tools_mingw,qt.tools.win64_mingw810'
       - name: Build
         shell: bash
