@@ -29,3 +29,13 @@ execute_process(COMMAND
     OUTPUT_STRIP_TRAILING_WHITESPACE
     OUTPUT_VARIABLE PEGASUS_GIT_COMMIT_CNT
 )
+
+# Pegasus X: the build number (as in .qmake.conf): 2000 + the GitHub workflow
+# run number for builds made by GitHub, else the commit count
+if(DEFINED ENV{GITHUB_RUN_NUMBER} AND NOT "$ENV{GITHUB_RUN_NUMBER}" STREQUAL "")
+    math(EXPR PEGASUSX_BUILD "2000 + $ENV{GITHUB_RUN_NUMBER}")
+elseif(PEGASUS_GIT_COMMIT_CNT)
+    set(PEGASUSX_BUILD "${PEGASUS_GIT_COMMIT_CNT}")
+else()
+    set(PEGASUSX_BUILD 0)
+endif()

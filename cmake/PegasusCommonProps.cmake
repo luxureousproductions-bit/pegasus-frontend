@@ -14,6 +14,7 @@ function(pegasus_add_common_props target)
         QT_NO_URL_CAST_FROM_STRING
         GIT_REVISION="${PEGASUS_GIT_REVISION}"
         GIT_DATE="${PEGASUS_GIT_DATE}"
+        PEGASUSX_BUILD=${PEGASUSX_BUILD}
     )
 
     target_compile_features(${target} PUBLIC cxx_std_17)

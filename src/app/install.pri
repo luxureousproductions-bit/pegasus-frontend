@@ -106,9 +106,8 @@ android {
     # building a branch with fewer commits, so builds made by GitHub use the
     # workflow run number instead, which grows with every build on any branch
     # (2000 + run, above the commit counts used before).
-    PEGASUSX_VERSION_CODE = $${GIT_COMMIT_CNT}
-    PEGASUSX_RUN_NUMBER = $$(GITHUB_RUN_NUMBER)
-    !isEmpty(PEGASUSX_RUN_NUMBER): PEGASUSX_VERSION_CODE = $$num_add(2000, $${PEGASUSX_RUN_NUMBER})
+    # (PEGASUSX_BUILD, .qmake.conf: the same number the app reports)
+    PEGASUSX_VERSION_CODE = $${PEGASUSX_BUILD}
 
     # TODO: make this cross-platform
     QMAKE_POST_LINK += \
