@@ -22,6 +22,8 @@ FocusScope {
     id: root
 
     property alias label: label.text
+    // Pegasus X: a line or two under the name, like the on/off options have
+    property alias desc: description.text
 
     readonly property int fontSize: vpx(22)
     readonly property int horizontalPadding: vpx(30)
@@ -30,7 +32,7 @@ FocusScope {
 
 
     width: parent.width
-    height: fontSize * 2.5
+    height: description.text ? labelContainer.height + fontSize * 1.25 : fontSize * 2.5
     opacity: enabled ? 1.0 : 0.25
 
     Keys.onPressed: {
@@ -52,16 +54,31 @@ FocusScope {
         visible: parent.focus || mouseArea.containsMouse
     }
 
-    Text {
-        id: label
-
+    Column {
+        id: labelContainer
         anchors.left: parent.left
         anchors.leftMargin: horizontalPadding
         anchors.verticalCenter: parent.verticalCenter
+        width: parent.width * 0.85 - horizontalPadding
+        spacing: fontSize * 0.25
 
-        color: "#eee"
-        font.pixelSize: fontSize
-        font.family: globalFonts.sans
+        Text {
+            id: label
+
+            color: "#eee"
+            font.pixelSize: fontSize
+            font.family: globalFonts.sans
+        }
+        Text {
+            id: description
+
+            visible: text !== ""
+            width: parent.width
+            color: "#999"
+            font.pixelSize: fontSize * 0.8
+            font.family: globalFonts.sans
+            wrapMode: Text.WordWrap
+        }
     }
 
     MouseArea {

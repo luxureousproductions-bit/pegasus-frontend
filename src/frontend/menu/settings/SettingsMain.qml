@@ -201,6 +201,7 @@ FocusScope {
             roleValue: SettingsEntry.Type.Button
             SimpleButton {
                 label: qsTr(model.label) + api.tr
+                desc: model.desc ? qsTr(model.desc) + api.tr : ""
                 onActivate: model.buttonAction()
                 enabled: model.enabled
             }
