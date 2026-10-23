@@ -39,6 +39,9 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRegularExpression>
@@ -2215,6 +2218,30 @@ struct EmulatorSetup {
         for (int i = 0; i < components.size() && i < resolved.size(); i++)
             ctx.resolved_components.emplace(components.at(i), resolved.at(i));
 
+        // ... and when the original is installed too (eg. Xendroid and its
+        // ".fork" build), the fork is one more build of that emulator: listed
+        // with the others, so it's offered for every system the emulator has
+        QSet<QString> fork_done;
+        for (auto& entry : ctx.emulators) {
+            QStringList forks;
+            for (const QString& component : entry.second) {
+                const QString package = component.section(QLatin1Char('/'), 0, 0);
+                for (const QString& other : installed) {
+                    if (!other.startsWith(package % QLatin1Char('.')))
+                        continue;
+                    const QString activity = ::android::find_game_activity(other);
+                    if (activity.isEmpty() || entry.second.contains(activity) || forks.contains(activity))
+                        continue;
+                    forks.append(activity);
+                    if (!fork_done.contains(activity)) {
+                        fork_done.insert(activity);
+                        ctx.resolved_components.emplace(activity, activity);
+                    }
+                }
+            }
+            entry.second.append(forks);
+        }
+
         // a collection is matched to a system by its short name or name:
         // ES-DE's own names first, then the common short names, then full names
         for (const QString& name : order)
@@ -2311,6 +2338,9 @@ struct EmulatorSetup {
                     QString app_name = ::android::app_label(package_name);
                     if (app_name.isEmpty())
                         app_name = package_name;
+                    // a fork named like the original: "Xendroid Fork"
+                    if (app_name == ::android::app_label(builds.first()))
+                        app_name += QStringLiteral(" Fork");
                     EmulatorChoice extra = choice;
                     extra.label = choice.label % QStringLiteral(" · ") % app_name;
                     extra.command = build_command;
@@ -2541,13 +2571,75 @@ std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString,
 }
 
 
+namespace {
+QString custom_emulators_path()
+{
+    return paths::writableConfigDir() % QStringLiteral("/pegasusx-emulators.json");
+}
+QJsonArray load_custom_emulators()
+{
+    QFile file(custom_emulators_path());
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(file.readAll()).array();
+}
+// what a saved emulator belongs to: the ES-DE system, else the collection
+QString custom_key(const EmulatorSetup& setup, const QString& collection_name, const QString& short_name)
+{
+    const QString system = setup.system_for(short_name, collection_name);
+    return system.isEmpty() ? QStringLiteral("collection:") % collection_name.toLower() : system;
+}
+} // namespace
+
 std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root)
 {
     const EmulatorSetup setup;
     const QString system = setup.system_for(short_name, collection_name);
-    if (system.isEmpty())
-        return {};
-    return setup.choices_for(system, rom_root);
+    std::vector<EmulatorChoice> out;
+    // the ones you saved for this system (or this collection) first
+    const QString key = custom_key(setup, collection_name, short_name);
+    for (const QJsonValue& value : load_custom_emulators()) {
+        const QJsonObject obj = value.toObject();
+        if (obj.value(QStringLiteral("for")).toString() != key)
+            continue;
+        EmulatorChoice choice;
+        choice.label = obj.value(QStringLiteral("label")).toString();
+        choice.command = obj.value(QStringLiteral("command")).toString();
+        choice.installed = true;
+        choice.custom = true;
+        if (!choice.label.isEmpty() && !choice.command.isEmpty())
+            out.push_back(std::move(choice));
+    }
+    if (!system.isEmpty()) {
+        std::vector<EmulatorChoice> listed = setup.choices_for(system, rom_root);
+        out.insert(out.end(), listed.begin(), listed.end());
+    }
+    return out;
+}
+
+QString save_custom_emulator(const QString& collection_name, const QString& short_name,
+                             const QString& label, const QString& command, bool remove)
+{
+    const EmulatorSetup setup;
+    const QString key = custom_key(setup, collection_name, short_name);
+    QJsonArray list = load_custom_emulators();
+    for (int i = list.size() - 1; i >= 0; i--) {
+        const QJsonObject obj = list.at(i).toObject();
+        if (obj.value(QStringLiteral("for")).toString() == key && obj.value(QStringLiteral("label")).toString() == label)
+            list.removeAt(i);
+    }
+    if (!remove) {
+        list.append(QJsonObject {
+            { QStringLiteral("for"), key },
+            { QStringLiteral("label"), label },
+            { QStringLiteral("command"), command },
+        });
+    }
+    QFile file(custom_emulators_path());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return QStringLiteral("Could not write `%1`").arg(file.fileName());
+    file.write(QJsonDocument(list).toJson());
+    return {};
 }
 
 

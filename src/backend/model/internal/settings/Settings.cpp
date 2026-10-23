@@ -1011,6 +1011,7 @@ QVariantList Settings::emulatorChoices(const QString& collection_name, const QSt
             { QStringLiteral("installed"), c.installed },
             { QStringLiteral("recommended"), c.recommended },
             { QStringLiteral("retroarch"), c.retroarch },
+            { QStringLiteral("custom"), c.custom },
         });
     }
 #else
@@ -1019,6 +1020,25 @@ QVariantList Settings::emulatorChoices(const QString& collection_name, const QSt
     Q_UNUSED(rom_root);
 #endif
     return out;
+}
+
+QString Settings::saveCustomEmulator(const QString& collection_name, const QString& short_name,
+                                     const QString& label, const QString& command, bool remove)
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::save_custom_emulator(collection_name, short_name, label.simplified(), command.simplified(), remove);
+#else
+    Q_UNUSED(collection_name); Q_UNUSED(short_name); Q_UNUSED(label); Q_UNUSED(command); Q_UNUSED(remove);
+    return {};
+#endif
+}
+
+int Settings::emulatorListAgeDays() const
+{
+    const QFileInfo finfo(esde_lists_dir() + QStringLiteral("/es_systems.xml"));
+    if (!finfo.exists())
+        return -1;
+    return static_cast<int>(finfo.lastModified().daysTo(QDateTime::currentDateTime()));
 }
 
 QString Settings::dataDir() const

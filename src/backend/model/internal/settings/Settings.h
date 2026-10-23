@@ -178,6 +178,12 @@ public:
     /// The emulators of a collection's system: [{ label, command, installed, recommended, retroarch }]
     Q_INVOKABLE QVariantList emulatorChoices(const QString& collection_name, const QString& short_name,
                                              const QString& rom_root) const;
+    /// Saves an emulator of yours (a name and a command) for a collection's
+    /// system; with `remove`, forgets it. Returns an error, or empty.
+    Q_INVOKABLE QString saveCustomEmulator(const QString& collection_name, const QString& short_name,
+                                           const QString& label, const QString& command, bool remove);
+    /// Days since ES-DE's emulator list was downloaded, -1 if never
+    Q_INVOKABLE int emulatorListAgeDays() const;
 
     // Pegasus X's data folder: where art you pick (and later, scraped art) is kept
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)

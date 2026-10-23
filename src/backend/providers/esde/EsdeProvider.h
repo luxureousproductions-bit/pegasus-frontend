@@ -102,6 +102,7 @@ struct EmulatorChoice {
     bool installed = false;
     bool retroarch = false;  ///< a RetroArch core, which also has to be downloaded in RetroArch
     bool recommended = false;  ///< ES-DE's default for the system
+    bool custom = false;  ///< one you saved yourself (Settings > Library)
 };
 
 /// A collection defined in the user's metadata files
@@ -195,6 +196,11 @@ std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString,
 
 /// The emulators of a collection's system (as in Settings > Emulators)
 std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root);
+/// Saves (or with `remove`, forgets) an emulator of yours: a name and a launch
+/// command, offered for the collection's system (or the collection itself if
+/// its system isn't known). Returns an error, or empty.
+QString save_custom_emulator(const QString& collection_name, const QString& short_name,
+                             const QString& label, const QString& command, bool remove);
 
 /// A collection's own lines, for Settings > Edit metadata
 struct CollectionDetails {

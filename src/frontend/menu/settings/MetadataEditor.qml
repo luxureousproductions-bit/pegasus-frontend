@@ -197,7 +197,8 @@ FocusScope {
                 continue;
             anyInstalled = true;
             entries.push({ "act": "cmd", "command": c.command,
-                           "text": mark(c.label + (c.recommended ? qsTr(" · recommended") + api.tr : ""),
+                           "text": mark(c.label + (c.custom ? qsTr(" · yours") + api.tr
+                                                  : c.recommended ? qsTr(" · recommended") + api.tr : ""),
                                         currentCmd !== "" && sameCommand(c.command, currentCmd)) });
         }
         // a system the list doesn't know: the apps in Android's Emulators section
@@ -214,7 +215,10 @@ FocusScope {
                                "text": mark(choices[m].label + qsTr(" · not installed") + api.tr,
                                             currentCmd !== "" && sameCommand(choices[m].command, currentCmd)) });
         }
-        entries.push({ "act": "custom", "text": qsTr("Custom command...") + api.tr });
+        entries.push({ "act": "custom", "text": qsTr("Custom command... (and save it to this list)") + api.tr });
+        var yours = choices.filter(function(x) { return x.custom; });
+        if (yours.length > 0)
+            entries.push({ "act": "forget", "text": qsTr("Remove one of yours from the list...") + api.tr });
         chooser.openFor(field.label, entries, function(act, entry) {
             if (act === "global")
                 root.setEdit("launch", "");
@@ -222,6 +226,8 @@ FocusScope {
                 root.setEdit("launch", (root.page === "game" && entry.command === root.collectionLaunch) ? "" : entry.command);
             else if (act === "custom")
                 fieldDialog.openFor(field);
+            else if (act === "forget")
+                root.forgetEmulator(yours);
         });
     }
     // the apps in Android's Emulators section (Settings > Library), opened with the game file
@@ -247,6 +253,26 @@ FocusScope {
             }
         }
         return out;
+    }
+    // your own emulators: a name and a command, listed for the collection's
+    // system (every collection of it), saved in Pegasus X's config
+    function saveEmulator(label, command) {
+        var error = Internal.settings.saveCustomEmulator(collName, collDetails.shortname || "", label, command, false);
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        choicesFor = "";  // read again
+        setEdit("launch", (page === "game" && command === collectionLaunch) ? "" : command);
+        message = qsTr("\"%1\" is in the emulator list of this system now.").arg(label) + api.tr;
+    }
+    function forgetEmulator(yours) {
+        var entries = yours.map(function(x) { return { "act": "forget", "label": x.label, "text": x.label }; });
+        chooser.openFor(qsTr("Remove which one?") + api.tr, entries, function(act, entry) {
+            Internal.settings.saveCustomEmulator(root.collName, root.collDetails.shortname || "", entry.label, "", true);
+            root.choicesFor = "";
+            root.message = qsTr("\"%1\" is off the list.").arg(entry.label) + api.tr;
+        });
     }
     // starts a game with a command, to see that it works
     function testWith(command, entry) {
@@ -274,6 +300,15 @@ FocusScope {
         emuListUpdating = true;
         keepPosition(function() { emuListInfo = qsTr("Downloading the latest from ES-DE...") + api.tr; });
         Internal.settings.updateEmulatorList();
+    }
+    Timer {
+        running: true
+        interval: 800
+        onTriggered: {
+            var age = Internal.settings.emulatorListAgeDays();
+            if (age < 0 || age >= 7)
+                root.updateEmulatorList();
+        }
     }
     Connections {
         target: Internal.settings
@@ -1984,6 +2019,16 @@ FocusScope {
             kb.focus = true;
             suggestBar.update();
         }
+        // the command, under a name, into the system's emulator list
+        function saveToList() {
+            var command = multiInput.text.replace(/\s*\n\s*/g, " ").trim();
+            if (command === "") {
+                hint.text = qsTr("Type the command first.") + api.tr;
+                return;
+            }
+            closeDialog();
+            nameDialog.openForEmulator(command);
+        }
         function closeDialog() {
             Qt.inputMethod.hide();
             lineInput.focus = false;
@@ -2350,10 +2395,12 @@ FocusScope {
                     orientation: ListView.Horizontal
                     layoutDirection: Qt.RightToLeft
                     spacing: vpx(12)
-                    model: [
-                        { "name": "cancel", "text": qsTr("Cancel") + api.tr },
-                        { "name": "clear", "text": qsTr("Clear") + api.tr },
-                    ]
+                    model: (fieldDialog.isCommand && !(root.page === "game" && root.isAndroidCollection(root.collObj)))
+                        ? [ { "name": "cancel", "text": qsTr("Cancel") + api.tr },
+                            { "name": "clear", "text": qsTr("Clear") + api.tr },
+                            { "name": "savelist", "text": qsTr("Save to the list...") + api.tr } ]
+                        : [ { "name": "cancel", "text": qsTr("Cancel") + api.tr },
+                            { "name": "clear", "text": qsTr("Clear") + api.tr } ]
                     KeyNavigation.down: suggestBar.visible ? suggestBar : kb
 
                     Keys.onPressed: {
@@ -2362,6 +2409,8 @@ FocusScope {
                             var name = model[currentIndex].name;
                             if (name === "done")
                                 fieldDialog.finish();
+                            else if (name === "savelist")
+                                fieldDialog.saveToList();
                             else if (name === "cancel")
                                 fieldDialog.closeDialog();
                             else {
@@ -2388,7 +2437,9 @@ FocusScope {
                         MouseArea {
                             anchors.fill: parent
                             onClicked: {
-                                if (modelData.name === "done")
+                                if (modelData.name === "savelist")
+                                    fieldDialog.saveToList();
+                                else if (modelData.name === "done")
                                     fieldDialog.finish();
                                 else if (modelData.name === "cancel")
                                     fieldDialog.closeDialog();
@@ -2410,12 +2461,25 @@ FocusScope {
         id: nameDialog
 
         property string parentPath: ""
+        property string command: ""   // naming an emulator of yours, not a folder
         anchors.fill: parent
         enabled: focus
         visible: focus
         z: 6
 
+        function back() {
+            (command !== "" ? list : filePicker).focus = true;
+        }
+        function openForEmulator(cmd) {
+            command = cmd;
+            nameInput.text = "";
+            nameKeyboard.row = 1;
+            nameKeyboard.col = 0;
+            focus = true;
+            nameKeyboard.focus = true;
+        }
         function openFor(path) {
+            command = "";
             parentPath = path;
             nameInput.text = "";
             nameKeyboard.row = 1;
@@ -2424,6 +2488,15 @@ FocusScope {
             nameKeyboard.focus = true;
         }
         function finish() {
+            if (command !== "") {
+                var label = nameInput.text.trim();
+                if (label === "")
+                    return;
+                var cmd = command;
+                list.focus = true;
+                root.saveEmulator(label, cmd);
+                return;
+            }
             var name = nameInput.text.trim().replace(/[\\/:*?<>|\u0022]/g, "_");
             if (name === "")
                 return;
@@ -2436,7 +2509,7 @@ FocusScope {
         Keys.onPressed: {
             if (api.keys.isCancel(event) && !event.isAutoRepeat) {
                 event.accepted = true;
-                filePicker.focus = true;
+                nameDialog.back();
             }
         }
 
@@ -2462,7 +2535,9 @@ FocusScope {
                 spacing: vpx(12)
                 Text {
                     width: parent.width
-                    text: qsTr("New folder in %1").arg(nameDialog.parentPath) + api.tr
+                    text: (nameDialog.command !== ""
+                           ? qsTr("A name for it in the list, eg. Xendroid Fork")
+                           : qsTr("New folder in %1").arg(nameDialog.parentPath)) + api.tr
                     color: "#eee"
                     font.family: globalFonts.sans
                     font.pixelSize: vpx(18)
