@@ -74,6 +74,9 @@ Rectangle {
 
             SequentialAnimation on animatedWidth {
                 loops: Animation.Infinite
+                // Pegasus X: only while the splash shows; running forever kept
+                // the scene redrawing every frame for the whole session
+                running: root.visible
                 PropertyAnimation { duration: 500; to: vpx(68) }
                 PropertyAnimation { duration: 0; to: 0 }
             }
