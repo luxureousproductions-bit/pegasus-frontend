@@ -119,6 +119,31 @@ void ApiObject::onGameFavoriteChanged()
     emit favoritesChanged();
 }
 
+QString ApiObject::frontendTitle()
+{
+    return QStringLiteral("Pegasus X " GIT_REVISION " build %1 (" GIT_DATE ")").arg(PEGASUSX_BUILD);
+}
+
+QVariantMap ApiObject::frontendInfo() const
+{
+    QStringList features {
+        // api.memory saves are coalesced and atomic (temp file + rename)
+        QStringLiteral("atomicMemory"),
+    };
+#ifdef Q_OS_ANDROID
+    // api.pdfPageCount and image://pdf/ render manuals
+    features.append(QStringLiteral("pdf"));
+    // the theme stays loaded while a game runs (no reload on return)
+    features.append(QStringLiteral("instantReturn"));
+#endif
+    return QVariantMap {
+        { QStringLiteral("name"), QStringLiteral("Pegasus X") },
+        { QStringLiteral("version"), QStringLiteral(GIT_REVISION) },
+        { QStringLiteral("build"), PEGASUSX_BUILD },
+        { QStringLiteral("features"), features },
+    };
+}
+
 int ApiObject::pdfPageCount(const QString& path) const
 {
 #ifdef Q_OS_ANDROID

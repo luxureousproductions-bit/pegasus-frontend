@@ -57,7 +57,8 @@ class FolderListModel;
 namespace {
 void print_metainfo()
 {
-    Log::info(LOGMSG("Pegasus " GIT_REVISION " (" GIT_DATE ")"));
+    // Pegasus X: the first line, so a tester's log says which build it came from
+    Log::info(model::ApiObject::frontendTitle());
     Log::info(LOGMSG("Running on %1 (%2, %3)").arg(
         QSysInfo::prettyProductName(),
         QSysInfo::currentCpuArchitecture(),

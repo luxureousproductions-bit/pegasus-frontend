@@ -46,6 +46,11 @@ class ApiObject : public QObject {
     // retranslate on locale change
     Q_PROPERTY(QString tr READ emptyString NOTIFY retranslationRequested)
 
+    // Pegasus X: { name, version, build, features } so themes can tell
+    // Pegasus X apart (undefined on stock Pegasus). `features` lists only
+    // what this build has.
+    Q_PROPERTY(QVariantMap frontendInfo READ frontendInfo CONSTANT)
+
 public:
     explicit ApiObject(const backend::CliArgs& args, QObject* parent = nullptr);
 
@@ -54,6 +59,9 @@ public:
     void setGameData(std::vector<model::Collection*>&&, std::vector<model::Game*>&&);
 
     CollectionListModel* collections() const { return m_collections; }
+    QVariantMap frontendInfo() const;
+    /// "Pegasus X <version> build <number> (<date>)"
+    static QString frontendTitle();
     GameListModel* allGames() const { return m_all_games; }
 
     // Number of pages of a PDF file (eg. a game manual), or 0 if it can't
