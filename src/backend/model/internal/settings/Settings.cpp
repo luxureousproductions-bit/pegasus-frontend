@@ -35,6 +35,7 @@
 #ifdef WITH_COMPAT_ESDE
 #include "providers/esde/EsdeProvider.h"
 #include "providers/LibraryRules.h"
+#include "ScraperKeys.h"
 #endif
 
 #include <QCursor>
@@ -43,6 +44,9 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QUrlQuery>
 #include <QDateTime>
 #include <QSettings>
 #include <QFile>
@@ -1031,6 +1035,181 @@ QString Settings::saveCustomEmulator(const QString& collection_name, const QStri
     Q_UNUSED(collection_name); Q_UNUSED(short_name); Q_UNUSED(label); Q_UNUSED(command); Q_UNUSED(remove);
     return {};
 #endif
+}
+
+namespace {
+const QString SCRAPER_GROUP = QStringLiteral("scraper/");
+
+QVariantMap scraper_defaults()
+{
+    return QVariantMap {
+        { QStringLiteral("source"), QStringLiteral("screenscraper") },
+        { QStringLiteral("games"), QStringLiteral("all") },
+        { QStringLiteral("systems"), QStringList() },
+        { QStringLiteral("ssUser"), QString() },
+        { QStringLiteral("ssPassword"), QString() },
+        { QStringLiteral("ssUse"), true },
+        { QStringLiteral("sgdbKey"), QString() },
+        // what to get
+        { QStringLiteral("getNames"), true },
+        { QStringLiteral("getRatings"), true },
+        { QStringLiteral("getDetails"), true },
+        { QStringLiteral("getVideos"), true },
+        { QStringLiteral("getScreenshots"), true },
+        { QStringLiteral("getTitlescreens"), true },
+        { QStringLiteral("getCovers"), true },
+        { QStringLiteral("getBackcovers"), true },
+        { QStringLiteral("getBox3d"), true },
+        { QStringLiteral("getPhysical"), true },
+        { QStringLiteral("getFanart"), true },
+        { QStringLiteral("getLogos"), true },
+        { QStringLiteral("getMiximages"), true },
+        { QStringLiteral("getManuals"), true },
+        // ScreenScraper makes the miximages: which of its styles
+        { QStringLiteral("miximageStyle"), QStringLiteral("mixrbv2") },
+        // other
+        { QStringLiteral("region"), QStringLiteral("us") },
+        { QStringLiteral("language"), QStringLiteral("en") },
+        { QStringLiteral("retries"), 3 },
+        { QStringLiteral("retryDelay"), 3 },
+        { QStringLiteral("hashMaxMiB"), 800 },
+        { QStringLiteral("overwrite"), false },
+        { QStringLiteral("useHashes"), true },
+        { QStringLiteral("useMetadataNames"), true },
+        { QStringLiteral("interactive"), false },
+    };
+}
+
+QString unmask(const unsigned char* data, int length)
+{
+    QByteArray out;
+    out.reserve(length);
+    for (int i = 0; i < length; i++)
+        out.append(static_cast<char>(data[i] ^ PEGASUSX_SS_MASK));
+    return QString::fromUtf8(out);
+}
+} // namespace
+
+QVariantMap Settings::scraperSettings() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    QVariantMap out = scraper_defaults();
+    for (auto it = out.begin(); it != out.end(); ++it) {
+        const QVariant saved = file.value(SCRAPER_GROUP + it.key());
+        if (!saved.isValid())
+            continue;
+        // the ini keeps everything as text: back to the default's type
+        if (it.value().type() == QVariant::Bool)
+            it.value() = saved.toString() == QLatin1String("true") || saved.toString() == QLatin1String("1");
+        else if (it.value().type() == QVariant::Int)
+            it.value() = saved.toInt();
+        else if (it.value().type() == QVariant::StringList)
+            it.value() = saved.toStringList();
+        else
+            it.value() = saved.toString();
+    }
+    out.insert(QStringLiteral("hasScreenScraper"), scraperHasScreenScraper());
+    return out;
+}
+
+void Settings::setScraperSetting(const QString& key, const QVariant& value)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    if (value.type() == QVariant::List)
+        file.setValue(SCRAPER_GROUP + key, value.toStringList());
+    else
+        file.setValue(SCRAPER_GROUP + key, value);
+}
+
+bool Settings::scraperHasScreenScraper() const
+{
+    return PEGASUSX_SS_DEVID_LEN > 0 && PEGASUSX_SS_DEVPASSWORD_LEN > 0;
+}
+
+void Settings::checkScraperAccounts()
+{
+    if (!m_netman)
+        m_netman = new QNetworkAccessManager(this);
+    const QVariantMap settings = scraperSettings();
+    auto* const result = new QVariantMap();
+    auto* const pending = new int(2);
+    const auto finish = [this, result, pending]{
+        if (--(*pending) > 0)
+            return;
+        emit scraperAccountsChecked(*result);
+        delete result;
+        delete pending;
+    };
+
+    // ScreenScraper: what your account allows today
+    const QString user = settings.value(QStringLiteral("ssUser")).toString();
+    if (!scraperHasScreenScraper()) {
+        result->insert(QStringLiteral("ss"), tr("Not in this build yet (the app's developer login is missing)"));
+        result->insert(QStringLiteral("ssOk"), false);
+        finish();
+    }
+    else if (user.isEmpty()) {
+        result->insert(QStringLiteral("ss"), tr("Without an account: slower, fewer games a day"));
+        result->insert(QStringLiteral("ssOk"), true);
+        finish();
+    }
+    else {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("devid"), unmask(PEGASUSX_SS_DEVID, PEGASUSX_SS_DEVID_LEN));
+        query.addQueryItem(QStringLiteral("devpassword"), unmask(PEGASUSX_SS_DEVPASSWORD, PEGASUSX_SS_DEVPASSWORD_LEN));
+        query.addQueryItem(QStringLiteral("softname"), QStringLiteral("PegasusX"));
+        query.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+        query.addQueryItem(QStringLiteral("ssid"), user);
+        query.addQueryItem(QStringLiteral("sspassword"), settings.value(QStringLiteral("ssPassword")).toString());
+        QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/ssuserInfos.php"));
+        url.setQuery(query);
+        QNetworkReply* const reply = m_netman->get(QNetworkRequest(url));
+        connect(reply, &QNetworkReply::finished, this, [reply, result, finish]{
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const QByteArray body = reply->readAll();
+            reply->deleteLater();
+            const QJsonObject info = QJsonDocument::fromJson(body).object()
+                .value(QStringLiteral("response")).toObject().value(QStringLiteral("ssuser")).toObject();
+            if (!info.isEmpty()) {
+                const int max = info.value(QStringLiteral("maxrequestsperday")).toString().toInt();
+                const int used = info.value(QStringLiteral("requeststoday")).toString().toInt();
+                result->insert(QStringLiteral("ss"), max > 0
+                    ? tr("%1 · %2 games left today").arg(info.value(QStringLiteral("id")).toString()).arg(qMax(0, max - used))
+                    : info.value(QStringLiteral("id")).toString());
+                result->insert(QStringLiteral("ssOk"), true);
+            }
+            else {
+                result->insert(QStringLiteral("ss"), (status == 403 || body.contains("Erreur de login"))
+                    ? tr("Wrong username or password")
+                    : status == 0 ? tr("No connection") : tr("ScreenScraper is busy or offline (%1)").arg(status));
+                result->insert(QStringLiteral("ssOk"), false);
+            }
+            finish();
+        });
+    }
+
+    // SteamGridDB: one search with your key
+    const QString key = settings.value(QStringLiteral("sgdbKey")).toString().trimmed();
+    if (key.isEmpty()) {
+        result->insert(QStringLiteral("sgdb"), tr("No API key yet"));
+        result->insert(QStringLiteral("sgdbOk"), false);
+        finish();
+    }
+    else {
+        QNetworkRequest request(QUrl(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/zelda")));
+        request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
+        QNetworkReply* const reply = m_netman->get(request);
+        connect(reply, &QNetworkReply::finished, this, [reply, result, finish]{
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            reply->deleteLater();
+            const bool ok = status == 200;
+            result->insert(QStringLiteral("sgdb"), ok ? tr("Key works")
+                : status == 401 ? tr("The key isn't accepted")
+                : status == 0 ? tr("No connection") : tr("SteamGridDB answered %1").arg(status));
+            result->insert(QStringLiteral("sgdbOk"), ok);
+            finish();
+        });
+    }
 }
 
 int Settings::emulatorListAgeDays() const

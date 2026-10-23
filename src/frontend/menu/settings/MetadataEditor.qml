@@ -1043,6 +1043,9 @@ FocusScope {
                 out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
                            "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
                            "muted": hiddenCount === 0 });
+                out.push({ "kind": "section", "text": qsTr("Scraper") + api.tr });
+                out.push({ "kind": "scraper", "text": qsTr("Scraper...") + api.tr,
+                           "value": qsTr("ScreenScraper, SteamGridDB") + api.tr, "muted": true });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
                 for (i = 0; i < root.collections.length; i++) {
                     var c = root.collections[i];
@@ -1337,6 +1340,10 @@ FocusScope {
                     root.testWith(String(root.current("launch") || "") || root.collectionLaunch, root.game);
                 else
                     root.testWith(root.collectionLaunch, root.games[0]);
+            }
+            else if (row.kind === "scraper") {
+                scraperLoader.active = true;
+                scraperLoader.focus = true;
             }
             else if (row.kind === "emulist")
                 root.updateEmulatorList();
@@ -2452,6 +2459,28 @@ FocusScope {
                     }
                 }
             }
+        }
+    }
+
+    // -- The scraper (its own screen, over Library) ---------------------------------
+
+    Loader {
+        id: scraperLoader
+        anchors.fill: parent
+        z: 7
+        active: false
+        enabled: focus
+        visible: active && focus
+        source: "ScraperScreen.qml"
+        onLoaded: item.focus = true
+        onFocusChanged: if (item && focus) item.focus = true
+    }
+    Connections {
+        target: scraperLoader.item
+        function onClose() {
+            list.focus = true;
+            // after the signal is done: the screen that sent it goes
+            Qt.callLater(function() { scraperLoader.active = false; });
         }
     }
 

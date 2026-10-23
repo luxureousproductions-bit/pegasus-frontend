@@ -50,6 +50,33 @@ jobs:
             echo "::warning::Could not refresh the ES-DE emulator lists, using the copy in the repository"
           fi
 
+      # Pegasus X: the app's ScreenScraper developer login, from the repository
+      # secrets SCREENSCRAPER_DEVID and SCREENSCRAPER_DEVPASSWORD, written into
+      # src/backend/ScraperKeys.h for this build only (never committed)
+      - name: Scraper keys
+        env:
+          SS_DEVID: ${{ secrets.SCREENSCRAPER_DEVID }}
+          SS_DEVPASSWORD: ${{ secrets.SCREENSCRAPER_DEVPASSWORD }}
+        run: |
+          if [ -z "$SS_DEVID" ] || [ -z "$SS_DEVPASSWORD" ]; then
+            echo "::warning::SCREENSCRAPER_DEVID / SCREENSCRAPER_DEVPASSWORD are not set: this build can't use ScreenScraper"
+            exit 0
+          fi
+          python3 - <<'PY'
+          import os
+          mask = 0x5A
+          def arr(v):
+              b = v.encode("utf-8")
+              return "{ " + ", ".join(str(c ^ mask) for c in b) + " }", len(b)
+          i, il = arr(os.environ["SS_DEVID"])
+          p, pl = arr(os.environ["SS_DEVPASSWORD"])
+          with open("src/backend/ScraperKeys.h", "w") as f:
+              f.write("#pragma once\n#define PEGASUSX_SS_MASK 0x5A\n")
+              f.write(f"static const unsigned char PEGASUSX_SS_DEVID[] = {i};\nstatic const int PEGASUSX_SS_DEVID_LEN = {il};\n")
+              f.write(f"static const unsigned char PEGASUSX_SS_DEVPASSWORD[] = {p};\nstatic const int PEGASUSX_SS_DEVPASSWORD_LEN = {pl};\n")
+          PY
+          echo "::notice::ScreenScraper developer login added to this build"
+
       - name: Build
         env:
           BUILDOPTS: ANDROID_ABIS=${{ matrix.abi }} FORCE_QT_PNG=1

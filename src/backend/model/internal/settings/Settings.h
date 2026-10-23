@@ -185,6 +185,16 @@ public:
     /// Days since ES-DE's emulator list was downloaded, -1 if never
     Q_INVOKABLE int emulatorListAgeDays() const;
 
+    // Scraper (Settings > Library > Scraper)
+    /// Every scraper setting, with its default when it was never set
+    Q_INVOKABLE QVariantMap scraperSettings() const;
+    Q_INVOKABLE void setScraperSetting(const QString& key, const QVariant& value);
+    /// Whether this build has the app's ScreenScraper developer login
+    Q_INVOKABLE bool scraperHasScreenScraper() const;
+    /// Asks ScreenScraper and SteamGridDB whether the logins work
+    /// (scraperAccountsChecked)
+    Q_INVOKABLE void checkScraperAccounts();
+
     // Pegasus X's data folder: where art you pick (and later, scraped art) is kept
     Q_PROPERTY(QString dataDir READ dataDir WRITE setDataDir NOTIFY dataDirChanged)
     /// The folder a file browser was last used in (its "Last folder" jump)
@@ -221,6 +231,8 @@ public:
     Q_INVOKABLE void reloadProviders();
 
 signals:
+    /// { ss: text, ssOk, sgdb: text, sgdbOk }
+    void scraperAccountsChecked(QVariantMap result);
     void fullscreenChanged();
     void mouseSupportChanged();
     void verifyFilesChanged();
