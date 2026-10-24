@@ -386,8 +386,14 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
             collections.push_back(games_target);
         }
     }
-    if (games_target)
+    if (games_target) {
+        // a collection read from a metadata file without "shortname:" (like
+        // Pegasus X's own edits file, after scraping or editing a game) gets
+        // its name in lower case, "android games": themes look for "androidgames"
+        if (games_target->shortName() != QLatin1String("androidgames"))
+            games_target->setShortName(QStringLiteral("androidgames"));
         games_target->gameList()->update(std::vector<model::Game*>(games_list));
+    }
 
     // each game's collections
     const QSet<model::Game*> in_android(android_list.cbegin(), android_list.cend());

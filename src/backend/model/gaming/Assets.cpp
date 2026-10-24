@@ -102,6 +102,23 @@ void Assets::remove_duplicate_names()
     }
 }
 
+void Assets::set_files(AssetType key, const QStringList& paths)
+{
+    QStringList& target = m_asset_lists[key];
+    QStringList icons;
+    for (const QString& uri : qAsConst(target)) {
+        if (uri.startsWith(QLatin1String("image://")))
+            icons.append(uri);
+    }
+    target.clear();
+    for (const QString& path : paths) {
+        const QString uri = path.contains(QLatin1String("://")) ? path : QUrl::fromLocalFile(path).toString();
+        if (!uri.isEmpty() && !target.contains(uri))
+            target.append(uri);
+    }
+    target.append(icons);
+}
+
 void Assets::remove_listed(const QStringList& entries)
 {
     static const HashMap<QString, AssetType> kinds {

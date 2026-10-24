@@ -473,65 +473,35 @@ FocusScope {
             readonly property bool isProgress: modelData.kind === "progress"
             readonly property bool isMix: modelData.kind === "mixpreview"
             readonly property bool steps: modelData.kind === "choice" || modelData.kind === "number"
-            readonly property bool highlighted: !isSection && !isInfo
+            readonly property bool highlighted: !isSection && !isInfo && !isMix
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
 
             width: ListView.view.width
             height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isMix ? vpx(200)
                   : isInfo ? (modelData.value ? vpx(42) : rowLabel.implicitHeight + vpx(16)) : vpx(22) * 2.4
 
-            // the two miximage styles, roughly: the one picked outlined
+            // the two miximage styles as example pictures (only to look at)
             Row {
                 visible: parent.isMix
                 anchors.centerIn: parent
                 spacing: vpx(30)
                 Repeater {
-                    model: [ { "v": "mixrbv1", "t": qsTr("Style 1") + api.tr }, { "v": "mixrbv2", "t": qsTr("Style 2") + api.tr } ]
+                    model: [ { "src": "qrc:/frontend/assets/miximage-style1.png", "t": qsTr("Style 1") + api.tr },
+                             { "src": "qrc:/frontend/assets/miximage-style2.png", "t": qsTr("Style 2") + api.tr } ]
                     delegate: Column {
                         spacing: vpx(6)
-                        readonly property bool chosen: root.s.miximageStyle === modelData.v
-                        Rectangle {
-                            width: vpx(240)
-                            height: vpx(150)
-                            radius: vpx(6)
-                            color: "#151718"
-                            border.color: parent.chosen ? "#3aa" : "#333"
-                            border.width: parent.chosen ? vpx(3) : vpx(1)
-                            // the screenshot
-                            Rectangle {
-                                x: parent.width * 0.16; y: parent.height * 0.1
-                                width: parent.width * 0.78; height: parent.height * 0.72
-                                color: "#2d4a55"
-                                Text { anchors.centerIn: parent; text: qsTr("screenshot") + api.tr; color: "#9cc"; font.pixelSize: vpx(12); font.family: globalFonts.sans }
-                            }
-                            // the logo
-                            Rectangle {
-                                x: modelData.v === "mixrbv2" ? parent.width * 0.5 : parent.width * 0.08
-                                y: modelData.v === "mixrbv2" ? parent.height * 0.66 : parent.height * 0.06
-                                width: parent.width * 0.42; height: parent.height * 0.2
-                                color: "#5a4a2a"; radius: vpx(3)
-                                Text { anchors.centerIn: parent; text: qsTr("logo") + api.tr; color: "#ec9"; font.pixelSize: vpx(12); font.family: globalFonts.sans }
-                            }
-                            // the box
-                            Rectangle {
-                                x: parent.width * 0.05; y: parent.height * 0.4
-                                width: parent.width * 0.26; height: parent.height * 0.55
-                                color: "#3d2d55"; radius: vpx(2)
-                                Text { anchors.centerIn: parent; text: qsTr("box") + api.tr; color: "#cbe"; font.pixelSize: vpx(12); font.family: globalFonts.sans }
-                            }
-                            // style 2: the cartridge or disc
-                            Rectangle {
-                                visible: modelData.v === "mixrbv2"
-                                x: parent.width * 0.27; y: parent.height * 0.62
-                                width: parent.height * 0.3; height: width; radius: width / 2
-                                color: "#55402d"
-                                Text { anchors.centerIn: parent; text: qsTr("disc") + api.tr; color: "#eca"; font.pixelSize: vpx(11); font.family: globalFonts.sans }
-                            }
+                        Image {
+                            width: vpx(256)
+                            height: vpx(160)
+                            source: modelData.src
+                            sourceSize.width: vpx(256)
+                            fillMode: Image.PreserveAspectFit
+                            asynchronous: true
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             text: modelData.t
-                            color: parent.chosen ? "#5cc" : "#999"
+                            color: "#999"
                             font.family: globalFonts.sans
                             font.pixelSize: vpx(16)
                         }
@@ -630,7 +600,7 @@ FocusScope {
             MouseArea {
                 id: rowMouse
                 anchors.fill: parent
-                enabled: !parent.isSection && !parent.isInfo
+                enabled: !parent.isSection && !parent.isInfo && !parent.isMix
                 hoverEnabled: true
                 onClicked: {
                     list.currentIndex = index;

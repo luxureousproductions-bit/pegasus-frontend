@@ -38,6 +38,7 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QStringBuilder>
 #include <QTimer>
 #include <QUrlQuery>
@@ -427,6 +428,7 @@ QVariantMap Scraper::state() const
         { QStringLiteral("notFound"), m_not_found },
         { QStringLiteral("failed"), m_failed },
         { QStringLiteral("stopReason"), m_stop_reason },
+        { QStringLiteral("changes"), m_last_changes },
     };
 }
 
@@ -448,6 +450,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_saved = m_not_found = m_failed = 0;
     m_last_title.clear();
     m_last_result.clear();
+    m_last_changes.clear();
     m_stop_reason.clear();
     m_stop = false;
     m_running = true;
@@ -1122,36 +1125,88 @@ void Scraper::downloadNext()
 
 void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext)
 {
-    {
-        const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
-        const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.collection) % QLatin1Char('/') % media.folder;
-        QDir().mkpath(dir);
-        const QString file_path = dir % QLatin1Char('/') % safe_file_name(title) % QLatin1Char('~')
-            % QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmss")) % QLatin1Char('.') % ext;
-        QFile file(file_path);
-        if (file.open(QIODevice::WriteOnly) && file.write(body) == body.size()) {
-            file.close();
-            // into the slot: the new file first (the 3D box after the 2D one),
-            // the others stay unless you overwrite
-            QStringList list = m_changes.contains(media.slot) ? m_changes.value(media.slot).toStringList()
-                                                               : job.slot_files.value(media.slot).toStringList();
-            if (m_settings.value(QStringLiteral("overwrite")).toBool() && !m_changes.contains(media.slot)) {
-                // replaced: the old files of that kind go
-                QStringList kept;
-                for (const QString& f : list) {
-                    const bool is3d = f.contains(QLatin1String("3dbox"), Qt::CaseInsensitive) || f.contains(QLatin1String("box3d"), Qt::CaseInsensitive);
-                    if (media.kind == QLatin1String("2d") && is3d) kept.append(f);
-                    if (media.kind == QLatin1String("3d") && !is3d) kept.append(f);
-                }
-                list = kept;
-            }
-            if (media.kind == QLatin1String("3d"))
-                list.append(file_path);
-            else
-                list.prepend(file_path);
-            m_changes.insert(media.slot, list);
-            m_got.append(media.folder);
+    // one file per game and kind: <data>/<collection>/<folder>/<title>.<ext>,
+    // written over on the next scrape (it used to get a new, time-stamped name
+    // every time, so each scrape left another copy)
+    const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
+    const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.collection) % QLatin1Char('/') % media.folder;
+    QDir().mkpath(dir);
+    const QString base = safe_file_name(title);
+    const QString file_path = dir % QLatin1Char('/') % base % QLatin1Char('.') % ext;
+    QSaveFile file(file_path);
+    if (!file.open(QIODevice::WriteOnly) || file.write(body) != body.size() || !file.commit()) {
+        downloadNext();
+        return;
+    }
+
+    // the game's other copies of this kind in Pegasus X's data folder (another
+    // extension, or the time-stamped copies of older scrapes) go
+    QStringList removed;
+    // exactly "<title>.<ext>" or "<title>~<14 digits>.<ext>", so another game
+    // ("Game Deluxe", "Game.Remake") never matches
+    static const QRegularExpression rx_stamp(QStringLiteral("^~\\d{14}$"));
+    const QFileInfoList others = QDir(dir).entryInfoList(QDir::Files);
+    for (const QFileInfo& other : others) {
+        const QString path = other.absoluteFilePath();
+        if (path == QFileInfo(file_path).absoluteFilePath())
+            continue;
+        const QString stem = other.completeBaseName();
+        const bool same = stem == base
+            || (stem.startsWith(base) && rx_stamp.match(stem.mid(base.length())).hasMatch());
+        if (same && QFile::remove(path))
+            removed.append(path);
+    }
+
+    // into the slot: the new file first (the 3D box after the 2D one), never
+    // twice, without the copies just removed; the others stay unless you overwrite
+    QStringList list = m_changes.contains(media.slot) ? m_changes.value(media.slot).toStringList()
+                                                       : job.slot_files.value(media.slot).toStringList();
+    if (m_settings.value(QStringLiteral("overwrite")).toBool() && !m_changes.contains(media.slot)) {
+        // replaced: the old files of that kind go
+        QStringList kept;
+        for (const QString& f : list) {
+            const bool is3d = f.contains(QLatin1String("3dbox"), Qt::CaseInsensitive) || f.contains(QLatin1String("box3d"), Qt::CaseInsensitive);
+            if (media.kind == QLatin1String("2d") && is3d) kept.append(f);
+            if (media.kind == QLatin1String("3d") && !is3d) kept.append(f);
         }
+        list = kept;
+    }
+    // a file of this game's in the same scraper folder under another name
+    // (scraped before under an older title) is replaced by this one too
+    const QString dir_abs = QDir(dir).absolutePath() + QLatin1Char('/');
+    QStringList clean;
+    for (const QString& f : list) {
+        const QString path = f.startsWith(QLatin1String("file:")) ? QUrl(f).toLocalFile() : f;
+        if (path == file_path || removed.contains(path) || clean.contains(f))
+            continue;
+        const QFileInfo info(path);
+        if (info.absolutePath() + QLatin1Char('/') == dir_abs && info.isFile()) {
+            if (QFile::remove(info.absoluteFilePath()))
+                removed.append(path);
+            continue;
+        }
+        clean.append(f);
+    }
+    if (media.kind == QLatin1String("3d"))
+        clean.append(file_path);
+    else
+        clean.prepend(file_path);
+    m_changes.insert(media.slot, clean);
+    m_got.append(media.folder);
+
+    // a file of this name removed in Library before: scraped again, it's back
+    if (media.slot.startsWith(QLatin1String("assets."))) {
+        const QString kind = media.slot.mid(7);
+        const QString name = QFileInfo(file_path).fileName().toLower();
+        QStringList hidden = m_changes.contains(QStringLiteral("x-pegasusx-hidden-art"))
+            ? m_changes.value(QStringLiteral("x-pegasusx-hidden-art")).toStringList() : job.hidden_art;
+        const int before = hidden.size();
+        hidden.erase(std::remove_if(hidden.begin(), hidden.end(), [&kind, &name](const QString& h) {
+            const int bar = h.indexOf(QLatin1Char('|'));
+            return bar > 0 && h.left(bar) == kind && QFileInfo(h.mid(bar + 1)).fileName().toLower() == name;
+        }), hidden.end());
+        if (hidden.size() != before)
+            m_changes.insert(QStringLiteral("x-pegasusx-hidden-art"), hidden);
     }
     downloadNext();
 }
@@ -1177,6 +1232,7 @@ void Scraper::save()
         return;
     }
     m_saved++;
+    m_last_changes = m_changes;
     QStringList what;
     if (m_changes.contains(QStringLiteral("description")) || m_changes.contains(QStringLiteral("developer")))
         what.append(tr("details"));

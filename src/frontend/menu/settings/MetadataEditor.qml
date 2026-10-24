@@ -287,6 +287,10 @@ FocusScope {
     }
     // -- Scraping one game --------------------------------------------------------
     property bool scrapingGame: false
+    // set while a page is filled in: the list's rows are made once at the end,
+    // not again for every property set on the way (that's what made opening a
+    // collection pause)
+    property bool building: false
     function scrapeThisGame() {
         if (scrapingGame)
             return;
@@ -313,7 +317,22 @@ FocusScope {
             root.keepPosition(function() { root.scrapingGame = false; });
             if (state.saved > 0) {
                 root.anySaved = true;
-                root.message = qsTr("Scraped: %1. It shows once you leave Library.").arg(state.result) + api.tr;
+                // the game was updated in place: its page shows what was saved now
+                if (root.page === "game" && root.game && root.game.obj) {
+                    // the game's removed-art list was updated with it
+                    if (root.hiddenArtSaved[root.game.path] !== undefined) {
+                        var hm = Object.assign({}, root.hiddenArtSaved);
+                        delete hm[root.game.path];
+                        root.hiddenArtSaved = hm;
+                    }
+                    var index = list.currentIndex;
+                    root.openGame(root.game);
+                    list.currentIndex = Math.min(index, list.count - 1);
+                    list.positionViewAtIndex(list.currentIndex, ListView.Center);
+                    root.missingMap[root.game.path] = root.missingOf(root.game.obj);
+                    root.missingMapChanged();
+                }
+                root.message = qsTr("Scraped: %1").arg(state.result) + api.tr;
             }
             else {
                 root.message = qsTr("Nothing saved: %1").arg(state.stopReason || state.result) + api.tr;
@@ -737,6 +756,7 @@ FocusScope {
                 function(act) { if (act === "show") root.setCollectionHidden(entry.name, false); });
             return;
         }
+        building = true;
         collName = entry.name;
         collObj = entry.obj;
         // Android, Merge off: Android Games too, on this page
@@ -780,10 +800,12 @@ FocusScope {
         loc = Internal.settings.metadataLocation(entry.name, "");
         message = "";
         page = "collection";
+        building = false;
         list.currentIndex = 1;
         list.positionViewAtBeginning();
     }
     function openGame(entry) {
+        building = true;
         game = entry;
         launchInfo = isAndroidCollection(collObj) ? Internal.settings.gameLaunchInfo(entry.obj) : ({});
         orig = readGame(entry.obj);
@@ -792,6 +814,7 @@ FocusScope {
         loc = Internal.settings.metadataLocation(entry.coll || collName, entry.path || entry.key);
         message = "";
         page = "game";
+        building = false;
         list.currentIndex = 1;
         list.positionViewAtBeginning();
     }
@@ -813,6 +836,7 @@ FocusScope {
             });
             return;
         }
+        building = true;
         edits = {};
         message = "";
         if (page === "game") {
@@ -821,6 +845,7 @@ FocusScope {
             orig = readCollection(collObj);
             saved = savedColl;
             loc = Internal.settings.metadataLocation(collName, "");
+            building = false;
             for (var i = 0; i < list.rows.length; i++) {
                 if (list.rows[i].kind === "game" && list.rows[i].game.path === path) {
                     list.currentIndex = i;
@@ -830,6 +855,7 @@ FocusScope {
             }
             return;
         }
+        building = false;
         if (page === "hidden") {
             page = "collections";
             list.currentIndex = 2;
@@ -1081,6 +1107,8 @@ FocusScope {
         highlightMoveDuration: 150
 
         readonly property var rows: {
+            if (root.building)
+                return [];
             var out = [];
             var i;
             if (root.page === "collections") {
@@ -1094,8 +1122,7 @@ FocusScope {
                            "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
                            "muted": hiddenCount === 0 });
                 out.push({ "kind": "section", "text": qsTr("Scraper") + api.tr });
-                out.push({ "kind": "scraper", "text": qsTr("Scraper...") + api.tr,
-                           "value": qsTr("ScreenScraper, SteamGridDB") + api.tr, "muted": true });
+                out.push({ "kind": "scraper", "text": qsTr("Scraper...") + api.tr, "value": "" });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
                 for (i = 0; i < root.collections.length; i++) {
                     var c = root.collections[i];
@@ -1675,6 +1702,7 @@ FocusScope {
                 anchors.fill: parent
                 anchors.margins: vpx(14)
                 source: (artPreview.isVideo || artPreview.isDoc) ? "" : root.toUrl(artPreview.file)
+                cache: false  // a re-scraped file keeps its name: show the new one
                 sourceSize.width: vpx(700)
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
@@ -1807,6 +1835,7 @@ FocusScope {
                     anchors.margins: vpx(4)
                     visible: !parent.vid
                     source: parent.vid ? "" : root.toUrl(modelData.file)
+                    cache: false  // a re-scraped file keeps its name: show the new one
                     sourceSize.width: vpx(160)
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true

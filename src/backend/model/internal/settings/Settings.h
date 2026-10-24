@@ -25,11 +25,13 @@
 #include "utils/QmlHelpers.h"
 
 #include <QObject>
+#include <QPointer>
 #include <vector>
 
 
 class QNetworkAccessManager;
 
+namespace model { class Game; }
 namespace scraper { class Scraper; struct Job; }
 
 namespace model {
@@ -294,6 +296,7 @@ private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
+    QPointer<model::Game> m_single_game;  ///< scraped alone: updated when done
     QString runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings);
     bool m_library_open = false;
     QVariantList m_emu_cache;

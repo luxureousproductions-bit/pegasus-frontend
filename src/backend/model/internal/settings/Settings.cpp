@@ -1237,6 +1237,49 @@ void Settings::checkScraperAccounts()
 }
 
 namespace {
+// what a scrape saved, onto the game as it's loaded now
+void apply_scraped(model::Game& game, const QVariantMap& changes)
+{
+    static const QHash<QString, AssetType> kinds {
+        { QStringLiteral("assets.box_front"), AssetType::BOX_FRONT },
+        { QStringLiteral("assets.box_back"), AssetType::BOX_BACK },
+        { QStringLiteral("assets.cartridge"), AssetType::CARTRIDGE },
+        { QStringLiteral("assets.screenshot"), AssetType::SCREENSHOT },
+        { QStringLiteral("assets.titlescreen"), AssetType::TITLESCREEN },
+        { QStringLiteral("assets.background"), AssetType::BACKGROUND },
+        { QStringLiteral("assets.logo"), AssetType::LOGO },
+        { QStringLiteral("assets.video"), AssetType::VIDEO },
+        { QStringLiteral("assets.steam"), AssetType::UI_STEAMGRID },
+    };
+    for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
+        const QString& key = it.key();
+        if (kinds.contains(key))
+            game.assetsMut().set_files(kinds.value(key), it.value().toStringList());
+        else if (key == QLatin1String("x-manual"))
+            game.extraMapMut().insert(QStringLiteral("manual"), it.value().toStringList());
+        else if (key == QLatin1String("x-pegasusx-hidden-art"))
+            game.extraMapMut().insert(QStringLiteral("pegasusx-hidden-art"), it.value().toStringList());
+        else if (key == QLatin1String("title"))
+            game.setTitle(it.value().toString());
+        else if (key == QLatin1String("description"))
+            game.setDescription(it.value().toString());
+        else if (key == QLatin1String("summary"))
+            game.setSummary(it.value().toString());
+        else if (key == QLatin1String("developer"))
+            game.developerList() = it.value().toStringList();
+        else if (key == QLatin1String("publisher"))
+            game.publisherList() = it.value().toStringList();
+        else if (key == QLatin1String("genre"))
+            game.genreList() = it.value().toStringList();
+        else if (key == QLatin1String("release"))
+            game.setReleaseDate(QDate::fromString(it.value().toString().left(10), Qt::ISODate));
+        else if (key == QLatin1String("players"))
+            game.setPlayerCount(it.value().toInt());
+        else if (key == QLatin1String("rating"))
+            game.setRating(it.value().toString().remove(QLatin1Char('%')).toFloat() / 100.f);
+    }
+}
+
 // one game for the scraper, with what it has now
 scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, const QString& system, const QString& path)
 {
@@ -1281,6 +1324,7 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
             }
         }
     }
+    job.hidden_art = game->extraMap().value(QStringLiteral("pegasusx-hidden-art")).toStringList();
     const QVariant manual = game->extraMap().value(QStringLiteral("manual"));
     job.slot_files.insert(QStringLiteral("x-manual"), manual.toStringList());
     return job;
@@ -1344,6 +1388,7 @@ QString Settings::startScraper(QObject* collections)
     }
     if (jobs.empty())
         return tr("No games to scrape with these settings.");
+    m_single_game.clear();
     return runScraper(std::move(jobs), settings);
 }
 
@@ -1374,7 +1419,11 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     std::vector<scraper::Job> jobs;
     jobs.push_back(make_scraper_job(*coll, game, scraper::Scraper::system_of(coll->name(), coll->shortName()),
                                     game->filesModel()->entries().front()->path()));
-    return runScraper(std::move(jobs), settings);
+    m_single_game = game;  // what it saves shows at once (apply_scraped)
+    const QString error = runScraper(std::move(jobs), settings);
+    if (!error.isEmpty())
+        m_single_game.clear();
+    return error;
 }
 
 QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings)
@@ -1389,6 +1438,11 @@ QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap
         connect(m_scraper, &scraper::Scraper::progress, this, &Settings::scraperProgress);
         connect(m_scraper, &scraper::Scraper::choiceNeeded, this, &Settings::scraperNeedsChoice);
         connect(m_scraper, &scraper::Scraper::finished, this, [this](QVariantMap state){
+            // one game: the game shows what was saved right away (Library's
+            // page reads it again), without reading the library again
+            if (m_single_game && state.value(QStringLiteral("saved")).toInt() > 0)
+                apply_scraped(*m_single_game, state.value(QStringLiteral("changes")).toMap());
+            m_single_game.clear();
             emit scraperFinished(state);
             // the library shows it: right away, unless Library is open (it
             // reads the library again when you leave it)

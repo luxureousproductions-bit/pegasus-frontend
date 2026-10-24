@@ -56,6 +56,7 @@ struct Job {
     QVariantMap slot_files;       ///< metadata key ("assets.screenshot", "x-manual") -> its files now
     bool has_box2d = false;
     bool has_box3d = false;
+    QStringList hidden_art;  ///< art removed in Library ("<kind>|<file>")
 };
 
 /// What a source gave for one game
@@ -115,6 +116,7 @@ private:
     QString m_last_result;
     bool m_last_ok = true;
     QString m_stop_reason;
+    QVariantMap m_last_changes;  ///< what the last game saved (shown at once for one game)
 
     // interactive mode
     bool m_waiting = false;
