@@ -24,6 +24,7 @@
 #include "utils/HashMap.h"
 #include "utils/PathTools.h"
 
+#include <QDir>
 #include <QDirIterator>
 #include <QStringBuilder>
 #include <QUrl>
@@ -165,6 +166,31 @@ void Themes::postInit()
     select_preferred_theme();
     print_change();
     emit themeChanged(currentQmlDir());
+    emit currentIndexChanged();
+}
+
+void Themes::rescan()
+{
+    const QString current = m_themes.empty() ? QString() : QDir(currentQmlDir()).absolutePath();
+    beginResetModel();
+    m_themes = find_available_themes();
+    m_current_idx = 0;
+    for (size_t idx = 0; idx < m_themes.size(); idx++) {
+        if (QDir(m_themes.at(idx).root_dir).absolutePath() == current)
+            m_current_idx = idx;
+    }
+    endResetModel();
+    emit currentIndexChanged();
+}
+
+int Themes::indexOfDir(const QString& dir) const
+{
+    const QString wanted = QDir(dir).absolutePath();
+    for (size_t idx = 0; idx < m_themes.size(); idx++) {
+        if (QDir(m_themes.at(idx).root_dir).absolutePath() == wanted)
+            return static_cast<int>(idx);
+    }
+    return -1;
 }
 
 void Themes::select_preferred_theme()
@@ -253,6 +279,7 @@ void Themes::setCurrentIndex(int idx_int)
     m_current_idx = idx;
     print_change();
     emit themeChanged(currentQmlDir());
+    emit currentIndexChanged();
 
     // remember
     AppSettings::general.theme = currentQmlDir();

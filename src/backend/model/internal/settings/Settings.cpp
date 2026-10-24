@@ -36,6 +36,7 @@
 #include "providers/LibraryRules.h"
 #include "ScraperKeys.h"
 #include "Scraper.h"
+#include "ThemeStore.h"
 #include "model/gaming/Assets.h"
 // Android only (ES-DE import, emulators, metadata editing)
 #ifdef WITH_COMPAT_ESDE
@@ -104,6 +105,23 @@ namespace model {
 Settings::Settings(QObject* parent)
     : QObject(parent)
 {}
+
+QObject* Settings::themeStore()
+{
+    if (!m_theme_store) {
+        m_theme_store = new ThemeStore(this);
+        m_theme_store->setCurrentDirGetter([this]{ return m_themes.currentQmlDir(); });
+        // a theme added, updated or removed: Pegasus' list read again; the
+        // one in use updated: built again
+        connect(m_theme_store, &ThemeStore::themesChanged, this, [this](const QString& dir){
+            const bool current = QDir(dir).absolutePath() == QDir(m_themes.currentQmlDir()).absolutePath();
+            m_themes.rescan();
+            if (current)
+                emit currentThemeUpdated();
+        });
+    }
+    return m_theme_store;
+}
 
 void Settings::postInit()
 {

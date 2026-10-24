@@ -41,7 +41,7 @@ struct ThemeEntry {
 
 class Themes : public QAbstractListModel {
     Q_OBJECT
-    Q_PROPERTY(int currentIndex READ currentIndex WRITE setCurrentIndex NOTIFY themeChanged)
+    Q_PROPERTY(int currentIndex READ currentIndex WRITE setCurrentIndex NOTIFY currentIndexChanged)
     Q_PROPERTY(QString currentName READ currentName NOTIFY themeChanged)
     Q_PROPERTY(QString currentQmlPath READ currentQmlPath NOTIFY themeChanged)
 
@@ -67,12 +67,19 @@ public:
     QString currentQmlDir() const { return m_themes.at(m_current_idx).root_dir; }
     QString currentQmlPath() const { return m_themes.at(m_current_idx).root_qml; }
 
+    /// Pegasus X: the themes folder read again (a theme added or removed in
+    /// the app), the theme in use kept
+    void rescan();
+    /// the index of the theme in this folder, or -1
+    Q_INVOKABLE int indexOfDir(const QString& dir) const;
+
 signals:
     void themeChanged(QString);
+    void currentIndexChanged();
 
 private:
     const QHash<int, QByteArray> m_role_names;
-    const std::vector<ThemeEntry> m_themes;
+    std::vector<ThemeEntry> m_themes;
 
     size_t m_current_idx;
     QTranslator m_translator;

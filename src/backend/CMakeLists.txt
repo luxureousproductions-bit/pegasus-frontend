@@ -24,6 +24,8 @@ add_library(pegasus-backend
     ScriptRunner.h
     Miximage.cpp
     Miximage.h
+    ThemeStore.cpp
+    ThemeStore.h
     Scraper.cpp
     Scraper.h
     ScraperKeys.h
@@ -43,6 +45,7 @@ target_include_directories(pegasus-backend PUBLIC
 )
 
 pegasus_require_qt(COMPONENTS
+    Gui
     Qml
     Quick
     Multimedia
@@ -55,6 +58,7 @@ target_link_libraries(pegasus-backend PUBLIC
     Qt::Multimedia
     Qt::Sql
     Qt::Svg
+    Qt::GuiPrivate
     SortFilterProxyModel
 )
 

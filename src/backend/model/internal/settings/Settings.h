@@ -32,6 +32,7 @@
 class QNetworkAccessManager;
 
 namespace model { class Game; }
+class ThemeStore;
 namespace scraper { class Scraper; struct Job; }
 
 namespace model {
@@ -68,10 +69,14 @@ class Settings : public QObject {
     QML_CONST_PROPERTY(model::Locales, locales)
     QML_CONST_PROPERTY(model::Themes, themes)
     QML_CONST_PROPERTY(model::Providers, providers)
+    Q_PROPERTY(QObject* themeStore READ themeStore CONSTANT)
 
 public:
     explicit Settings(QObject* parent = nullptr);
     void postInit();
+
+    QObject* themeStore();
+    Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
 
     bool fullscreen() const { return AppSettings::general.fullscreen; }
     void setFullscreen(bool);
@@ -263,6 +268,10 @@ public:
     Q_INVOKABLE void reloadProviders();
 
 signals:
+    /// Pegasus X: the theme in use was updated in the theme downloader: built again
+    void currentThemeUpdated();
+    /// Pegasus X: the menu closes, back to the theme (eg. "Use it now")
+    void closeMenuRequested();
     /// { ss: text, ssOk, sgdb: text, sgdbOk }
     void scraperAccountsChecked(QVariantMap result);
     void scraperProgress(QVariantMap state);
@@ -298,6 +307,7 @@ private:
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
     QPointer<model::Game> m_single_game;
+    ThemeStore* m_theme_store = nullptr;
     QString startScraperWith(QObject* collections, bool offline);  ///< scraped alone: updated when done
     QString runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings);
     bool m_library_open = false;

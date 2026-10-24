@@ -1,6 +1,6 @@
 TEMPLATE = lib
 
-QT += qml quick sql
+QT += qml quick sql gui-private
 CONFIG += c++11 staticlib warn_on exceptions_off
 android: QT += androidextras
 
@@ -22,6 +22,7 @@ SOURCES += \
     AppSettings.cpp \
     Log.cpp \
     Miximage.cpp \
+    ThemeStore.cpp \
     Scraper.cpp \
 
 HEADERS += \
@@ -35,6 +36,7 @@ HEADERS += \
     AppSettings.h \
     Log.h \
     Miximage.h \
+    ThemeStore.h \
     Scraper.h \
     ScraperKeys.h \
 

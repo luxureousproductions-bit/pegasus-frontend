@@ -30,6 +30,7 @@ FocusScope {
     signal openGamepadSettings
     signal openGameDirSettings
     signal openEsdeImport
+    signal openThemeDownloader
     signal openEmulatorSettings
     signal openLibrarySettings
     signal openMetadataEditor
@@ -82,6 +83,13 @@ FocusScope {
             type: SettingsEntry.Type.Select
             selectBox: themeBox
             selectValue: Internal.settings.themes.currentName
+            section: "general"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Get themes...")
+            desc: QT_TR_NOOP("Browse the Pegasus theme gallery with pictures, install and update themes, or add one from a GitHub link.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openThemeDownloader
             section: "general"
         },
         SettingsEntry {

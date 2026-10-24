@@ -244,6 +244,18 @@ Window {
     Connections {
         target: Internal.settings
         function onReloadAllRequested() { splashScreen.toTheme = true; }
+        // a theme picked in the theme downloader: the menu closes, it loads
+        function onCloseMenuRequested() {
+            if (mainMenu.item)
+                mainMenu.item.closeAll();
+        }
+        // the theme in use was updated: built again from its new files
+        function onCurrentThemeUpdated() {
+            theme.source = "";
+            Internal.meta.clearQMLCache();
+            theme.swapPending = true;
+            themeSwap.restart();
+        }
     }
     Connections {
         target: Internal.scanner
