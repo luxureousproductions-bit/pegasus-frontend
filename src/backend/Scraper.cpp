@@ -22,6 +22,9 @@
 #include "providers/esde/EsdeProvider.h"
 #endif
 
+#include <QBuffer>
+#include <QImage>
+#include <QPair>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
@@ -319,6 +322,67 @@ QString md5_of(const QString& path, qint64 max_bytes)
     return QString::fromLatin1(hash.result().toHex());
 }
 
+// the part of a picture that isn't empty border: by transparency when it has
+// any, else by difference from the top-left corner's colour
+QRect content_rect(const QImage& source)
+{
+    const QImage img = source.convertToFormat(QImage::Format_ARGB32);
+    const bool alpha = source.hasAlphaChannel();
+    const QRgb corner = img.pixel(0, 0);
+    const auto empty = [alpha, corner](QRgb p) {
+        if (alpha)
+            return qAlpha(p) < 10;
+        return qAbs(qRed(p) - qRed(corner)) < 24 && qAbs(qGreen(p) - qGreen(corner)) < 24
+            && qAbs(qBlue(p) - qBlue(corner)) < 24;
+    };
+    int left = img.width(), right = -1, top = img.height(), bottom = -1;
+    for (int y = 0; y < img.height(); y++) {
+        const QRgb* line = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+        for (int x = 0; x < img.width(); x++) {
+            if (empty(line[x]))
+                continue;
+            left = qMin(left, x);
+            right = qMax(right, x);
+            top = qMin(top, y);
+            bottom = qMax(bottom, y);
+        }
+    }
+    if (right < left || bottom < top)
+        return {};
+    return QRect(QPoint(left, top), QPoint(right, bottom));
+}
+
+// a downloaded picture made smaller and/or trimmed, as the Scraper settings
+// say; untouched (same bytes) when nothing needs doing
+QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim)
+{
+    QImage img;
+    if (!img.loadFromData(data))
+        return { data, ext };
+    bool changed = false;
+    if (trim) {
+        const QRect box = content_rect(img);
+        // only a real border (a few pixels at least), never an empty picture
+        if (box.isValid() && box != img.rect() && box.width() > 16 && box.height() > 16) {
+            img = img.copy(box);
+            changed = true;
+        }
+    }
+    if (max_w > 0 && (img.width() > max_w || img.height() > max_h)) {
+        img = img.scaled(max_w, max_h, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        changed = true;
+    }
+    if (!changed)
+        return { data, ext };
+    const QString out_ext = (img.hasAlphaChannel() || ext == QLatin1String("png")) ? QStringLiteral("png") : QStringLiteral("jpg");
+    QByteArray out;
+    QBuffer buffer(&out);
+    buffer.open(QIODevice::WriteOnly);
+    if (!img.save(&buffer, out_ext == QLatin1String("png") ? "PNG" : "JPG", out_ext == QLatin1String("jpg") ? 90 : -1))
+        return { data, ext };
+    return { out, out_ext };
+}
+
 QString safe_file_name(QString name)
 {
     static const QRegularExpression rx_bad(QStringLiteral("[\\\\/:*?\"<>|]"));
@@ -394,8 +458,242 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
 
 void Scraper::stop()
 {
-    if (m_running)
-        m_stop = true;
+    if (!m_running)
+        return;
+    m_stop = true;
+    // waiting for a pick: nothing else will move it on
+    if (m_waiting) {
+        m_waiting = false;
+        next();
+    }
+}
+
+bool Scraper::interactive() const
+{
+    return m_settings.value(QStringLiteral("interactive")).toBool();
+}
+
+// the matches for a name: ScreenScraper's (with details and art), else
+// SteamGridDB's (art only)
+void Scraper::search(const QString& name)
+{
+    const Job& job = m_jobs[m_index];
+    const QString source = m_settings.value(QStringLiteral("source")).toString();
+    const bool ss_ok = source == QLatin1String("screenscraper") && !m_dev_id.isEmpty()
+        && screenscraper_systems().contains(job.system);
+    if (ss_ok)
+        ssSearch(name);
+    else if (!m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty())
+        sgdbSearch(name);
+    else {
+        m_not_found++;
+        finishGame(tr("ScreenScraper isn't in this build yet"), false);
+    }
+}
+
+void Scraper::ssSearch(const QString& name)
+{
+    const Job& job = m_jobs[m_index];
+    QUrlQuery query;
+    query.addQueryItem(QStringLiteral("devid"), m_dev_id);
+    query.addQueryItem(QStringLiteral("devpassword"), m_dev_password);
+    query.addQueryItem(QStringLiteral("softname"), QStringLiteral("PegasusX"));
+    query.addQueryItem(QStringLiteral("output"), QStringLiteral("json"));
+    const QString user = m_settings.value(QStringLiteral("ssUser")).toString();
+    if (m_settings.value(QStringLiteral("ssUse")).toBool() && !user.isEmpty()) {
+        query.addQueryItem(QStringLiteral("ssid"), user);
+        query.addQueryItem(QStringLiteral("sspassword"), m_settings.value(QStringLiteral("ssPassword")).toString());
+    }
+    query.addQueryItem(QStringLiteral("systemeid"), QString::number(screenscraper_systems().value(job.system)));
+    query.addQueryItem(QStringLiteral("recherche"), name);
+    QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/jeuRecherche.php"));
+    url.setQuery(query);
+    get(url, {}, m_settings.value(QStringLiteral("retries")).toInt(), [this](int status, const QByteArray& body){
+        if (m_stop) {
+            next();
+            return;
+        }
+        if (status == 430 || status == 403 || status == 426 || body.contains("Erreur de login")) {
+            m_stop_reason = status == 430 ? tr("Your ScreenScraper games for today are used up. Try again tomorrow.")
+                          : status == 426 ? tr("ScreenScraper needs a newer Pegasus X.")
+                          : tr("ScreenScraper didn't accept the login: check Account settings.");
+            m_stop = true;
+            finishGame(m_stop_reason, false);
+            return;
+        }
+        m_ss_results = QJsonDocument::fromJson(body).object()
+            .value(QStringLiteral("response")).toObject().value(QStringLiteral("jeux")).toArray();
+        const QString region = m_settings.value(QStringLiteral("region")).toString();
+        const QString language = m_settings.value(QStringLiteral("language")).toString();
+        QVariantList candidates;
+        QJsonArray kept;
+        for (const QJsonValue& value : qAsConst(m_ss_results)) {
+            const QJsonObject game = value.toObject();
+            const QString name = text_of(pick(game.value(QStringLiteral("noms")).toArray(), QStringLiteral("region"), region));
+            if (name.isEmpty())
+                continue;  // ScreenScraper ends its list with an empty entry
+            kept.append(game);
+            const QString date = text_of(pick(game.value(QStringLiteral("dates")).toArray(), QStringLiteral("region"), region));
+            QStringList genres;
+            for (const QJsonValue& genre : game.value(QStringLiteral("genres")).toArray()) {
+                const QString g = text_of(pick(genre.toObject().value(QStringLiteral("noms")).toArray(), QStringLiteral("langue"), language));
+                if (!g.isEmpty())
+                    genres.append(g);
+            }
+            QJsonArray boxes;
+            for (const QJsonValue& m : game.value(QStringLiteral("medias")).toArray()) {
+                const QString type = m.toObject().value(QStringLiteral("type")).toString();
+                if (type == QLatin1String("box-2D") || type == QLatin1String("box-3D") || type == QLatin1String("ss"))
+                    boxes.append(m);
+            }
+            const QString system = game.value(QStringLiteral("systeme")).toObject().value(QStringLiteral("text")).toString();
+            const double note = text_of(game.value(QStringLiteral("note"))).toDouble();
+            candidates.append(QVariantMap {
+                { QStringLiteral("name"), name },
+                { QStringLiteral("info"), QStringList { system, date.left(4) }.filter(QRegularExpression(QStringLiteral("."))).join(QStringLiteral(" · ")) },
+                { QStringLiteral("description"), text_of(pick(game.value(QStringLiteral("synopsis")).toArray(), QStringLiteral("langue"), language)) },
+                { QStringLiteral("thumb"), pick(boxes, QStringLiteral("region"), region).value(QStringLiteral("url")).toString() },
+                { QStringLiteral("developer"), text_of(game.value(QStringLiteral("developpeur"))) },
+                { QStringLiteral("publisher"), text_of(game.value(QStringLiteral("editeur"))) },
+                { QStringLiteral("genre"), genres.join(QStringLiteral(", ")) },
+                { QStringLiteral("players"), text_of(game.value(QStringLiteral("joueurs"))) },
+                { QStringLiteral("release"), date.left(10) },
+                { QStringLiteral("rating"), note > 0 ? QString::number(qRound(note * 5)) + QLatin1Char('%') : QString() },
+            });
+        }
+        m_ss_results = kept;
+        m_choice_source = QStringLiteral("ss");
+        offerChoice(candidates);
+    });
+}
+
+void Scraper::sgdbSearch(const QString& name)
+{
+    const QByteArray auth = "Bearer " + m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().toUtf8();
+    QUrl url(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/")
+             + QString::fromLatin1(QUrl::toPercentEncoding(name)));
+    get(url, auth, m_settings.value(QStringLiteral("retries")).toInt(), [this, auth](int status, const QByteArray& body){
+        if (m_stop) {
+            next();
+            return;
+        }
+        if (status == 401) {
+            m_stop_reason = tr("SteamGridDB didn't accept the key: check Account settings.");
+            m_stop = true;
+            finishGame(m_stop_reason, false);
+            return;
+        }
+        const QJsonArray found = QJsonDocument::fromJson(body).object().value(QStringLiteral("data")).toArray();
+        m_sgdb_ids.clear();
+        auto* const candidates = new QVariantList();
+        for (const QJsonValue& v : found) {
+            const QJsonObject game = v.toObject();
+            m_sgdb_ids.push_back(game.value(QStringLiteral("id")).toInt());
+            const qint64 released = static_cast<qint64>(game.value(QStringLiteral("release_date")).toDouble());
+            candidates->append(QVariantMap {
+                { QStringLiteral("name"), game.value(QStringLiteral("name")).toString() },
+                { QStringLiteral("info"), released > 0 ? QString::number(QDateTime::fromSecsSinceEpoch(released).date().year()) : QString() },
+                { QStringLiteral("release"), released > 0 ? QDateTime::fromSecsSinceEpoch(released).date().toString(Qt::ISODate) : QString() },
+            });
+        }
+        m_choice_source = QStringLiteral("sgdb");
+        // a cover for the first ones, to tell them apart
+        const int with_thumbs = qMin(6, static_cast<int>(m_sgdb_ids.size()));
+        if (with_thumbs == 0) {
+            offerChoice(*candidates);
+            delete candidates;
+            return;
+        }
+        auto* const pending = new int(with_thumbs);
+        for (int i = 0; i < with_thumbs; i++) {
+            const QUrl grid(QStringLiteral("https://www.steamgriddb.com/api/v2/grids/game/%1?dimensions=600x900").arg(m_sgdb_ids[static_cast<size_t>(i)]));
+            get(grid, auth, 0, [this, i, pending, candidates](int st, const QByteArray& b){
+                const QJsonArray images = QJsonDocument::fromJson(b).object().value(QStringLiteral("data")).toArray();
+                if (st == 200 && !images.isEmpty()) {
+                    QVariantMap c = (*candidates)[i].toMap();
+                    c.insert(QStringLiteral("thumb"), images.first().toObject().value(QStringLiteral("thumb")).toString());
+                    (*candidates)[i] = c;
+                }
+                if (--(*pending) == 0) {
+                    delete pending;
+                    const QVariantList list = *candidates;
+                    delete candidates;
+                    if (m_stop)
+                        next();
+                    else
+                        offerChoice(list);
+                }
+            });
+        }
+    });
+}
+
+void Scraper::offerChoice(const QVariantList& candidates)
+{
+    const Job& job = m_jobs[m_index];
+    // one match and Auto-accept on: no need to ask (scraping one game always asks)
+    if (candidates.size() == 1 && m_settings.value(QStringLiteral("autoAcceptSingle")).toBool()
+            && m_jobs.size() > 1) {
+        m_waiting = true;
+        choose(0);
+        return;
+    }
+    m_choice = QVariantMap {
+        { QStringLiteral("title"), job.title },
+        { QStringLiteral("collection"), job.collection },
+        { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
+        { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper") : QStringLiteral("SteamGridDB") },
+        { QStringLiteral("candidates"), candidates },
+    };
+    m_waiting = true;
+    report();
+    emit choiceNeeded(m_choice);
+}
+
+void Scraper::choose(int index)
+{
+    if (!m_waiting)
+        return;
+    m_waiting = false;
+    if (m_choice_source == QLatin1String("ss")) {
+        if (index < 0 || index >= m_ss_results.size()) {
+            m_waiting = true;
+            skip();
+            return;
+        }
+        parseScreenScraper(m_ss_results.at(index).toObject());
+        if (!m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty())
+            steamGridDb();
+        else
+            downloadNext();
+        return;
+    }
+    if (index < 0 || index >= static_cast<int>(m_sgdb_ids.size())) {
+        m_waiting = true;
+        skip();
+        return;
+    }
+    steamGridDb(m_sgdb_ids[static_cast<size_t>(index)]);
+}
+
+void Scraper::refine(const QString& search_name)
+{
+    if (!m_waiting || search_name.trimmed().isEmpty())
+        return;
+    m_waiting = false;
+    Job& job = m_jobs[m_index];
+    job.search_name = search_name.trimmed();
+    job.title_is_file_name = true;  // searched by this name from now on
+    search(job.search_name);
+}
+
+void Scraper::skip()
+{
+    if (!m_waiting)
+        return;
+    m_waiting = false;
+    m_not_found++;
+    finishGame(tr("skipped"), false);
 }
 
 void Scraper::report()
@@ -438,6 +736,12 @@ void Scraper::next()
     m_media.clear();
     m_got.clear();
     report();
+
+    // interactive mode: the matches are shown, you pick one
+    if (interactive()) {
+        search(job.title_is_file_name ? job.search_name : job.title);
+        return;
+    }
 
     const QString source = m_settings.value(QStringLiteral("source")).toString();
     const bool ss_ok = source == QLatin1String("screenscraper") && !m_dev_id.isEmpty()
@@ -656,7 +960,7 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
     }
 }
 
-void Scraper::steamGridDb()
+void Scraper::steamGridDb(int known_id)
 {
     const QString key = m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed();
     if (key.isEmpty()) {
@@ -696,30 +1000,8 @@ void Scraper::steamGridDb()
     }
     const QByteArray auth = "Bearer " + key.toUtf8();
     const QString name = job.title_is_file_name ? job.search_name : job.title;
-    QUrl url(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/")
-             + QString::fromLatin1(QUrl::toPercentEncoding(name)));
-    get(url, auth, m_settings.value(QStringLiteral("retries")).toInt(), [this, todo, auth, name](int status, const QByteArray& body){
-        const QJsonArray found = QJsonDocument::fromJson(body).object().value(QStringLiteral("data")).toArray();
-        if (m_stop || status != 200 || found.isEmpty()) {
-            delete todo;
-            if (m_media.empty() && m_changes.isEmpty()) {
-                m_not_found++;
-                finishGame(status == 401 ? tr("SteamGridDB didn't accept the key") : tr("not found"), false);
-            }
-            else {
-                downloadNext();
-            }
-            return;
-        }
-        // the exact name if it's there, else SteamGridDB's best match
-        QJsonObject game = found.first().toObject();
-        for (const QJsonValue& v : found) {
-            if (normalized(v.toObject().value(QStringLiteral("name")).toString()) == normalized(name)) {
-                game = v.toObject();
-                break;
-            }
-        }
-        const QString id = QString::number(game.value(QStringLiteral("id")).toInt());
+    // the art of a SteamGridDB game: only what's still free
+    const auto fetch_art = [this, todo, auth](const QString& id) {
         auto* const pending = new int(static_cast<int>(todo->size()));
         for (const Want& w : *todo) {
             QString path = QStringLiteral("https://www.steamgriddb.com/api/v2/%1/game/%2").arg(QLatin1String(w.path), id);
@@ -752,6 +1034,35 @@ void Scraper::steamGridDb()
                 }
             });
         }
+    };
+    if (known_id > 0) {
+        fetch_art(QString::number(known_id));
+        return;
+    }
+    QUrl url(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/")
+             + QString::fromLatin1(QUrl::toPercentEncoding(name)));
+    get(url, auth, m_settings.value(QStringLiteral("retries")).toInt(), [this, todo, name, fetch_art](int status, const QByteArray& body){
+        const QJsonArray found = QJsonDocument::fromJson(body).object().value(QStringLiteral("data")).toArray();
+        if (m_stop || status != 200 || found.isEmpty()) {
+            delete todo;
+            if (m_media.empty() && m_changes.isEmpty()) {
+                m_not_found++;
+                finishGame(status == 401 ? tr("SteamGridDB didn't accept the key") : tr("not found"), false);
+            }
+            else {
+                downloadNext();
+            }
+            return;
+        }
+        // the exact name if it's there, else SteamGridDB's best match
+        QJsonObject game = found.first().toObject();
+        for (const QJsonValue& v : found) {
+            if (normalized(v.toObject().value(QStringLiteral("name")).toString()) == normalized(name)) {
+                game = v.toObject();
+                break;
+            }
+        }
+        fetch_art(QString::number(game.value(QStringLiteral("id")).toInt()));
     });
 }
 
@@ -777,6 +1088,41 @@ void Scraper::downloadNext()
         QString ext = media.ext.toLower();
         if (ext.isEmpty())
             ext = QStringLiteral("png");
+
+        // pictures: the size and trimming of the Scraper settings, worked out
+        // off the main thread
+        const bool picture = media.folder != QLatin1String("videos") && media.folder != QLatin1String("manuals")
+            && (ext == QLatin1String("png") || ext == QLatin1String("jpg") || ext == QLatin1String("jpeg") || ext == QLatin1String("webp"));
+        const QString size = m_settings.value(QStringLiteral("imageMaxSize")).toString();
+        int max_w = size == QLatin1String("1920") ? 1920 : size == QLatin1String("1280") ? 1280
+                  : size == QLatin1String("640") ? 640 : size == QLatin1String("original") ? 0 : 2560;
+        int max_h = max_w == 1920 ? 1080 : max_w == 1280 ? 720 : max_w == 640 ? 480 : max_w == 0 ? 0 : 1440;
+        const bool logo = media.folder == QLatin1String("marquees");
+        if (logo && max_w > 1000) {
+            max_w = 1000;  // logos don't need more (as ES-DE)
+            max_h = 600;
+        }
+        const QString trim_setting = m_settings.value(QStringLiteral("trimBorders")).toString();
+        const bool trim = trim_setting == QLatin1String("all") || (trim_setting == QLatin1String("logos") && logo);
+        if (picture && (max_w > 0 || trim)) {
+            auto* const watcher = new QFutureWatcher<QPair<QByteArray, QString>>(this);
+            connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, media, job]{
+                const QPair<QByteArray, QString> result = watcher->result();
+                watcher->deleteLater();
+                storeMedia(media, job, result.first, result.second);
+            });
+            watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim]{
+                return process_image(body, ext, max_w, max_h, trim);
+            }));
+            return;
+        }
+        storeMedia(media, job, body, ext);
+    });
+}
+
+void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext)
+{
+    {
         const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
         const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.collection) % QLatin1Char('/') % media.folder;
         QDir().mkpath(dir);
@@ -806,8 +1152,8 @@ void Scraper::downloadNext()
             m_changes.insert(media.slot, list);
             m_got.append(media.folder);
         }
-        downloadNext();
-    });
+    }
+    downloadNext();
 }
 
 void Scraper::save()

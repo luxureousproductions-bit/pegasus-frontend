@@ -2562,6 +2562,33 @@ FocusScope {
         }
     }
 
+    // -- The scraper's matches to pick from (interactive mode, one game) -----------
+
+    ScraperChoice {
+        id: scraperChoice
+        z: 9
+        onFinished: {
+            if (scraperLoader.active)
+                scraperLoader.focus = true;
+            else
+                list.focus = true;
+        }
+    }
+    Connections {
+        target: Internal.settings
+        function onScraperNeedsChoice(choice) { scraperChoice.openFor(choice); }
+    }
+    // waiting since before Library opened (scraping went on after you left)
+    Timer {
+        running: true
+        interval: 300
+        onTriggered: {
+            var pending = Internal.settings.scraperPendingChoice();
+            if (pending.candidates !== undefined)
+                scraperChoice.openFor(pending);
+        }
+    }
+
     // -- A name for a new folder ---------------------------------------------------
 
     FocusScope {

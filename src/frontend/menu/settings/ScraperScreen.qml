@@ -270,7 +270,8 @@ FocusScope {
         }
         if (page === "miximage") {
             out.push({ "kind": "choice", "key": "miximageStyle", "text": qsTr("Miximage style") + api.tr, "choices": miximageChoices });
-            out.push({ "kind": "info", "text": qsTr("Made by ScreenScraper from the game's art, ready to show.") + api.tr, "value": "" });
+            out.push({ "kind": "mixpreview", "text": "" });
+            out.push({ "kind": "info", "text": qsTr("A miximage is one picture made from the game's art: the screenshot, with the box, the logo (and in style 2 the cartridge or disc) on top. ScreenScraper makes it, ready to show; the layouts above are a rough guide.") + api.tr, "value": "" });
             return out;
         }
         if (page === "running") {
@@ -298,7 +299,22 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "overwrite", "text": qsTr("Overwrite files and data") + api.tr });
             out.push({ "kind": "toggle", "key": "useHashes", "text": qsTr("Search using file hashes") + api.tr });
             out.push({ "kind": "toggle", "key": "useMetadataNames", "text": qsTr("Search using metadata names") + api.tr });
-            out.push({ "kind": "toggle", "key": "interactive", "text": qsTr("Ask when the match isn't sure") + api.tr });
+            out.push({ "kind": "toggle", "key": "interactive", "text": qsTr("Interactive mode (pick each match)") + api.tr });
+            out.push({ "kind": "toggle", "key": "autoAcceptSingle", "text": qsTr("Auto-accept a single match") + api.tr });
+            out.push({ "kind": "section", "text": qsTr("Pictures") + api.tr });
+            out.push({ "kind": "choice", "key": "imageMaxSize", "text": qsTr("Biggest picture size") + api.tr, "choices": [
+                { "v": "2560", "t": qsTr("2560×1440 (as ES-DE)") + api.tr },
+                { "v": "1920", "t": "1920×1080" },
+                { "v": "1280", "t": "1280×720" },
+                { "v": "640", "t": qsTr("640×480 (smallest files)") + api.tr },
+                { "v": "original", "t": qsTr("Original (as downloaded)") + api.tr },
+            ] });
+            out.push({ "kind": "choice", "key": "trimBorders", "text": qsTr("Trim empty borders") + api.tr, "choices": [
+                { "v": "off", "t": qsTr("Off") + api.tr },
+                { "v": "logos", "t": qsTr("Logos only") + api.tr },
+                { "v": "all", "t": qsTr("All pictures") + api.tr },
+            ] });
+            out.push({ "kind": "info", "text": qsTr("Logos are kept at 1000×600 at most. Smaller pictures load faster in themes.") + api.tr, "value": "" });
             return out;
         }
         return out;
@@ -424,7 +440,8 @@ FocusScope {
         highlightMoveDuration: 150
 
         function selectable(i) {
-            return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info";
+            return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info"
+                && root.rows[i].kind !== "mixpreview";
         }
         Keys.onUpPressed: {
             var i = currentIndex - 1;
@@ -454,12 +471,73 @@ FocusScope {
             readonly property bool isInfo: modelData.kind === "info"
             readonly property bool isStart: modelData.kind === "start" || modelData.kind === "stop" || modelData.kind === "done"
             readonly property bool isProgress: modelData.kind === "progress"
+            readonly property bool isMix: modelData.kind === "mixpreview"
             readonly property bool steps: modelData.kind === "choice" || modelData.kind === "number"
             readonly property bool highlighted: !isSection && !isInfo
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
 
             width: ListView.view.width
-            height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isInfo ? vpx(42) : vpx(22) * 2.4
+            height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isMix ? vpx(200)
+                  : isInfo ? (modelData.value ? vpx(42) : rowLabel.implicitHeight + vpx(16)) : vpx(22) * 2.4
+
+            // the two miximage styles, roughly: the one picked outlined
+            Row {
+                visible: parent.isMix
+                anchors.centerIn: parent
+                spacing: vpx(30)
+                Repeater {
+                    model: [ { "v": "mixrbv1", "t": qsTr("Style 1") + api.tr }, { "v": "mixrbv2", "t": qsTr("Style 2") + api.tr } ]
+                    delegate: Column {
+                        spacing: vpx(6)
+                        readonly property bool chosen: root.s.miximageStyle === modelData.v
+                        Rectangle {
+                            width: vpx(240)
+                            height: vpx(150)
+                            radius: vpx(6)
+                            color: "#151718"
+                            border.color: parent.chosen ? "#3aa" : "#333"
+                            border.width: parent.chosen ? vpx(3) : vpx(1)
+                            // the screenshot
+                            Rectangle {
+                                x: parent.width * 0.16; y: parent.height * 0.1
+                                width: parent.width * 0.78; height: parent.height * 0.72
+                                color: "#2d4a55"
+                                Text { anchors.centerIn: parent; text: qsTr("screenshot") + api.tr; color: "#9cc"; font.pixelSize: vpx(12); font.family: globalFonts.sans }
+                            }
+                            // the logo
+                            Rectangle {
+                                x: modelData.v === "mixrbv2" ? parent.width * 0.5 : parent.width * 0.08
+                                y: modelData.v === "mixrbv2" ? parent.height * 0.66 : parent.height * 0.06
+                                width: parent.width * 0.42; height: parent.height * 0.2
+                                color: "#5a4a2a"; radius: vpx(3)
+                                Text { anchors.centerIn: parent; text: qsTr("logo") + api.tr; color: "#ec9"; font.pixelSize: vpx(12); font.family: globalFonts.sans }
+                            }
+                            // the box
+                            Rectangle {
+                                x: parent.width * 0.05; y: parent.height * 0.4
+                                width: parent.width * 0.26; height: parent.height * 0.55
+                                color: "#3d2d55"; radius: vpx(2)
+                                Text { anchors.centerIn: parent; text: qsTr("box") + api.tr; color: "#cbe"; font.pixelSize: vpx(12); font.family: globalFonts.sans }
+                            }
+                            // style 2: the cartridge or disc
+                            Rectangle {
+                                visible: modelData.v === "mixrbv2"
+                                x: parent.width * 0.27; y: parent.height * 0.62
+                                width: parent.height * 0.3; height: width; radius: width / 2
+                                color: "#55402d"
+                                Text { anchors.centerIn: parent; text: qsTr("disc") + api.tr; color: "#eca"; font.pixelSize: vpx(11); font.family: globalFonts.sans }
+                            }
+                        }
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            text: modelData.t
+                            color: parent.chosen ? "#5cc" : "#999"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(16)
+                        }
+                    }
+                }
+            }
 
             // how far it is
             Rectangle {
@@ -518,7 +596,7 @@ FocusScope {
             }
             Text {
                 id: rowLabel
-                visible: !parent.isSection && !parent.isStart
+                visible: !parent.isSection && !parent.isStart && !parent.isMix
                 text: modelData.text
                 color: parent.isInfo ? "#999" : "#eee"
                 font.family: globalFonts.sans
@@ -527,10 +605,12 @@ FocusScope {
                 anchors.leftMargin: vpx(30)
                 anchors.verticalCenter: parent.verticalCenter
                 width: parent.isInfo && (modelData.value || "") === "" ? parent.width - vpx(60) : parent.width * 0.5
-                elide: Text.ElideRight
+                // a note under the options: all of it, on several lines
+                wrapMode: parent.isInfo && !modelData.value ? Text.WordWrap : Text.NoWrap
+                elide: parent.isInfo && !modelData.value ? Text.ElideNone : Text.ElideRight
             }
             Text {
-                visible: !parent.isSection && !parent.isStart
+                visible: !parent.isSection && !parent.isStart && !parent.isMix
                 text: (parent.steps && parent.highlighted ? "◂  " : "") + root.valueText(modelData)
                       + (parent.steps && parent.highlighted ? "  ▸" : "")
                       + (modelData.kind === "page" ? "   ›" : "")

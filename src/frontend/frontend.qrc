@@ -49,6 +49,7 @@
         <file>menu/settings/LibraryEditor.qml</file>
         <file>menu/settings/MetadataEditor.qml</file>
         <file>menu/settings/ScraperScreen.qml</file>
+        <file>menu/settings/ScraperChoice.qml</file>
         <file>menu/settings/GamepadEditor.qml</file>
         <file>menu/settings/KeyEditor.qml</file>
         <file>menu/settings/ProviderEditor.qml</file>

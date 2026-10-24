@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <QJsonArray>
 #include <QObject>
 #include <QStringList>
 #include <QVariantMap>
@@ -82,10 +83,19 @@ public:
     /// The ES-DE system of a collection, for ScreenScraper's system id
     static QString system_of(const QString& collection_name, const QString& short_name);
 
+    // interactive mode: the matches found for the game, waiting for a pick
+    QVariantMap pendingChoice() const { return m_waiting ? m_choice : QVariantMap(); }
+    void choose(int index);
+    void refine(const QString& search_name);
+    void skip();
+
 signals:
     /// { running, done, total, current, title, result, ok, saved, notFound, failed }
     void progress(QVariantMap state);
     void finished(QVariantMap state);
+    /// { title, collection, searchName, source, candidates: [{ name, info,
+    /// description, thumb, developer, publisher, genre, players, release, rating }] }
+    void choiceNeeded(QVariantMap choice);
 
 private:
     QNetworkAccessManager* m_net = nullptr;
@@ -106,6 +116,18 @@ private:
     bool m_last_ok = true;
     QString m_stop_reason;
 
+    // interactive mode
+    bool m_waiting = false;
+    QVariantMap m_choice;
+    QJsonArray m_ss_results;                ///< ScreenScraper's games, as found
+    std::vector<int> m_sgdb_ids;            ///< SteamGridDB's games, as found
+    QString m_choice_source;                ///< "ss" / "sgdb"
+    bool interactive() const;
+    void search(const QString& name);
+    void ssSearch(const QString& name);
+    void sgdbSearch(const QString& name);
+    void offerChoice(const QVariantList& candidates);
+
     // the game being scraped
     QVariantMap m_changes;
     std::vector<Media> m_media;
@@ -119,8 +141,9 @@ private:
 
     void screenScraper(const QString& md5);
     void parseScreenScraper(const QJsonObject& game);
-    void steamGridDb();
+    void steamGridDb(int known_id = 0);
     void downloadNext();
+    void storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext);
     void save();
 
     // a GET with retries (429, 5xx and dropped connections)

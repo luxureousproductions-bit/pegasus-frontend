@@ -201,6 +201,13 @@ public:
     /// returns an error, or empty when it started (scraperProgress, scraperFinished)
     Q_INVOKABLE QString startScraper(QObject* collections);
     Q_INVOKABLE void stopScraper();
+    /// Interactive mode: the match picked (index in the choice's candidates),
+    /// a new search name, or this game skipped
+    Q_INVOKABLE void scraperChoose(int index);
+    Q_INVOKABLE void scraperRefine(const QString& search_name);
+    Q_INVOKABLE void scraperSkip();
+    /// The choice waiting for a pick (see scraperNeedsChoice), or empty
+    Q_INVOKABLE QVariantMap scraperPendingChoice() const;
     /// Scrapes one game (Library's game page) with the Scraper settings;
     /// `overwrite`: replace what it has, else only fill what's empty
     Q_INVOKABLE QString scrapeGame(QObject* game, const QString& collection_name, bool overwrite);
@@ -256,6 +263,8 @@ signals:
     /// { ss: text, ssOk, sgdb: text, sgdbOk }
     void scraperAccountsChecked(QVariantMap result);
     void scraperProgress(QVariantMap state);
+    /// { title, collection, searchName, source, candidates: [...] }
+    void scraperNeedsChoice(QVariantMap choice);
     void reloadAllRequested();
     void scraperFinished(QVariantMap state);
     void fullscreenChanged();

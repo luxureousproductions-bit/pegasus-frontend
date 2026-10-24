@@ -1096,6 +1096,11 @@ QVariantMap scraper_defaults()
         { QStringLiteral("useHashes"), true },
         { QStringLiteral("useMetadataNames"), true },
         { QStringLiteral("interactive"), false },
+        { QStringLiteral("autoAcceptSingle"), true },
+        // pictures: biggest size kept (ES-DE: 2560x1440, logos 1000x600), and
+        // empty borders trimmed (off, logos, all)
+        { QStringLiteral("imageMaxSize"), QStringLiteral("2560") },
+        { QStringLiteral("trimBorders"), QStringLiteral("off") },
     };
 }
 
@@ -1358,6 +1363,8 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
         return tr("No game to scrape.");
     QVariantMap settings = scraperSettings();
     settings.insert(QStringLiteral("overwrite"), overwrite);
+    // one game: always shows what it found, to pick and accept
+    settings.insert(QStringLiteral("interactive"), true);
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
     if (!scraperHasScreenScraper() && !has_sgdb)
@@ -1380,6 +1387,7 @@ QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap
     if (!m_scraper) {
         m_scraper = new scraper::Scraper(this);
         connect(m_scraper, &scraper::Scraper::progress, this, &Settings::scraperProgress);
+        connect(m_scraper, &scraper::Scraper::choiceNeeded, this, &Settings::scraperNeedsChoice);
         connect(m_scraper, &scraper::Scraper::finished, this, [this](QVariantMap state){
             emit scraperFinished(state);
             // the library shows it: right away, unless Library is open (it
@@ -1399,6 +1407,29 @@ void Settings::stopScraper()
 {
     if (m_scraper)
         m_scraper->stop();
+}
+
+void Settings::scraperChoose(int index)
+{
+    if (m_scraper)
+        m_scraper->choose(index);
+}
+
+void Settings::scraperRefine(const QString& search_name)
+{
+    if (m_scraper)
+        m_scraper->refine(search_name);
+}
+
+void Settings::scraperSkip()
+{
+    if (m_scraper)
+        m_scraper->skip();
+}
+
+QVariantMap Settings::scraperPendingChoice() const
+{
+    return m_scraper ? m_scraper->pendingChoice() : QVariantMap();
 }
 
 QVariantMap Settings::scraperState() const
