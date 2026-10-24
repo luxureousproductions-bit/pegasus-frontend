@@ -37,6 +37,17 @@ FocusScope {
     property string tab: "all"        // all, installed, updates, links
     property string message: ""
     property int pictureIndex: 0
+    property var badPictures: ({})    // pictures that didn't load: skipped
+    readonly property var pictures: {
+        var out = [];
+        if (!entry)
+            return out;
+        for (var i = 0; i < entry.pictures.length; i++) {
+            if (!badPictures[entry.pictures[i]])
+                out.push(entry.pictures[i]);
+        }
+        return out;
+    }
     property int loadedCount: 0
     property int totalCount: 0
 
@@ -187,8 +198,8 @@ FocusScope {
             setTab(tabs[at].v);
         }
     }
-    Keys.onLeftPressed: if (entry && entry.pictures.length > 1) pictureIndex = (pictureIndex - 1 + entry.pictures.length) % entry.pictures.length
-    Keys.onRightPressed: if (entry && entry.pictures.length > 1) pictureIndex = (pictureIndex + 1) % entry.pictures.length
+    Keys.onLeftPressed: if (pictures.length > 1) pictureIndex = (pictureIndex - 1 + pictures.length) % pictures.length
+    Keys.onRightPressed: if (pictures.length > 1) pictureIndex = (pictureIndex + 1) % pictures.length
 
     // -- The page --------------------------------------------------------------------
 
@@ -384,8 +395,15 @@ FocusScope {
                 id: picture
                 anchors.fill: parent
                 anchors.margins: vpx(4)
-                source: root.entry && root.entry.pictures.length > 0
-                        ? root.entry.pictures[Math.min(root.pictureIndex, root.entry.pictures.length - 1)] : ""
+                source: root.pictures.length > 0 ? root.pictures[Math.min(root.pictureIndex, root.pictures.length - 1)] : ""
+                // a picture that doesn't load: the next one
+                onStatusChanged: {
+                    if (status === Image.Error && source != "") {
+                        var bad = Object.assign({}, root.badPictures);
+                        bad[source.toString()] = true;
+                        root.badPictures = bad;
+                    }
+                }
                 sourceSize.width: vpx(900)
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
@@ -409,9 +427,9 @@ FocusScope {
             anchors.topMargin: vpx(8)
             anchors.left: pictureBox.left
             spacing: vpx(6)
-            visible: root.entry !== null && root.entry.pictures.length > 1
+            visible: root.pictures.length > 1
             Repeater {
-                model: root.entry ? root.entry.pictures.length : 0
+                model: root.pictures.length
                 delegate: Rectangle {
                     width: vpx(8)
                     height: width
@@ -530,7 +548,7 @@ FocusScope {
                 parts.push((e.update ? qsTr("Y update") : qsTr("Y download again")) + api.tr);
             if (e && (e.installed || e.custom))
                 parts.push((e.installed ? qsTr("X remove") : qsTr("X take off my links")) + api.tr);
-            if (e && e.pictures.length > 1)
+            if (e && root.pictures.length > 1)
                 parts.push(qsTr("◂ ▸ pictures") + api.tr);
             parts.push(qsTr("LB / RB filter") + api.tr);
             parts.push(qsTr("B back") + api.tr);

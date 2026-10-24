@@ -107,13 +107,24 @@ QStringList readme_pictures(const QString& text, const QString& raw_base, const 
                 url = url.mid(2);
             if (url.startsWith(QLatin1Char('/')))
                 url = url.mid(1);
+            // many themes keep their pictures in .meta/ (the gallery's
+            // custom), some READMEs point beside it: both are tried, the
+            // one that doesn't load is skipped
+            const QString meta = url.startsWith(QLatin1String(".meta/")) ? QString() : raw_base + QStringLiteral(".meta/") + url;
             url = raw_base + url;
+            if (!out.contains(url))
+                out.append(url);
+            if (!meta.isEmpty() && !out.contains(meta))
+                out.append(meta);
+            if (out.size() >= 8)
+                break;
+            continue;
         }
         if (!url.startsWith(QLatin1String("http")))
             continue;
         if (!out.contains(url))
             out.append(url);
-        if (out.size() >= 6)
+        if (out.size() >= 8)
             break;
     }
     return out;
@@ -479,8 +490,8 @@ void ThemeStore::fetchInfo(size_t index, std::function<void()> done)
             entry.summary = cfg.value(QStringLiteral("summary"));
             entry.description = cfg.value(QStringLiteral("description"));
         }
-        // README.md, else readme.md / Readme.md
-        auto names = std::make_shared<QStringList>(QStringList { QStringLiteral("README.md"), QStringLiteral("readme.md"), QStringLiteral("Readme.md") });
+        // README.md, else its other spellings
+        auto names = std::make_shared<QStringList>(QStringList { QStringLiteral("README.md"), QStringLiteral("README.MD"), QStringLiteral("readme.md"), QStringLiteral("Readme.md") });
         auto try_next = std::make_shared<std::function<void()>>();
         *try_next = [this, index, raw, names, try_next, done]{
             if (names->isEmpty() || index >= m_entries.size()) {
@@ -496,6 +507,10 @@ void ThemeStore::fetchInfo(size_t index, std::function<void()> done)
                     Entry& entry = m_entries[index];
                     entry.pictures = readme_pictures(QString::fromUtf8(b), raw, entry.owner, entry.repo);
                     names->clear();
+                }
+                if (names->isEmpty() && index < m_entries.size() && m_entries[index].pictures.isEmpty()) {
+                    for (const char* guess : { ".meta/screenshot.png", ".meta/screenshot.jpg", ".meta/screenshots/0.png", "screenshot.png", "screenshot.jpg" })
+                        m_entries[index].pictures.append(raw + QLatin1String(guess));
                 }
                 (*try_next)();
             });
