@@ -40,6 +40,7 @@
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -2842,9 +2843,23 @@ OriginalLaunches original_launches(const QString& collection_name)
 // -- Metadata editor -----------------------------------------------------------
 
 namespace {
-QString edits_file_path()
+// Pegasus X's own entries (games Pegasus found by itself, eg. Android apps),
+// one file per collection: in Pegasus' format a game belongs to every
+// collection declared above it in the same file, so with several collections
+// in one file an Xbox game written after "collection: Android" was in both
+QString edits_file_path(const QString& collection_name)
 {
-    return paths::writableConfigDir() % QStringLiteral("/metafiles/pegasusx-edits.metadata.pegasus.txt");
+    QString safe;
+    for (const QChar c : collection_name) {
+        if (c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_'))
+            safe += c;
+        else if (c == QLatin1Char(' '))
+            safe += QLatin1Char('_');
+    }
+    if (safe.isEmpty())
+        safe = QStringLiteral("other");
+    return paths::writableConfigDir() % QStringLiteral("/metafiles/pegasusx-edits-") % safe
+        % QStringLiteral(".metadata.pegasus.txt");
 }
 
 QStringList aliases_of(const QString& key)
@@ -3114,8 +3129,60 @@ void own_files_free(OwnFiles* own)
 } // namespace
 
 
+void split_legacy_edits_file()
+{
+    // the old file, all collections together: each collection's part goes to
+    // its own file (added to it if there is one); the old file is kept, renamed
+    const QString legacy = paths::writableConfigDir() % QStringLiteral("/metafiles/pegasusx-edits.metadata.pegasus.txt");
+    QFile in(legacy);
+    if (!in.exists() || !in.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    const QStringList lines = QString::fromUtf8(in.readAll()).split(QLatin1Char('\n'));
+    in.close();
+
+    QString current;
+    QHash<QString, QStringList> parts;
+    QStringList order;
+    static const QRegularExpression rx_coll(QStringLiteral("^collection\\s*:\\s*(.+)$"));
+    for (const QString& line : lines) {
+        const QRegularExpressionMatch m = rx_coll.match(line.trimmed());
+        if (m.hasMatch()) {
+            current = m.captured(1).trimmed();
+            if (!parts.contains(current))
+                order.append(current);
+            parts[current].append(line);
+            continue;
+        }
+        if (current.isEmpty())
+            continue;  // the comments at the top
+        parts[current].append(line);
+    }
+    bool ok = true;
+    for (const QString& name : order) {
+        QFile out(edits_file_path(name));
+        QDir().mkpath(QFileInfo(out.fileName()).absolutePath());
+        const bool existed = out.exists();
+        if (!out.open(QIODevice::Append | QIODevice::Text)) {
+            ok = false;
+            continue;
+        }
+        QTextStream stream(&out);
+        stream.setCodec("UTF-8");
+        if (!existed)
+            stream << "# Made by Pegasus X: your edits to games Pegasus found by itself\n";
+        stream << "\n" << parts.value(name).join(QLatin1Char('\n')) << "\n";
+    }
+    if (ok) {
+        QFile::rename(legacy, legacy + QStringLiteral(".split-old"));
+        QMutexLocker lock(&collection_files_mutex());
+        collection_files_cache().clear();
+        Log::info(QStringLiteral("Metadata"), LOGMSG("Split `%1` into one file per collection").arg(legacy));
+    }
+}
+
 MetadataLocation metadata_location(const QString& collection_name, const QString& game_path)
 {
+    split_legacy_edits_file();
     MetadataLocation out;
     std::vector<MetaFile> files = files_defining(collection_name);
     sort_own_first(files);
@@ -3126,7 +3193,7 @@ MetadataLocation metadata_location(const QString& collection_name, const QString
     else {
         const QString wanted = MetaFile::is_uri(game_path) ? game_path : ::clean_abs_path(QFileInfo(game_path));
         const auto found = find_game_block(files, wanted);
-        out.file = found.first >= 0 ? files[static_cast<size_t>(found.first)].path : edits_file_path();
+        out.file = found.first >= 0 ? files[static_cast<size_t>(found.first)].path : edits_file_path(collection_name);
         out.is_new = found.first < 0;
     }
     out.is_import = QFileInfo(out.file).fileName() == IMPORT_FILE_NAME;
@@ -3137,6 +3204,7 @@ MetadataLocation metadata_location(const QString& collection_name, const QString
 QString save_game_metadata(const QString& collection_name, const QString& game_path,
                            const QString& game_title, const QVariantMap& changes)
 {
+    split_legacy_edits_file();
     if (changes.isEmpty())
         return {};
     const QString wanted = MetaFile::is_uri(game_path) ? game_path : ::clean_abs_path(QFileInfo(game_path));
@@ -3155,7 +3223,7 @@ QString save_game_metadata(const QString& collection_name, const QString& game_p
     // a game Pegasus found by itself (eg. an Android app): a new entry of
     // yours, in Pegasus X's own metadata file
     MetaFile file;
-    const QString path = edits_file_path();
+    const QString path = edits_file_path(collection_name);
     if (!file.load(path)) {
         QDir().mkpath(QFileInfo(path).absolutePath());
         file.path = path;

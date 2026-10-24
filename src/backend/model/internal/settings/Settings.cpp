@@ -107,6 +107,10 @@ Settings::Settings(QObject* parent)
 
 void Settings::postInit()
 {
+#ifdef WITH_COMPAT_ESDE
+    // before the library is read: no game in a collection that isn't its own
+    providers::esde::split_legacy_edits_file();
+#endif
     change_mouse_support(AppSettings::general.mouse_support);
 
     m_themes.postInit();
