@@ -19,6 +19,7 @@
 
 #include "Log.h"
 #include "Paths.h"
+#include "utils/ZipReader.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -39,7 +40,6 @@
 #include <QStringBuilder>
 #include <QUrl>
 #include <QtConcurrent/QtConcurrent>
-#include <QtGui/private/qzipreader_p.h>
 #include <algorithm>
 #include <memory>
 
@@ -161,18 +161,18 @@ UnpackResult unpack_zip(const QString& zip_path, const QString& themes_dir, cons
                         const QString& old_dir, const QJsonObject& marker)
 {
     UnpackResult result;
-    QZipReader zip(zip_path);
+    const utils::ZipReader zip(zip_path);
     if (!zip.isReadable()) {
         result.message = QStringLiteral("The download isn't a zip file.");
         return result;
     }
-    const QVector<QZipReader::FileInfo> entries = zip.fileInfoList();
+    const std::vector<utils::ZipReader::Entry>& entries = zip.entries();
     QString root;
     int depth = 1 << 20;
-    for (const QZipReader::FileInfo& e : entries) {
-        if (!e.isFile)
+    for (const utils::ZipReader::Entry& e : entries) {
+        if (e.is_dir || e.is_symlink)
             continue;
-        const QString path = QString(e.filePath).replace(QLatin1Char('\\'), QLatin1Char('/'));
+        const QString path = QString(e.path).replace(QLatin1Char('\\'), QLatin1Char('/'));
         if (path == QLatin1String("theme.qml") || path.endsWith(QLatin1String("/theme.qml"))) {
             const int d = path.count(QLatin1Char('/'));
             if (d < depth) {
@@ -190,27 +190,28 @@ UnpackResult unpack_zip(const QString& zip_path, const QString& themes_dir, cons
     const QString staging = themes_dir + QStringLiteral("/.pegasusx-new-") + folder;
     remove_dir(staging);
     QDir().mkpath(staging);
-    for (const QZipReader::FileInfo& e : entries) {
-        const QString path = QString(e.filePath).replace(QLatin1Char('\\'), QLatin1Char('/'));
-        if (!path.startsWith(root) || path.contains(QLatin1String("../")) || e.isSymLink)
+    for (const utils::ZipReader::Entry& e : entries) {
+        const QString path = QString(e.path).replace(QLatin1Char('\\'), QLatin1Char('/'));
+        if (!path.startsWith(root) || path.contains(QLatin1String("../")) || e.is_symlink)
             continue;
         const QString rel = path.mid(root.length());
         if (rel.isEmpty())
             continue;
         const QString target = staging + QLatin1Char('/') + rel;
-        if (e.isDir) {
+        if (e.is_dir) {
             QDir().mkpath(target);
             continue;
         }
         QDir().mkpath(QFileInfo(target).absolutePath());
+        bool read_ok = false;
+        const QByteArray data = zip.fileData(e, &read_ok);
         QFile out(target);
-        if (!out.open(QIODevice::WriteOnly) || out.write(zip.fileData(e.filePath)) < 0) {
+        if (!read_ok || !out.open(QIODevice::WriteOnly) || out.write(data) < 0) {
             remove_dir(staging);
             result.message = QStringLiteral("Couldn't write `%1`.").arg(rel);
             return result;
         }
     }
-    zip.close();
     if (!QFileInfo::exists(staging + QStringLiteral("/theme.cfg"))) {
         remove_dir(staging);
         result.message = QStringLiteral("There's no theme.cfg in it.");

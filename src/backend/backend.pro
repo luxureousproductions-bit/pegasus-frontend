@@ -1,6 +1,6 @@
 TEMPLATE = lib
 
-QT += qml quick sql gui-private
+QT += qml quick sql
 CONFIG += c++11 staticlib warn_on exceptions_off
 android: QT += androidextras
 

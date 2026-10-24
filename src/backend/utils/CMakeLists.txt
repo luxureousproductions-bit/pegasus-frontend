@@ -22,4 +22,6 @@ target_sources(pegasus-backend PRIVATE
     StdHelpers.h
     StringHelpers.cpp
     StringHelpers.h
+    ZipReader.cpp
+    ZipReader.h
 )

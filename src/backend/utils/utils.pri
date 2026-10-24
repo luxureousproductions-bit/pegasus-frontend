@@ -13,7 +13,8 @@ HEADERS += \
     $$PWD/QmlHelpers.h \
     $$PWD/SqliteDb.h \
     $$PWD/StdHelpers.h \
-    $$PWD/StringHelpers.h
+    $$PWD/StringHelpers.h \
+    $$PWD/ZipReader.h
 
 SOURCES += \
     $$PWD/CommandTokenizer.cpp \
@@ -24,4 +25,5 @@ SOURCES += \
     $$PWD/PathCase.cpp \
     $$PWD/PathTools.cpp \
     $$PWD/SqliteDb.cpp \
-    $$PWD/StringHelpers.cpp
+    $$PWD/StringHelpers.cpp \
+    $$PWD/ZipReader.cpp

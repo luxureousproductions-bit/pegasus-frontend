@@ -45,7 +45,6 @@ target_include_directories(pegasus-backend PUBLIC
 )
 
 pegasus_require_qt(COMPONENTS
-    Gui
     Qml
     Quick
     Multimedia
@@ -58,7 +57,6 @@ target_link_libraries(pegasus-backend PUBLIC
     Qt::Multimedia
     Qt::Sql
     Qt::Svg
-    Qt::GuiPrivate
     SortFilterProxyModel
 )
 
