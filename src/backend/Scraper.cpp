@@ -1125,13 +1125,19 @@ void Scraper::downloadNext()
 
 void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext)
 {
-    // one file per game and kind: <data>/<collection>/<folder>/<title>.<ext>,
-    // written over on the next scrape (it used to get a new, time-stamped name
-    // every time, so each scrape left another copy)
+    // one file per game and kind, named after the game's file (as ES-DE does):
+    // <data>/<collection>/<folder>/<game file name>.<ext>, written over on the
+    // next scrape and the same whatever the title becomes. Android apps (no
+    // file, an android: entry) use the title.
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
     const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.collection) % QLatin1Char('/') % media.folder;
     QDir().mkpath(dir);
-    const QString base = safe_file_name(title);
+    const bool has_file = !job.path.isEmpty() && !job.path.startsWith(QLatin1String("android:"));
+    // (a content:// entry: its last part, decoded)
+    const QString file_part = job.path.contains(QLatin1String("://"))
+        ? QUrl::fromPercentEncoding(job.path.toUtf8()).section(QLatin1Char('/'), -1)
+        : job.path;
+    const QString base = safe_file_name(has_file ? QFileInfo(file_part).completeBaseName() : title);
     const QString file_path = dir % QLatin1Char('/') % base % QLatin1Char('.') % ext;
     QSaveFile file(file_path);
     if (!file.open(QIODevice::WriteOnly) || file.write(body) != body.size() || !file.commit()) {
@@ -1142,7 +1148,7 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     // the game's other copies of this kind in Pegasus X's data folder (another
     // extension, or the time-stamped copies of older scrapes) go
     QStringList removed;
-    // exactly "<title>.<ext>" or "<title>~<14 digits>.<ext>", so another game
+    // exactly "<name>.<ext>" or "<name>~<14 digits>.<ext>", so another game
     // ("Game Deluxe", "Game.Remake") never matches
     static const QRegularExpression rx_stamp(QStringLiteral("^~\\d{14}$"));
     const QFileInfoList others = QDir(dir).entryInfoList(QDir::Files);
@@ -1172,7 +1178,7 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
         list = kept;
     }
     // a file of this game's in the same scraper folder under another name
-    // (scraped before under an older title) is replaced by this one too
+    // (scraped before, named after its title) is replaced by this one too
     const QString dir_abs = QDir(dir).absolutePath() + QLatin1Char('/');
     QStringList clean;
     for (const QString& f : list) {
