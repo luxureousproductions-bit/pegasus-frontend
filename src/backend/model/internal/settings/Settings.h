@@ -233,6 +233,9 @@ public:
     Q_INVOKABLE QStringList libraryGenres(QObject* all_games) const;
     /// Reads the games again from the cache (quick), applying the changes
     Q_INVOKABLE void reloadLibrary();
+    /// Settings' "Reload all games": scans again and lands on the theme
+    /// (reloadAllRequested, then the scan), the menu closed
+    Q_INVOKABLE void reloadAllGames();
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"
     Q_INVOKABLE QString emulatorListInfo() const;
 
@@ -245,6 +248,7 @@ signals:
     /// { ss: text, ssOk, sgdb: text, sgdbOk }
     void scraperAccountsChecked(QVariantMap result);
     void scraperProgress(QVariantMap state);
+    void reloadAllRequested();
     void scraperFinished(QVariantMap state);
     void fullscreenChanged();
     void mouseSupportChanged();

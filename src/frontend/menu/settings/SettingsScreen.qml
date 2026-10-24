@@ -61,7 +61,7 @@ FocusScope {
         onOpenMetadataEditor: root.openScreen("MetadataEditor.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
-        onReloadRequested: Internal.settings.reloadProviders()
+        onReloadRequested: Internal.settings.reloadAllGames()
     }
 
 

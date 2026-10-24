@@ -239,6 +239,12 @@ Window {
             genericMessage.focus = true;
         }
     }
+    // Pegasus X: "Reload all games" lands on the theme (its home screen), the
+    // menu closed; other reloads from the settings give the menu back
+    Connections {
+        target: Internal.settings
+        function onReloadAllRequested() { splashScreen.toTheme = true; }
+    }
     Connections {
         target: Internal.scanner
         function onRunningChanged() {
@@ -246,7 +252,7 @@ Window {
                 // Pegasus X: remember if the menu was open (eg. a reload from
                 // the settings), to give it back the focus afterwards
                 if (!splashScreen.focus)
-                    splashScreen.restoreMenu = mainMenu.focus;
+                    splashScreen.restoreMenu = mainMenu.focus && !splashScreen.toTheme;
                 splashScreen.focus = true;
             }
         }
@@ -267,6 +273,7 @@ Window {
         stage: Internal.scanner.stage
 
         property bool restoreMenu: false
+        property bool toTheme: false
 
         function hideMaybe() {
             if (focus && !dataLoading && !skinLoading) {
@@ -276,6 +283,7 @@ Window {
                 if (restoreMenu)
                     mainMenu.forceActiveFocus();
                 restoreMenu = false;
+                toTheme = false;
                 Internal.scanner.reset();
             }
         }

@@ -1490,6 +1490,12 @@ void Settings::reloadLibrary()
     emit libraryReloadRequested();
 }
 
+void Settings::reloadAllGames()
+{
+    emit reloadAllRequested();
+    reloadProviders();
+}
+
 void Settings::reloadProviders()
 {
     Log::info(LOGMSG("Reloading..."));
