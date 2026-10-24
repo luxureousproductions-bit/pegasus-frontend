@@ -32,6 +32,13 @@ FocusScope {
         root.state = "";
         root.close();
     }
+    // Pegasus X: closes the menu from anywhere in it (eg. after Reload all
+    // games): the open screen goes, and the next opening starts at the panel
+    function closeAll() {
+        subscreen.source = "";
+        menuPanel.focus = true;
+        triggerClose();
+    }
     function openScreen(url) {
         subscreen.source = url;
         subscreen.focus = true;

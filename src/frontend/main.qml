@@ -278,6 +278,10 @@ Window {
         function hideMaybe() {
             if (focus && !dataLoading && !skinLoading) {
                 content.focus = true;
+                // Reload all games: the theme, not the menu (content would
+                // give the focus back to the menu, still on the settings)
+                if (toTheme && mainMenu.item)
+                    mainMenu.item.closeAll();
                 // The theme reloads under the open menu and may take the focus
                 // while doing so, leaving the menu visible but deaf to the keys
                 if (restoreMenu)
