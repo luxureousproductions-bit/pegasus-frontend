@@ -1069,6 +1069,11 @@ QVariantMap scraper_defaults()
         { QStringLiteral("ssPassword"), QString() },
         { QStringLiteral("ssUse"), true },
         { QStringLiteral("sgdbKey"), QString() },
+        // IGDB: your own Twitch app (dev.twitch.tv), and whether it fills in
+        // what the first source didn't have
+        { QStringLiteral("igdbClientId"), QString() },
+        { QStringLiteral("igdbClientSecret"), QString() },
+        { QStringLiteral("igdbFill"), true },
         // what to get
         { QStringLiteral("getNames"), true },
         { QStringLiteral("getRatings"), true },
@@ -1102,6 +1107,12 @@ QVariantMap scraper_defaults()
         { QStringLiteral("imageMaxSize"), QStringLiteral("2560") },
         { QStringLiteral("trimBorders"), QStringLiteral("off") },
     };
+}
+
+bool scraper_has_igdb(const QVariantMap& settings)
+{
+    return !settings.value(QStringLiteral("igdbClientId")).toString().trimmed().isEmpty()
+        && !settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed().isEmpty();
 }
 
 QString unmask(const unsigned char* data, int length)
@@ -1156,7 +1167,7 @@ void Settings::checkScraperAccounts()
         m_netman = new QNetworkAccessManager(this);
     const QVariantMap settings = scraperSettings();
     auto* const result = new QVariantMap();
-    auto* const pending = new int(2);
+    auto* const pending = new int(3);
     const auto finish = [this, result, pending]{
         if (--(*pending) > 0)
             return;
@@ -1208,6 +1219,34 @@ void Settings::checkScraperAccounts()
                     : status == 0 ? tr("No connection") : tr("ScreenScraper is busy or offline (%1)").arg(status));
                 result->insert(QStringLiteral("ssOk"), false);
             }
+            finish();
+        });
+    }
+
+    // IGDB: a token from Twitch with your app's Client ID and secret
+    if (!scraper_has_igdb(settings)) {
+        result->insert(QStringLiteral("igdb"), tr("No Client ID and secret yet"));
+        result->insert(QStringLiteral("igdbOk"), false);
+        finish();
+    }
+    else {
+        QUrlQuery query;
+        query.addQueryItem(QStringLiteral("client_id"), settings.value(QStringLiteral("igdbClientId")).toString().trimmed());
+        query.addQueryItem(QStringLiteral("client_secret"), settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed());
+        query.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("client_credentials"));
+        QUrl url(QStringLiteral("https://id.twitch.tv/oauth2/token"));
+        url.setQuery(query);
+        QNetworkRequest request(url);
+        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
+        QNetworkReply* const reply = m_netman->post(request, QByteArray());
+        connect(reply, &QNetworkReply::finished, this, [reply, result, finish]{
+            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+            const bool ok = status == 200 && QJsonDocument::fromJson(reply->readAll()).object().contains(QStringLiteral("access_token"));
+            reply->deleteLater();
+            result->insert(QStringLiteral("igdb"), ok ? tr("Login works")
+                : (status == 400 || status == 401 || status == 403) ? tr("The Client ID or secret isn't accepted")
+                : status == 0 ? tr("No connection") : tr("Twitch answered %1").arg(status));
+            result->insert(QStringLiteral("igdbOk"), ok);
             finish();
         });
     }
@@ -1346,10 +1385,13 @@ QString Settings::startScraper(QObject* collections)
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_ss = scraperHasScreenScraper();
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
+    const bool has_igdb = scraper_has_igdb(settings);
     if (source == QLatin1String("steamgriddb") && !has_sgdb)
         return tr("Enter your SteamGridDB API key in Account settings first.");
-    if (source == QLatin1String("screenscraper") && !has_ss && !has_sgdb)
-        return tr("ScreenScraper isn't in this build yet. Pick SteamGridDB, or add your SteamGridDB key.");
+    if (source == QLatin1String("igdb") && !has_igdb)
+        return tr("Enter your IGDB Client ID and secret in Account settings first.");
+    if (source == QLatin1String("screenscraper") && !has_ss && !has_sgdb && !has_igdb)
+        return tr("ScreenScraper isn't in this build yet. Pick IGDB or SteamGridDB, or add their login.");
 
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
@@ -1412,8 +1454,11 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     settings.insert(QStringLiteral("interactive"), true);
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
-    if (!scraperHasScreenScraper() && !has_sgdb)
-        return tr("Enter your SteamGridDB key in Library > Scraper > Account settings first.");
+    const bool has_igdb = scraper_has_igdb(settings);
+    if (!scraperHasScreenScraper() && !has_sgdb && !has_igdb)
+        return tr("Enter your IGDB or SteamGridDB login in Library > Scraper > Account settings first.");
+    if (source == QLatin1String("igdb") && !has_igdb)
+        return tr("Enter your IGDB Client ID and secret in Library > Scraper > Account settings first.");
     if (source == QLatin1String("steamgriddb") && !has_sgdb)
         return tr("Enter your SteamGridDB key in Library > Scraper > Account settings first.");
     std::vector<scraper::Job> jobs;

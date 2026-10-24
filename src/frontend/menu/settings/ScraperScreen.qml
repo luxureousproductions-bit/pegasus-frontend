@@ -40,7 +40,8 @@ FocusScope {
         var next = Object.assign({}, s);
         next[key] = value;
         keepPosition(function() { s = next; });
-        if (key === "ssUser" || key === "ssPassword" || key === "sgdbKey" || key === "ssUse")
+        if (key === "ssUser" || key === "ssPassword" || key === "sgdbKey" || key === "ssUse"
+                || key === "igdbClientId" || key === "igdbClientSecret")
             checkAccounts();
     }
     function checkAccounts() {
@@ -98,6 +99,7 @@ FocusScope {
 
     readonly property var sourceChoices: [
         { "v": "screenscraper", "t": "ScreenScraper" },
+        { "v": "igdb", "t": qsTr("IGDB (best for modern, PC and Android games)") + api.tr },
         { "v": "steamgriddb", "t": qsTr("SteamGridDB (art only)") + api.tr },
     ]
     readonly property var gamesChoices: [
@@ -255,6 +257,15 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "ssUse", "text": qsTr("Use this account") + api.tr });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.ss || ""), "ok": !!accounts.ssOk });
+            out.push({ "kind": "section", "text": "IGDB" });
+            out.push({ "kind": "text", "key": "igdbClientId", "secret": true, "text": qsTr("Client ID") + api.tr,
+                       "value": s.igdbClientId !== "" ? "••••" + String(s.igdbClientId).slice(-4) : qsTr("not set") + api.tr, "muted": s.igdbClientId === "" });
+            out.push({ "kind": "text", "key": "igdbClientSecret", "secret": true, "text": qsTr("Client secret") + api.tr,
+                       "value": s.igdbClientSecret !== "" ? "••••••••" : qsTr("not set") + api.tr, "muted": s.igdbClientSecret === "" });
+            out.push({ "kind": "toggle", "key": "igdbFill", "text": qsTr("Fill in what ScreenScraper doesn't have") + api.tr });
+            out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
+                       "value": checking ? qsTr("checking...") + api.tr : (accounts.igdb || ""), "ok": !!accounts.igdbOk });
+            out.push({ "kind": "info", "text": qsTr("Get them") + api.tr, "value": "dev.twitch.tv › Console › Register your application" });
             out.push({ "kind": "section", "text": "SteamGridDB" });
             out.push({ "kind": "text", "key": "sgdbKey", "secret": true, "text": qsTr("API key") + api.tr,
                        "value": s.sgdbKey !== "" ? "••••" + String(s.sgdbKey).slice(-4) : qsTr("not set") + api.tr, "muted": s.sgdbKey === "" });
