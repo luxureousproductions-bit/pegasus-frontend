@@ -251,8 +251,14 @@ Window {
             if (Internal.scanner.running) {
                 // Pegasus X: remember if the menu was open (eg. a reload from
                 // the settings), to give it back the focus afterwards
-                if (!splashScreen.focus)
-                    splashScreen.restoreMenu = mainMenu.focus && !splashScreen.toTheme;
+                // Pegasus X: a reload started from the menu (Reload all games,
+                // leaving Library or an editor with changes) lands on the theme's
+                // home screen, the menu closed
+                if (!splashScreen.focus) {
+                    if (mainMenu.focus)
+                        splashScreen.toTheme = true;
+                    splashScreen.restoreMenu = false;
+                }
                 splashScreen.focus = true;
             }
         }

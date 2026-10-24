@@ -54,7 +54,17 @@ FocusScope {
     property var savedTitles: ({})       // game path -> title saved this time
     property var genres: []              // every genre in the library, for quick picks
 
+    // Pegasus X: what the library looked like when Library opened; leaving with
+    // the same (eg. hidden and shown again) reads nothing again
+    property string libStart: ""
+    property bool scrapedHere: false
+    function libState() {
+        return JSON.stringify({ "h": Internal.settings.hiddenItems(), "k": Internal.settings.androidKinds(),
+                                "m": Internal.settings.mergeAndroid });
+    }
+
     Component.onCompleted: {
+        libStart = libState();
         Internal.settings.libraryOpen = true;  // a finished scrape waits for you to leave
         list.currentIndex = 1;  // the first option, below the title
         // the first time: offer to set up the data folder
@@ -296,6 +306,8 @@ FocusScope {
     Connections {
         target: Internal.settings
         function onScraperFinished(state) {
+            if (state.saved > 0)
+                root.scrapedHere = true;
             if (!root.scrapingGame)
                 return;
             root.keepPosition(function() { root.scrapingGame = false; });
@@ -840,7 +852,7 @@ FocusScope {
             return;
         }
         Internal.settings.libraryOpen = false;
-        if (anySaved || libChanged || Internal.settings.scraperState().saved > 0)
+        if (anySaved || scrapedHere || (libChanged && libState() !== libStart))
             Internal.settings.reloadLibrary();
         root.close();
     }

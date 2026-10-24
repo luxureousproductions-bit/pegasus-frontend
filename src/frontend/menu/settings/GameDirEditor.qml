@@ -25,6 +25,10 @@ FocusScope {
     id: root
 
     property bool mSettingsChanged: false
+    // Pegasus X: the folders when the screen opened; a folder added and
+    // removed again is no change (no reload)
+    property string takenDirs: ""
+    Component.onCompleted: takenDirs = JSON.stringify(Internal.settings.gameDirs)
 
     signal close
 
@@ -146,7 +150,7 @@ FocusScope {
 
                     onModelChanged: {
                         if (isComplete)
-                            root.mSettingsChanged = true;
+                            root.mSettingsChanged = JSON.stringify(Internal.settings.gameDirs) !== root.takenDirs;
                     }
 
                     MouseArea {

@@ -23,6 +23,9 @@ FocusScope {
     id: root
 
     property bool mSettingsChanged: false
+    // Pegasus X: which sources were switched an odd number of times (switched
+    // and switched back is no change: no reload)
+    property var flips: ({})
 
     signal close
 
@@ -187,8 +190,12 @@ FocusScope {
                 checked: model.enabled
                 onCheckedChanged: {
                     model.enabled = checked;
-                    if (isComplete)
-                        root.mSettingsChanged = true;
+                    if (isComplete) {
+                        var next = Object.assign({}, root.flips);
+                        next[myIndex] = !next[myIndex];
+                        root.flips = next;
+                        root.mSettingsChanged = Object.keys(next).some(function(k) { return next[k]; });
+                    }
                 }
 
                 property bool isComplete: false

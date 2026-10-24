@@ -31,6 +31,10 @@ FocusScope {
     property var picked: ({})  // system name -> true
     property string message: ""
     property bool imported: false
+    // Pegasus X: the merge setting when the screen opened; flipped back is no change
+    property bool mergeTaken: false
+    property bool mergeStart: false
+    property bool otherChange: false   // an import, rescan or delete
 
     // progress of a running import
     property real progress: 0
@@ -150,6 +154,7 @@ FocusScope {
         }
         confirmDelete = "";
         var removed = Internal.settings.deleteEsdeImport(sys.folders);
+        otherChange = otherChange || removed > 0;
         imported = imported || removed > 0;
         message = removed > 0 ? qsTr("Deleted the import of %1.").arg(sys.fullname) + api.tr
                               : qsTr("Nothing to delete for %1.").arg(sys.fullname) + api.tr;
@@ -197,6 +202,7 @@ FocusScope {
         function onEsdeImportFinished(result) {
             root.progress = 1;
             if (result.files && result.files.length > 0) {
+                root.otherChange = true;
                 root.imported = true;
                 root.message = qsTr("Imported %1 games from %2 systems.").arg(result.games).arg(result.systems) + api.tr
                     + (result.error !== "" ? " " + result.error : "");
@@ -218,8 +224,13 @@ FocusScope {
         if (row.kind === "folder")
             filePicker.focus = true;
         else if (row.kind === "androidgames") {
+            if (!mergeTaken) {
+                mergeStart = root.mergeAndroid;
+                mergeTaken = true;
+            }
             Internal.settings.mergeAndroid = !root.mergeAndroid;
-            imported = true;  // asks to reload on the way out
+            // asks to reload on the way out, unless it's back as it was
+            imported = otherChange || Internal.settings.mergeAndroid !== mergeStart;
         }
         else if (row.kind === "nav")
             openPage(row.to);
