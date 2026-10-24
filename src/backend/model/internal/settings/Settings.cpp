@@ -108,6 +108,13 @@ Settings::Settings(QObject* parent)
 void Settings::postInit()
 {
 #ifdef WITH_COMPAT_ESDE
+    // apps may have been installed or removed while Pegasus X was away
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [](Qt::ApplicationState state){
+        if (state == Qt::ApplicationActive)
+            providers::esde::invalidate_emulator_setup();
+    });
+#endif
+#ifdef WITH_COMPAT_ESDE
     // before the library is read: no game in a collection that isn't its own
     providers::esde::split_legacy_edits_file();
 #endif
@@ -599,6 +606,9 @@ void Settings::updateEmulatorList()
                 file.write(entry.second);
             }
             Log::info(LOGMSG("Emulator list updated from ES-DE (%1 systems)").arg(systems.count("<system>")));
+#ifdef WITH_COMPAT_ESDE
+            providers::esde::invalidate_emulator_setup();
+#endif
             emit emulatorListUpdated(true, tr("Updated: %1 systems.").arg(systems.count("<system>")));
         });
     }

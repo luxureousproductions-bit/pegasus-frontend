@@ -37,6 +37,8 @@
 #include "utils/PathTools.h"
 
 #include <QDir>
+#include <memory>
+#include <QDateTime>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
@@ -2365,6 +2367,39 @@ struct EmulatorSetup {
     }
 };
 
+// Pegasus X: building the setup reads ES-DE's lists and asks Android about
+// every emulator app, which took long enough to pause Settings > Library each
+// time a collection opened (two or three times per collection). It's built
+// once and shared: again when the emulator list or your own emulators change,
+// when Pegasus X comes back to the front (apps may have been installed), or
+// after 10 minutes.
+QMutex& setup_mutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+std::shared_ptr<const EmulatorSetup>& setup_slot()
+{
+    static std::shared_ptr<const EmulatorSetup> slot;
+    return slot;
+}
+qint64& setup_time()
+{
+    static qint64 time = 0;
+    return time;
+}
+std::shared_ptr<const EmulatorSetup> shared_emulator_setup()
+{
+    QMutexLocker lock(&setup_mutex());
+    std::shared_ptr<const EmulatorSetup>& slot = setup_slot();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (!slot || now - setup_time() > 10 * 60 * 1000) {
+        slot = std::make_shared<const EmulatorSetup>();
+        setup_time() = now;
+    }
+    return slot;
+}
+
 QString same_command_key(const QString& command)
 {
     return command.simplified();
@@ -2468,7 +2503,8 @@ std::vector<EmulatorCollection> emulator_collections()
     }
 
     // what can launch them
-    const EmulatorSetup setup;
+    const std::shared_ptr<const EmulatorSetup> setup_ptr = shared_emulator_setup();
+    const EmulatorSetup& setup = *setup_ptr;
     for (EmulatorCollection& coll : out) {
         coll.system = setup.system_for(coll.short_name, coll.name);
         if (coll.system.isEmpty())
@@ -2546,7 +2582,8 @@ std::vector<DefaultLaunch> default_launches(const std::vector<std::pair<QString,
     std::vector<DefaultLaunch> out(collections.size());
     if (collections.empty())
         return out;
-    const EmulatorSetup setup;
+    const std::shared_ptr<const EmulatorSetup> setup_ptr = shared_emulator_setup();
+    const EmulatorSetup& setup = *setup_ptr;
     for (size_t i = 0; i < collections.size(); i++) {
         const QString system = setup.system_for(collections[i].second, collections[i].first);
         if (system.isEmpty())
@@ -2597,7 +2634,8 @@ QString custom_key(const EmulatorSetup& setup, const QString& collection_name, c
 
 std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root)
 {
-    const EmulatorSetup setup;
+    const std::shared_ptr<const EmulatorSetup> setup_ptr = shared_emulator_setup();
+    const EmulatorSetup& setup = *setup_ptr;
     const QString system = setup.system_for(short_name, collection_name);
     std::vector<EmulatorChoice> out;
     // the ones you saved for this system (or this collection) first
@@ -2624,7 +2662,8 @@ std::vector<EmulatorChoice> collection_choices(const QString& collection_name, c
 QString save_custom_emulator(const QString& collection_name, const QString& short_name,
                              const QString& label, const QString& command, bool remove)
 {
-    const EmulatorSetup setup;
+    const std::shared_ptr<const EmulatorSetup> setup_ptr = shared_emulator_setup();
+    const EmulatorSetup& setup = *setup_ptr;
     const QString key = custom_key(setup, collection_name, short_name);
     QJsonArray list = load_custom_emulators();
     for (int i = list.size() - 1; i >= 0; i--) {
@@ -3128,6 +3167,12 @@ void own_files_free(OwnFiles* own)
 }
 } // namespace
 
+
+void invalidate_emulator_setup()
+{
+    QMutexLocker lock(&setup_mutex());
+    setup_slot().reset();
+}
 
 void split_legacy_edits_file()
 {

@@ -186,6 +186,9 @@ QString save_collection_metadata(const QString& collection_name, const QVariantM
 /// Pegasus X's old edits file (all collections in one, which put games in
 /// collections declared before theirs) split into one file per collection
 void split_legacy_edits_file();
+/// The emulator setup (ES-DE's lists and the installed apps) is read again
+/// next time it's needed (see shared_emulator_setup)
+void invalidate_emulator_setup();
 
 /// The emulator a collection uses when its metadata has no launch command:
 /// ES-DE's default for its system if installed, else the first installed one.

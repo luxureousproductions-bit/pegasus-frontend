@@ -44,7 +44,13 @@ FocusScope {
     // Pegasus X: every file is listed (the ones that can't be picked greyed
     // out); a folder opens at its first entry, and backing out lands on the
     // folder you left instead of keeping the old row number
-    Component.onCompleted: root.showDrives()
+    // Pegasus X: the drives are listed when the browser is first shown, not
+    // when the screen holding it opens (Library, Game folders, ES-DE import)
+    property bool listed: false
+    onFocusChanged: {
+        if (focus && !listed)
+            root.showDrives();
+    }
 
     // Pegasus X: every browse starts on the drives; `path` (eg. the game's
     // media folder) becomes the "Suggested" jump
@@ -57,6 +63,7 @@ FocusScope {
         list.focus = true;
     }
     function showDrives() {
+        listed = true;
         folderModel.cd("/:pegasusx-drives:");  // no such folder: the drive list
         root.resetPosition();
     }
