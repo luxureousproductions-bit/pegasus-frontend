@@ -1217,6 +1217,57 @@ void Settings::checkScraperAccounts()
     }
 }
 
+namespace {
+// one game for the scraper, with what it has now
+scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, const QString& system, const QString& path)
+{
+    const auto local = [](const QString& url) {
+        return url.startsWith(QLatin1String("file:")) ? QUrl(url).toLocalFile() : url;
+    };
+    static const QRegularExpression rx_3d(QStringLiteral("box3d|box_3d|3dbox"), QRegularExpression::CaseInsensitiveOption);
+    const model::Assets& assets = game->assets();
+    const model::Collection* const coll_ptr = &coll;
+    scraper::Job job;
+    job.collection = coll_ptr->name();
+    job.system = system;
+    job.title = game->title();
+    job.path = path;
+    job.has_description = !game->description().isEmpty() || !game->summary().isEmpty();
+    job.has_developer = !game->developerListConst().isEmpty();
+    job.has_publisher = !game->publisherListConst().isEmpty();
+    job.has_genre = !game->genreListConst().isEmpty();
+    job.has_release = game->releaseDate().isValid();
+    job.has_players = game->playerCount() > 1;
+    job.has_rating = game->rating() > 0.0f;
+    job.title_is_file_name = !path.startsWith(QLatin1String("android:"))
+        && QFileInfo(path).completeBaseName().compare(game->title(), Qt::CaseInsensitive) == 0;
+    const std::vector<std::pair<const char*, const QStringList*>> slot_lists {
+        { "assets.box_front", &assets.boxFrontList() }, { "assets.box_back", &assets.boxBackList() },
+        { "assets.cartridge", &assets.cartridgeList() }, { "assets.screenshot", &assets.screenshotList() },
+        { "assets.titlescreen", &assets.titlescreenList() }, { "assets.background", &assets.backgroundList() },
+        { "assets.logo", &assets.logoList() }, { "assets.video", &assets.videoList() },
+        { "assets.steam", &assets.steamList() },
+    };
+    for (const auto& entry : slot_lists) {
+        QStringList files_now;
+        for (const QString& f : *entry.second) {
+            if (!f.startsWith(QLatin1String("image://")))
+                files_now.append(local(f));
+        }
+        job.slot_files.insert(QLatin1String(entry.first), files_now);
+        if (QLatin1String(entry.first) == QLatin1String("assets.box_front")) {
+            for (const QString& f : files_now) {
+                if (rx_3d.match(f).hasMatch()) job.has_box3d = true;
+                else job.has_box2d = true;
+            }
+        }
+    }
+    const QVariant manual = game->extraMap().value(QStringLiteral("manual"));
+    job.slot_files.insert(QStringLiteral("x-manual"), manual.toStringList());
+    return job;
+}
+} // namespace
+
 QString Settings::startScraper(QObject* collections)
 {
     if (m_scraper && m_scraper->running())
@@ -1237,10 +1288,6 @@ QString Settings::startScraper(QObject* collections)
     if (source == QLatin1String("screenscraper") && !has_ss && !has_sgdb)
         return tr("ScreenScraper isn't in this build yet. Pick SteamGridDB, or add your SteamGridDB key.");
 
-    const auto local = [](const QString& url) {
-        return url.startsWith(QLatin1String("file:")) ? QUrl(url).toLocalFile() : url;
-    };
-    static const QRegularExpression rx_3d(QStringLiteral("box3d|box_3d|3dbox"), QRegularExpression::CaseInsensitiveOption);
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
     for (int i = 0; i < list->count(); i++) {
@@ -1273,49 +1320,45 @@ QString Settings::startScraper(QObject* collections)
                 continue;
             seen.insert(path);
 
-            scraper::Job job;
-            job.collection = coll->name();
-            job.system = system;
-            job.title = game->title();
-            job.path = path;
-            job.has_description = !game->description().isEmpty() || !game->summary().isEmpty();
-            job.has_developer = !game->developerListConst().isEmpty();
-            job.has_publisher = !game->publisherListConst().isEmpty();
-            job.has_genre = !game->genreListConst().isEmpty();
-            job.has_release = game->releaseDate().isValid();
-            job.has_players = game->playerCount() > 1;
-            job.has_rating = game->rating() > 0.0f;
-            job.title_is_file_name = !path.startsWith(QLatin1String("android:"))
-                && QFileInfo(path).completeBaseName().compare(game->title(), Qt::CaseInsensitive) == 0;
-            const std::vector<std::pair<const char*, const QStringList*>> slot_lists {
-                { "assets.box_front", &assets.boxFrontList() }, { "assets.box_back", &assets.boxBackList() },
-                { "assets.cartridge", &assets.cartridgeList() }, { "assets.screenshot", &assets.screenshotList() },
-                { "assets.titlescreen", &assets.titlescreenList() }, { "assets.background", &assets.backgroundList() },
-                { "assets.logo", &assets.logoList() }, { "assets.video", &assets.videoList() },
-                { "assets.steam", &assets.steamList() },
-            };
-            for (const auto& entry : slot_lists) {
-                QStringList files_now;
-                for (const QString& f : *entry.second) {
-                    if (!f.startsWith(QLatin1String("image://")))
-                        files_now.append(local(f));
-                }
-                job.slot_files.insert(QLatin1String(entry.first), files_now);
-                if (QLatin1String(entry.first) == QLatin1String("assets.box_front")) {
-                    for (const QString& f : files_now) {
-                        if (rx_3d.match(f).hasMatch()) job.has_box3d = true;
-                        else job.has_box2d = true;
-                    }
-                }
-            }
-            const QVariant manual = game->extraMap().value(QStringLiteral("manual"));
-            job.slot_files.insert(QStringLiteral("x-manual"), manual.toStringList());
-            jobs.push_back(std::move(job));
+            jobs.push_back(make_scraper_job(*coll, game, system, path));
         }
     }
     if (jobs.empty())
         return tr("No games to scrape with these settings.");
+    return runScraper(std::move(jobs), settings);
+}
 
+QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, bool overwrite)
+{
+    if (m_scraper && m_scraper->running())
+        return tr("The scraper is already running.");
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    if (!game || game->filesModel()->entries().empty())
+        return tr("No game to scrape.");
+    const model::Collection* coll = nullptr;
+    for (model::Collection* const c : game->collectionsModel()->entries()) {
+        if (c->name() == collection_name || !coll)
+            coll = c;
+    }
+    if (!coll)
+        return tr("No game to scrape.");
+    QVariantMap settings = scraperSettings();
+    settings.insert(QStringLiteral("overwrite"), overwrite);
+    const QString source = settings.value(QStringLiteral("source")).toString();
+    const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
+    if (!scraperHasScreenScraper() && !has_sgdb)
+        return tr("Enter your SteamGridDB key in Library > Scraper > Account settings first.");
+    if (source == QLatin1String("steamgriddb") && !has_sgdb)
+        return tr("Enter your SteamGridDB key in Library > Scraper > Account settings first.");
+    std::vector<scraper::Job> jobs;
+    jobs.push_back(make_scraper_job(*coll, game, scraper::Scraper::system_of(coll->name(), coll->shortName()),
+                                    game->filesModel()->entries().front()->path()));
+    return runScraper(std::move(jobs), settings);
+}
+
+QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings)
+{
+    const bool has_ss = scraperHasScreenScraper();
     QString data = dataDir();
     if (data.isEmpty())
         data = paths::writableConfigDir() + QStringLiteral("/media");

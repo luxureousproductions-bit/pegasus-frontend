@@ -25,11 +25,12 @@
 #include "utils/QmlHelpers.h"
 
 #include <QObject>
+#include <vector>
 
 
 class QNetworkAccessManager;
 
-namespace scraper { class Scraper; }
+namespace scraper { class Scraper; struct Job; }
 
 namespace model {
 
@@ -200,6 +201,9 @@ public:
     /// returns an error, or empty when it started (scraperProgress, scraperFinished)
     Q_INVOKABLE QString startScraper(QObject* collections);
     Q_INVOKABLE void stopScraper();
+    /// Scrapes one game (Library's game page) with the Scraper settings;
+    /// `overwrite`: replace what it has, else only fill what's empty
+    Q_INVOKABLE QString scrapeGame(QObject* game, const QString& collection_name, bool overwrite);
     /// { running, done, total, current, title, result, ok, saved, notFound, failed, stopReason }
     Q_INVOKABLE QVariantMap scraperState() const;
     /// Settings > Library is open: it reads the library again when you leave;
@@ -281,6 +285,7 @@ private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
+    QString runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings);
     bool m_library_open = false;
     QVariantList m_emu_cache;
     QVariantList m_android_apps_cache;

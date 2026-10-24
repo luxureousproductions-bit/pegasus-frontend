@@ -275,6 +275,40 @@ FocusScope {
             root.message = qsTr("\"%1\" is off the list.").arg(entry.label) + api.tr;
         });
     }
+    // -- Scraping one game --------------------------------------------------------
+    property bool scrapingGame: false
+    function scrapeThisGame() {
+        if (scrapingGame)
+            return;
+        chooser.openFor(qsTr("Scrape \"%1\"").arg(current("title")) + api.tr, [
+            { "act": "fill", "text": qsTr("Fill what's empty") + api.tr },
+            { "act": "replace", "text": qsTr("Replace with what's found") + api.tr },
+        ], function(act) {
+            var error = Internal.settings.scrapeGame(root.game.obj, root.gameColl(), act === "replace");
+            if (error !== "") {
+                root.message = error;
+                return;
+            }
+            root.keepPosition(function() { root.scrapingGame = true; });
+            root.message = qsTr("Scraping \"%1\"...").arg(root.current("title")) + api.tr;
+        });
+    }
+    Connections {
+        target: Internal.settings
+        function onScraperFinished(state) {
+            if (!root.scrapingGame)
+                return;
+            root.keepPosition(function() { root.scrapingGame = false; });
+            if (state.saved > 0) {
+                root.anySaved = true;
+                root.message = qsTr("Scraped: %1. It shows once you leave Library.").arg(state.result) + api.tr;
+            }
+            else {
+                root.message = qsTr("Nothing saved: %1").arg(state.stopReason || state.result) + api.tr;
+            }
+        }
+    }
+
     // starts a game with a command, to see that it works
     function testWith(command, entry) {
         if (!entry || command === "") {
@@ -1189,6 +1223,9 @@ FocusScope {
                     }
                 }
                 out.push({ "kind": "addart", "text": qsTr("Add art or a manual...") + api.tr, "value": "" });
+                out.push({ "kind": "scrapegame", "text": qsTr("Scrape this game...") + api.tr,
+                           "value": root.scrapingGame ? qsTr("scraping...") + api.tr : qsTr("with the Scraper's settings") + api.tr,
+                           "muted": true });
             }
 
             var savedIn = root.loc.file ? root.loc.file.split("/").slice(-2).join("/") : "";
@@ -1349,6 +1386,8 @@ FocusScope {
                 scraperLoader.active = true;
                 scraperLoader.focus = true;
             }
+            else if (row.kind === "scrapegame")
+                root.scrapeThisGame();
             else if (row.kind === "emulist")
                 root.updateEmulatorList();
             else if (row.kind === "datadir")
