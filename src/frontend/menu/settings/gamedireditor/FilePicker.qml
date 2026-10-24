@@ -72,11 +72,16 @@ FocusScope {
     property string dataFolder: Internal.settings.dataDir
     readonly property var shortcuts: {
         var out = [];
+        // pinned first: Pegasus X's data folder, ES-DE's folder, the drives
+        if (dataFolder !== "")
+            out.push({ "t": qsTr("Pegasus X") + api.tr, "act": "go", "path": dataFolder });
+        if (Internal.settings.esdeImportDir !== "")
+            out.push({ "t": qsTr("ES-DE") + api.tr, "act": "go", "path": Internal.settings.esdeImportDir });
+        out.push({ "t": qsTr("Drives  RB") + api.tr, "act": "drives" });
         if (pickFolders) {
             out.push({ "t": qsTr("Use this folder") + api.tr, "act": "use" });
             out.push({ "t": qsTr("New folder...") + api.tr, "act": "new" });
         }
-        out.push({ "t": qsTr("Drives  RB") + api.tr, "act": "drives" });
         out.push({ "t": qsTr("Up a folder  B") + api.tr, "act": "up" });
         // the last 5 folders: the newest is LB's
         var recent = Internal.settings.recentBrowseFolders;
@@ -86,10 +91,6 @@ FocusScope {
         }
         if (startFolder !== "")
             out.push({ "t": qsTr("Suggested") + api.tr, "act": "go", "path": startFolder });
-        if (Internal.settings.esdeImportDir !== "")
-            out.push({ "t": qsTr("ES-DE") + api.tr, "act": "go", "path": Internal.settings.esdeImportDir });
-        if (dataFolder !== "")
-            out.push({ "t": qsTr("Pegasus X data") + api.tr, "act": "go", "path": dataFolder });
         return out;
     }
     function jump(entry) {
