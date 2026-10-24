@@ -22,6 +22,8 @@ add_library(pegasus-backend
     ProcessLauncher.h
     ScriptRunner.cpp
     ScriptRunner.h
+    Miximage.cpp
+    Miximage.h
     Scraper.cpp
     Scraper.h
     ScraperKeys.h

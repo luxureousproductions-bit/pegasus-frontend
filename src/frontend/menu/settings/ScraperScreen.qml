@@ -126,9 +126,55 @@ FocusScope {
         { "v": "zh", "t": "中文" },
     ]
     readonly property var miximageChoices: [
-        { "v": "mixrbv2", "t": qsTr("ScreenScraper mix, style 2") + api.tr },
-        { "v": "mixrbv1", "t": qsTr("ScreenScraper mix, style 1") + api.tr },
+        { "v": "generate", "t": qsTr("Made by Pegasus X (as ES-DE)") + api.tr },
+        { "v": "mixrbv2", "t": qsTr("ScreenScraper's, style 2") + api.tr },
+        { "v": "mixrbv1", "t": qsTr("ScreenScraper's, style 1") + api.tr },
     ]
+    readonly property var sizeChoices: [
+        { "v": "small", "t": qsTr("Small") + api.tr },
+        { "v": "medium", "t": qsTr("Medium") + api.tr },
+        { "v": "large", "t": qsTr("Large") + api.tr },
+    ]
+    readonly property var fitChoices: [
+        { "v": "contain", "t": qsTr("Contain") + api.tr },
+        { "v": "crop", "t": qsTr("Crop") + api.tr },
+        { "v": "stretch", "t": qsTr("Stretch") + api.tr },
+    ]
+
+    // -- How to get each login (a popup from Account settings) -------------------
+    readonly property var helpTexts: ({
+        "ss": {
+            "title": qsTr("ScreenScraper account") + api.tr,
+            "steps": [
+                qsTr("On screenscraper.fr, tap \"Inscription\" (sign up) at the top. Pick a username and password and enter your email.") + api.tr,
+                qsTr("Open the email ScreenScraper sends and confirm your account.") + api.tr,
+                qsTr("Enter the same username and password here, and leave \"Use this account\" on.") + api.tr,
+                qsTr("Free accounts get a set number of games a day; supporting ScreenScraper raises it. The Status row shows how many are left today.") + api.tr,
+            ],
+            "site": "screenscraper.fr"
+        },
+        "igdb": {
+            "title": qsTr("IGDB login (a Twitch app)") + api.tr,
+            "steps": [
+                qsTr("Log in to twitch.tv and turn on two-factor authentication (Settings › Security). Twitch asks for it before you can make an app.") + api.tr,
+                qsTr("On dev.twitch.tv, open Console › Applications › Register Your Application.") + api.tr,
+                qsTr("Name: anything no one else has used, eg. \"pegasusx-\" and your name. OAuth Redirect URL: https://localhost (tap Add). Category: Application Integration. Client type: Confidential.") + api.tr,
+                qsTr("Open the app you made: copy the Client ID, then tap New Secret and copy the secret (it's shown only once).") + api.tr,
+                qsTr("Enter both here. The Status row says \"Login works\" when Twitch accepts them.") + api.tr,
+            ],
+            "site": "dev.twitch.tv/console"
+        },
+        "sgdb": {
+            "title": qsTr("SteamGridDB API key") + api.tr,
+            "steps": [
+                qsTr("On steamgriddb.com, log in with your Steam account (top right).") + api.tr,
+                qsTr("Open your profile menu › Preferences › API.") + api.tr,
+                qsTr("Tap Generate API Key and copy the key.") + api.tr,
+                qsTr("Enter it here. The Status row says \"Key works\" when SteamGridDB accepts it.") + api.tr,
+            ],
+            "site": "steamgriddb.com/profile/preferences/api"
+        },
+    })
     readonly property var contentToggles: [
         ["getNames", qsTr("Game names") + api.tr],
         ["getRatings", qsTr("Ratings") + api.tr],
@@ -142,7 +188,6 @@ FocusScope {
         ["getPhysical", qsTr("Physical media images") + api.tr],
         ["getFanart", qsTr("Fan art images") + api.tr],
         ["getLogos", qsTr("Logos (marquees)") + api.tr],
-        ["getMiximages", qsTr("Miximages") + api.tr],
         ["getManuals", qsTr("Game manuals") + api.tr],
     ]
 
@@ -222,6 +267,23 @@ FocusScope {
         list.currentIndex = 0;
     }
 
+    function startGenerator() {
+        if ((s.systems || []).length === 0) {
+            message = qsTr("Pick the systems on the Scraper page first.") + api.tr;
+            return;
+        }
+        var error = Internal.settings.startMiximageGenerator(api.collections);
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        results = [];
+        run = Internal.settings.scraperState();
+        message = "";
+        page = "running";
+        list.currentIndex = 0;
+    }
+
     readonly property var rows: {
         var out = [];
         var i;
@@ -255,6 +317,7 @@ FocusScope {
             out.push({ "kind": "text", "key": "ssPassword", "secret": true, "text": qsTr("Password") + api.tr,
                        "value": s.ssPassword !== "" ? "••••••••" : qsTr("not set") + api.tr, "muted": s.ssPassword === "" });
             out.push({ "kind": "toggle", "key": "ssUse", "text": qsTr("Use this account") + api.tr });
+            out.push({ "kind": "help", "key": "ss", "text": qsTr("How to get an account") + api.tr, "value": "" });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.ss || ""), "ok": !!accounts.ssOk });
             out.push({ "kind": "section", "text": "IGDB" });
@@ -265,13 +328,13 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "igdbFill", "text": qsTr("Fill in what ScreenScraper doesn't have") + api.tr });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.igdb || ""), "ok": !!accounts.igdbOk });
-            out.push({ "kind": "info", "text": qsTr("Get them") + api.tr, "value": "dev.twitch.tv › Console › Register your application" });
+            out.push({ "kind": "help", "key": "igdb", "text": qsTr("How to get a Client ID and secret") + api.tr, "value": "" });
             out.push({ "kind": "section", "text": "SteamGridDB" });
             out.push({ "kind": "text", "key": "sgdbKey", "secret": true, "text": qsTr("API key") + api.tr,
                        "value": s.sgdbKey !== "" ? "••••" + String(s.sgdbKey).slice(-4) : qsTr("not set") + api.tr, "muted": s.sgdbKey === "" });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.sgdb || ""), "ok": !!accounts.sgdbOk });
-            out.push({ "kind": "info", "text": qsTr("Get a key") + api.tr, "value": "steamgriddb.com › Preferences › API" });
+            out.push({ "kind": "help", "key": "sgdb", "text": qsTr("How to get an API key") + api.tr, "value": "" });
             return out;
         }
         if (page === "content") {
@@ -280,9 +343,35 @@ FocusScope {
             return out;
         }
         if (page === "miximage") {
-            out.push({ "kind": "choice", "key": "miximageStyle", "text": qsTr("Miximage style") + api.tr, "choices": miximageChoices });
             out.push({ "kind": "mixpreview", "text": "" });
-            out.push({ "kind": "info", "text": qsTr("A miximage is one picture made from the game's art: the screenshot, with the box, the logo (and in style 2 the cartridge or disc) on top. ScreenScraper makes it, ready to show; the layouts above are a rough guide.") + api.tr, "value": "" });
+            out.push({ "kind": "choice", "key": "miximageStyle", "text": qsTr("Miximages") + api.tr, "choices": miximageChoices });
+            out.push({ "kind": "toggle", "key": "getMiximages", "text": qsTr("Generate miximages when scraping") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixOverwrite", "text": qsTr("Overwrite miximages (scraper/offline generator)") + api.tr });
+            out.push({ "kind": "offline", "text": qsTr("Offline generator") + api.tr,
+                       "value": qsTr("%1 systems").arg((s.systems || []).length) + api.tr });
+            out.push({ "kind": "section", "text": qsTr("Made by Pegasus X") + api.tr });
+            out.push({ "kind": "choice", "key": "mixResolution", "text": qsTr("Miximage resolution") + api.tr, "choices": [
+                { "v": "1280x960", "t": "1280×960" }, { "v": "1920x1440", "t": "1920×1440" }, { "v": "640x480", "t": "640×480" } ] });
+            out.push({ "kind": "choice", "key": "mixFormat", "text": qsTr("Miximage file format") + api.tr, "choices": [
+                { "v": "png", "t": "PNG" }, { "v": "webp", "t": qsTr("WEBP (PNG where not supported)") + api.tr } ] });
+            out.push({ "kind": "choice", "key": "mixHorizontalFit", "text": qsTr("Horizontal screenshot fit") + api.tr, "choices": fitChoices });
+            out.push({ "kind": "choice", "key": "mixVerticalFit", "text": qsTr("Vertical screenshot fit") + api.tr, "choices": fitChoices });
+            out.push({ "kind": "choice", "key": "mixThreshold", "text": qsTr("Screenshot aspect ratio threshold") + api.tr, "choices": [
+                { "v": "high", "t": qsTr("High") + api.tr }, { "v": "low", "t": qsTr("Low") + api.tr } ] });
+            out.push({ "kind": "choice", "key": "mixBlankColor", "text": qsTr("Blank areas fill color") + api.tr, "choices": [
+                { "v": "black", "t": qsTr("Black") + api.tr }, { "v": "frame", "t": qsTr("Frame") + api.tr } ] });
+            out.push({ "kind": "choice", "key": "mixScaling", "text": qsTr("Screenshot scaling method") + api.tr, "choices": [
+                { "v": "sharp", "t": qsTr("Sharp") + api.tr }, { "v": "smooth", "t": qsTr("Smooth") + api.tr } ] });
+            out.push({ "kind": "choice", "key": "mixBoxSize", "text": qsTr("Box size") + api.tr, "choices": sizeChoices });
+            out.push({ "kind": "choice", "key": "mixPhysicalSize", "text": qsTr("Physical media size") + api.tr, "choices": sizeChoices });
+            out.push({ "kind": "toggle", "key": "mixRemoveLetterboxes", "text": qsTr("Remove letterboxes from screenshots") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixRemovePillarboxes", "text": qsTr("Remove pillarboxes from screenshots") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixRotateBoxes", "text": qsTr("Rotate horizontally oriented boxes") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixIncludeMarquee", "text": qsTr("Include marquee image") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixIncludeBox", "text": qsTr("Include box image") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixCoverFallback", "text": qsTr("Use cover image if 3D box is missing") + api.tr });
+            out.push({ "kind": "toggle", "key": "mixIncludePhysical", "text": qsTr("Include physical media image") + api.tr });
+            out.push({ "kind": "info", "text": qsTr("The offline generator makes miximages for the systems picked on the Scraper page from the art the games already have, without going online.") + api.tr, "value": "" });
             return out;
         }
         if (page === "running") {
@@ -399,6 +488,8 @@ FocusScope {
         else if (row.kind === "none") set("systems", []);
         else if (row.kind === "text") textDialog.openFor(row);
         else if (row.kind === "start") startScraper();
+        else if (row.kind === "help") helpDialog.openFor(row.key);
+        else if (row.kind === "offline") startGenerator();
         else if (row.kind === "stop") Internal.settings.stopScraper();
         else if (row.kind === "done") { page = "main"; message = ""; list.currentIndex = 0; }
     }
@@ -497,13 +588,14 @@ FocusScope {
                 anchors.centerIn: parent
                 spacing: vpx(30)
                 Repeater {
-                    model: [ { "src": "qrc:/frontend/assets/miximage-style1.png", "t": qsTr("Style 1") + api.tr },
-                             { "src": "qrc:/frontend/assets/miximage-style2.png", "t": qsTr("Style 2") + api.tr } ]
+                    model: [ { "src": "qrc:/frontend/assets/miximage-pegasusx.png", "t": qsTr("Made by Pegasus X") + api.tr },
+                             { "src": "qrc:/frontend/assets/miximage-style2.png", "t": qsTr("ScreenScraper style 2") + api.tr },
+                             { "src": "qrc:/frontend/assets/miximage-style1.png", "t": qsTr("ScreenScraper style 1") + api.tr } ]
                     delegate: Column {
                         spacing: vpx(6)
                         Image {
-                            width: vpx(256)
-                            height: vpx(160)
+                            width: vpx(210)
+                            height: vpx(158)
                             source: modelData.src
                             sourceSize.width: vpx(256)
                             fillMode: Image.PreserveAspectFit
@@ -736,6 +828,123 @@ FocusScope {
                             anchors.fill: parent
                             onClicked: picker.done(index)
                         }
+                    }
+                }
+            }
+        }
+    }
+
+
+    // -- How to get a login --------------------------------------------------------
+
+    FocusScope {
+        id: helpDialog
+
+        property var help: ({})
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+        z: 5
+
+        function openFor(key) {
+            help = root.helpTexts[key] || ({});
+            helpFlick.contentY = 0;
+            focus = true;
+        }
+
+        Keys.onPressed: {
+            if (event.isAutoRepeat)
+                return;
+            if (api.keys.isCancel(event) || api.keys.isAccept(event)) {
+                event.accepted = true;
+                list.focus = true;
+            }
+        }
+        Keys.onUpPressed: helpFlick.contentY = Math.max(0, helpFlick.contentY - vpx(60))
+        Keys.onDownPressed: helpFlick.contentY = Math.max(0, Math.min(helpFlick.contentHeight - helpFlick.height, helpFlick.contentY + vpx(60)))
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.6
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: list.focus = true
+            }
+        }
+        Rectangle {
+            anchors.centerIn: parent
+            width: Math.min(parent.width * 0.7, vpx(820))
+            height: Math.min(parent.height * 0.85, helpColumn.height + vpx(40))
+            color: "#2b2e30"
+            radius: vpx(8)
+            border.color: "#3aa"
+            border.width: vpx(2)
+            Flickable {
+                id: helpFlick
+                anchors.fill: parent
+                anchors.margins: vpx(20)
+                contentHeight: helpColumn.height
+                clip: true
+                Column {
+                    id: helpColumn
+                    width: parent.width
+                    spacing: vpx(14)
+                    Text {
+                        width: parent.width
+                        text: helpDialog.help.title || ""
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(24)
+                        font.bold: true
+                        wrapMode: Text.WordWrap
+                    }
+                    Repeater {
+                        model: helpDialog.help.steps || []
+                        delegate: Row {
+                            spacing: vpx(12)
+                            width: helpColumn.width
+                            Rectangle {
+                                width: vpx(30)
+                                height: width
+                                radius: width / 2
+                                color: "#2a5f5f"
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: index + 1
+                                    color: "#eee"
+                                    font.family: globalFonts.sans
+                                    font.pixelSize: vpx(16)
+                                    font.bold: true
+                                }
+                            }
+                            Text {
+                                width: parent.width - vpx(42)
+                                text: modelData
+                                color: "#ddd"
+                                font.family: globalFonts.sans
+                                font.pixelSize: vpx(18)
+                                wrapMode: Text.WordWrap
+                                lineHeight: 1.15
+                            }
+                        }
+                    }
+                    Text {
+                        width: parent.width
+                        text: qsTr("Website: %1").arg(helpDialog.help.site || "") + api.tr
+                        color: "#5cc"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(17)
+                        wrapMode: Text.WrapAnywhere
+                    }
+                    Text {
+                        width: parent.width
+                        text: qsTr("A / B close · ▴ ▾ scroll") + api.tr
+                        color: "#999"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(15)
+                        horizontalAlignment: Text.AlignHCenter
                     }
                 }
             }

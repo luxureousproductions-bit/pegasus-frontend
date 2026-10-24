@@ -18,6 +18,7 @@
 #include "Scraper.h"
 
 #include "Log.h"
+#include "Miximage.h"
 #ifdef WITH_COMPAT_ESDE
 #include "providers/esde/EsdeProvider.h"
 #endif
@@ -848,7 +849,15 @@ void Scraper::next()
     m_media.clear();
     m_got.clear();
     m_igdb_done = false;
+    m_mix_done = false;
+    m_mix_error.clear();
     report();
+
+    // the offline generator: only the miximage, from the art the game has
+    if (offline()) {
+        downloadNext();
+        return;
+    }
 
     // interactive mode: the matches are shown, you pick one
     if (interactive()) {
@@ -1053,6 +1062,9 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
     for (const Kind& kind : kinds) {
         const QString setting = QLatin1String(kind.setting);
         if (!wants(setting))
+            continue;
+        // miximages made here: ScreenScraper's aren't downloaded
+        if (!kind.types[0] && (mix.isEmpty() || mix == QLatin1String("generate")))
             continue;
         const QStringList types = kind.types[0] ? QString::fromLatin1(kind.types).split(QLatin1Char(','))
                                                 : QStringList { mix.isEmpty() ? QStringLiteral("mixrbv2") : mix };
@@ -1471,6 +1483,12 @@ void Scraper::downloadNext()
         return;
     }
     if (m_media.empty()) {
+        // all downloaded: the miximage made from them
+        if (!m_mix_done && wantsMiximage()) {
+            m_mix_done = true;
+            makeMiximage();
+            return;
+        }
         save();
         return;
     }
@@ -1611,9 +1629,87 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     downloadNext();
 }
 
+bool Scraper::offline() const
+{
+    return m_settings.value(QStringLiteral("offlineMix")).toBool();
+}
+
+bool Scraper::wantsMiximage() const
+{
+    if (offline())
+        return true;
+    const QString style = m_settings.value(QStringLiteral("miximageStyle")).toString();
+    return wants(QStringLiteral("getMiximages")) && (style.isEmpty() || style == QLatin1String("generate"));
+}
+
+// the game's miximage from its screenshot, logo, box and disc (the ones just
+// scraped, else the ones it had)
+void Scraper::makeMiximage()
+{
+    const Job& job = m_jobs[m_index];
+    const auto files_of = [this, &job](const QString& key) {
+        return m_changes.contains(key) ? m_changes.value(key).toStringList() : job.slot_files.value(key).toStringList();
+    };
+    if (!files_of(QStringLiteral("assets.steam")).isEmpty()
+            && !m_settings.value(QStringLiteral("mixOverwrite"), true).toBool()) {
+        m_mix_error = tr("has a miximage already");
+        save();
+        return;
+    }
+    // the first local file of a kind (boxes: 3D or 2D)
+    const auto first_local = [&files_of](const QString& key, int want3d) {
+        for (const QString& f : files_of(key)) {
+            const QString path = f.startsWith(QLatin1String("file:")) ? QUrl(f).toLocalFile() : f;
+            if (path.isEmpty() || path.contains(QLatin1String("://")))
+                continue;
+            const bool is3d = path.contains(QLatin1String("3dbox"), Qt::CaseInsensitive)
+                || path.contains(QLatin1String("box3d"), Qt::CaseInsensitive);
+            if ((want3d == 0 && is3d) || (want3d == 1 && !is3d))
+                continue;
+            if (QFileInfo(path).isFile())
+                return path;
+        }
+        return QString();
+    };
+    miximage::Sources sources;
+    sources.screenshot = first_local(QStringLiteral("assets.screenshot"), -1);
+    sources.marquee = first_local(QStringLiteral("assets.logo"), -1);
+    sources.box3d = first_local(QStringLiteral("assets.box_front"), 1);
+    sources.cover = first_local(QStringLiteral("assets.box_front"), 0);
+    sources.physical = first_local(QStringLiteral("assets.cartridge"), -1);
+    if (sources.screenshot.isEmpty()) {
+        m_mix_error = tr("no screenshot for a miximage");
+        save();
+        return;
+    }
+    const miximage::Options options = miximage::Options::from(m_settings);
+    auto* const watcher = new QFutureWatcher<miximage::Result>(this);
+    connect(watcher, &QFutureWatcher<miximage::Result>::finished, this, [this, watcher]{
+        const miximage::Result result = watcher->result();
+        watcher->deleteLater();
+        if (m_stop || result.data.isEmpty()) {
+            m_mix_error = result.error;
+            save();
+            return;
+        }
+        Media media;
+        media.setting = QStringLiteral("getMiximages");
+        media.slot = QStringLiteral("assets.steam");
+        media.folder = QStringLiteral("miximages");
+        media.ext = result.ext;
+        storeMedia(media, m_jobs[m_index], result.data, result.ext);  // then saves
+    });
+    watcher->setFuture(QtConcurrent::run([sources, options]{ return miximage::make(sources, options); }));
+}
+
 void Scraper::save()
 {
     const Job& job = m_jobs[m_index];
+    if (m_changes.isEmpty() && !m_mix_error.isEmpty()) {
+        m_not_found++;
+        finishGame(m_mix_error, false);
+        return;
+    }
     if (m_changes.isEmpty()) {
         m_not_found++;
         finishGame(tr("nothing new"), false);

@@ -1089,8 +1089,26 @@ QVariantMap scraper_defaults()
         { QStringLiteral("getLogos"), true },
         { QStringLiteral("getMiximages"), true },
         { QStringLiteral("getManuals"), true },
-        // ScreenScraper makes the miximages: which of its styles
-        { QStringLiteral("miximageStyle"), QStringLiteral("mixrbv2") },
+        // miximages: made here as ES-DE makes them ("generate"), or
+        // ScreenScraper's ready-made ones (mixrbv1 / mixrbv2); ES-DE's options
+        { QStringLiteral("miximageStyle"), QStringLiteral("generate") },
+        { QStringLiteral("mixOverwrite"), true },
+        { QStringLiteral("mixResolution"), QStringLiteral("1280x960") },
+        { QStringLiteral("mixFormat"), QStringLiteral("png") },
+        { QStringLiteral("mixHorizontalFit"), QStringLiteral("crop") },
+        { QStringLiteral("mixVerticalFit"), QStringLiteral("contain") },
+        { QStringLiteral("mixThreshold"), QStringLiteral("high") },
+        { QStringLiteral("mixBlankColor"), QStringLiteral("black") },
+        { QStringLiteral("mixScaling"), QStringLiteral("sharp") },
+        { QStringLiteral("mixBoxSize"), QStringLiteral("medium") },
+        { QStringLiteral("mixPhysicalSize"), QStringLiteral("medium") },
+        { QStringLiteral("mixRemoveLetterboxes"), true },
+        { QStringLiteral("mixRemovePillarboxes"), true },
+        { QStringLiteral("mixRotateBoxes"), true },
+        { QStringLiteral("mixIncludeMarquee"), true },
+        { QStringLiteral("mixIncludeBox"), true },
+        { QStringLiteral("mixCoverFallback"), true },
+        { QStringLiteral("mixIncludePhysical"), true },
         // other
         { QStringLiteral("region"), QStringLiteral("us") },
         { QStringLiteral("language"), QStringLiteral("en") },
@@ -1372,25 +1390,41 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
 
 QString Settings::startScraper(QObject* collections)
 {
+    return startScraperWith(collections, false);
+}
+
+// ES-DE's offline generator: miximages from the art the games have, for the
+// systems picked, nothing downloaded
+QString Settings::startMiximageGenerator(QObject* collections)
+{
+    return startScraperWith(collections, true);
+}
+
+QString Settings::startScraperWith(QObject* collections, bool offline)
+{
     if (m_scraper && m_scraper->running())
         return tr("The scraper is already running.");
     const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
     if (!list)
         return tr("No library to scrape.");
-    const QVariantMap settings = scraperSettings();
+    QVariantMap settings = scraperSettings();
     const QStringList systems = settings.value(QStringLiteral("systems")).toStringList();
-    const QString filter = settings.value(QStringLiteral("games")).toString();
+    const QString filter = offline ? QStringLiteral("all") : settings.value(QStringLiteral("games")).toString();
     if (systems.isEmpty())
-        return tr("Pick the systems to scrape first.");
+        return tr("Pick the systems first.");
+    if (offline) {
+        settings.insert(QStringLiteral("offlineMix"), true);
+        settings.insert(QStringLiteral("interactive"), false);
+    }
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_ss = scraperHasScreenScraper();
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
     const bool has_igdb = scraper_has_igdb(settings);
-    if (source == QLatin1String("steamgriddb") && !has_sgdb)
+    if (!offline && source == QLatin1String("steamgriddb") && !has_sgdb)
         return tr("Enter your SteamGridDB API key in Account settings first.");
-    if (source == QLatin1String("igdb") && !has_igdb)
+    if (!offline && source == QLatin1String("igdb") && !has_igdb)
         return tr("Enter your IGDB Client ID and secret in Account settings first.");
-    if (source == QLatin1String("screenscraper") && !has_ss && !has_sgdb && !has_igdb)
+    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_sgdb && !has_igdb)
         return tr("ScreenScraper isn't in this build yet. Pick IGDB or SteamGridDB, or add their login.");
 
     std::vector<scraper::Job> jobs;

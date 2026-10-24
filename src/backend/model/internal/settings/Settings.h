@@ -202,6 +202,7 @@ public:
     /// Scrapes the games the Scraper settings pick (systems and filter);
     /// returns an error, or empty when it started (scraperProgress, scraperFinished)
     Q_INVOKABLE QString startScraper(QObject* collections);
+    Q_INVOKABLE QString startMiximageGenerator(QObject* collections);
     Q_INVOKABLE void stopScraper();
     /// Interactive mode: the match picked (index in the choice's candidates),
     /// a new search name, or this game skipped
@@ -296,7 +297,8 @@ private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
-    QPointer<model::Game> m_single_game;  ///< scraped alone: updated when done
+    QPointer<model::Game> m_single_game;
+    QString startScraperWith(QObject* collections, bool offline);  ///< scraped alone: updated when done
     QString runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings);
     bool m_library_open = false;
     QVariantList m_emu_cache;

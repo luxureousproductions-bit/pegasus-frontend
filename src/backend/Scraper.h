@@ -150,6 +150,14 @@ private:
     /// after the first source: IGDB for what's missing, then SteamGridDB's art
     void fillMore();
 
+    // miximages made here (as ES-DE), after the downloads; the offline
+    // generator makes only these, from the art the games have
+    bool m_mix_done = false;
+    QString m_mix_error;
+    bool offline() const;
+    bool wantsMiximage() const;
+    void makeMiximage();
+
     // the game being scraped
     QVariantMap m_changes;
     std::vector<Media> m_media;

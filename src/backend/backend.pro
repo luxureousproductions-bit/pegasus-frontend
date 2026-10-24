@@ -21,6 +21,7 @@ SOURCES += \
     Paths.cpp \
     AppSettings.cpp \
     Log.cpp \
+    Miximage.cpp \
     Scraper.cpp \
 
 HEADERS += \
@@ -33,6 +34,7 @@ HEADERS += \
     Paths.h \
     AppSettings.h \
     Log.h \
+    Miximage.h \
     Scraper.h \
     ScraperKeys.h \
 
