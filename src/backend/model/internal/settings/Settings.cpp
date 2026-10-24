@@ -56,6 +56,7 @@
 #include <QFile>
 #include <QRegularExpression>
 #include <QDir>
+#include <QDirIterator>
 #include <QThreadPool>
 #include <QtConcurrent/QtConcurrent>
 #include <QFileInfo>
@@ -1488,6 +1489,55 @@ void Settings::reloadLibrary()
 {
     Log::info(LOGMSG("Reloading the library..."));
     emit libraryReloadRequested();
+}
+
+QVariantMap Settings::themeSystemArt(const QString& collection_name, const QString& short_name) const
+{
+    QString dir = m_themes.currentQmlDir();
+    if (dir.isEmpty() || dir.startsWith(QLatin1Char(':')) || dir.startsWith(QLatin1String("qrc")))
+        return {};
+
+    // every picture of the theme, by lower-case name (read once per theme)
+    static QString cached_dir;
+    static QHash<QString, QStringList> pictures;
+    if (cached_dir != dir) {
+        cached_dir = dir;
+        pictures.clear();
+        static const QStringList exts { QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("jpeg"),
+                                        QStringLiteral("webp"), QStringLiteral("svg"), QStringLiteral("gif") };
+        QDirIterator it(dir, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            it.next();
+            const QFileInfo fi = it.fileInfo();
+            if (exts.contains(fi.suffix().toLower()))
+                pictures[fi.completeBaseName().toLower()].append(fi.absoluteFilePath());
+        }
+    }
+
+    QString normalized;
+    for (const QChar c : collection_name.toLower()) {
+        if (c.isLetterOrNumber())
+            normalized += c;
+    }
+    QString logo;
+    QString background;
+    for (const QString& key : { short_name.toLower(), normalized }) {
+        if (key.isEmpty())
+            continue;
+        for (const QString& path : pictures.value(key)) {
+            const QString in = path.mid(dir.length()).toLower();
+            if (logo.isEmpty() && in.contains(QLatin1String("logo")))
+                logo = path;
+            else if (background.isEmpty() && (in.contains(QLatin1String("background")) || in.contains(QLatin1String("fanart"))))
+                background = path;
+        }
+        if (!logo.isEmpty() && !background.isEmpty())
+            break;
+    }
+    return QVariantMap {
+        { QStringLiteral("logo"), logo },
+        { QStringLiteral("background"), background },
+    };
 }
 
 void Settings::reloadAllGames()

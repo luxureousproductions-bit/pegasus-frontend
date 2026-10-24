@@ -717,6 +717,8 @@ FocusScope {
         savedTitles = {};
         savedColl = {};
         collDetails = Internal.settings.collectionDetails(entry.name);
+        themeArt = Internal.settings.themeSystemArt(entry.name, collDetails.shortname || entry.obj.shortName || "");
+        coll2ThemeArt = second ? Internal.settings.themeSystemArt(second.name, coll2Details.shortname || second.shortName || "") : ({});
         choices = Internal.settings.emulatorChoices(entry.name, collDetails.shortname || "", collDetails.romRoot || "");
         choicesFor = entry.name;
         var cmds = Internal.settings.gameEmulators(entry.name);
@@ -1145,7 +1147,7 @@ FocusScope {
                     var ca = root.collectionArt[i];
                     var caValue = root.current(ca[0]);
                     out.push({ "kind": "art", "text": ca[1], "key": ca[0], "icon": false,
-                               "value": caValue === "" ? qsTr("the theme's own") + api.tr : root.fileName(caValue),
+                               "value": caValue === "" ? root.themeArtText(ca[0]) : root.fileName(caValue),
                                "muted": caValue === "", "edited": ca[0] in root.edits, "done": ca[0] in root.saved });
                 }
                 if (root.coll2Name !== "") {
@@ -1164,7 +1166,7 @@ FocusScope {
                         var a2 = root.current(key2);
                         out.push({ "kind": "art", "text": qsTr("Tile %1").arg(root.collectionArt[i][1].toLowerCase()) + api.tr,
                                    "key": key2, "icon": false,
-                                   "value": a2 === "" ? qsTr("the theme's own") + api.tr : root.fileName(a2),
+                                   "value": a2 === "" ? root.themeArtText(key2) : root.fileName(a2),
                                    "muted": a2 === "", "edited": key2 in root.edits, "done": key2 in root.saved });
                     }
                 }
@@ -1521,11 +1523,32 @@ FocusScope {
         return (list && list.length > 0) ? String(list[0]) : "";
     }
     // what the panel shows for a row: { file, title, edited }
+    // the theme's own system art (Settings.themeSystemArt): Android Games'
+    // when the key starts with p2
+    property var themeArt: ({})
+    property var coll2ThemeArt: ({})
+    function themeArtFor(key) {
+        var k = String(key);
+        var art = k.indexOf(p2) === 0 ? coll2ThemeArt : themeArt;
+        return (k.indexOf("background") >= 0 ? art.background : art.logo) || "";
+    }
+    function themeArtText(key) {
+        var f = themeArtFor(key);
+        return f !== "" ? qsTr("the theme's own · %1").arg(fileName(f)) + api.tr : qsTr("the theme's own (none found)") + api.tr;
+    }
     function previewFor(row) {
         if (!row)
             return {};
-        if (row.kind === "art")
-            return { "file": String(current(row.key) || ""), "title": row.text, "edited": !!row.edited, "own": true };
+        if (row.kind === "art") {
+            var own = String(current(row.key) || "");
+            // a system tile without art of its own: the theme's own
+            if (own === "" && String(row.key).indexOf("cart:") >= 0) {
+                var themeFile = themeArtFor(row.key);
+                if (themeFile !== "")
+                    return { "file": themeFile, "title": row.text + qsTr(" · the theme's own") + api.tr };
+            }
+            return { "file": own, "title": row.text, "edited": !!row.edited, "own": true };
+        }
         if (page === "game") {
             var bases = ["art:box2d", "art:box3d", "art:screenshot", "art:titlescreen", "art:fanart", "art:miximage", "art:logo"];
             for (var b = 0; b < bases.length; b++) {
@@ -1545,6 +1568,8 @@ FocusScope {
                          "title": row.game.title };
             }
             var tile = String(current("cart:background") || current("cart:logo") || "");
+            if (tile === "")
+                tile = themeArt.background || themeArt.logo || "";
             return { "file": tile, "title": qsTr("System tile") + api.tr };
         }
         return {};

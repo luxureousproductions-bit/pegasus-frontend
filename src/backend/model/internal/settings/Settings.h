@@ -236,6 +236,10 @@ public:
     /// Settings' "Reload all games": scans again and lands on the theme
     /// (reloadAllRequested, then the scan), the menu closed
     Q_INVOKABLE void reloadAllGames();
+    /// The current theme's own art for a system, found by the collection's
+    /// short name (or name) in the theme's folder: { logo, background } paths
+    /// (empty when the theme has none, or isn't a folder on disk)
+    Q_INVOKABLE QVariantMap themeSystemArt(const QString& collection_name, const QString& short_name) const;
     /// Where the emulator list comes from, eg. "Downloaded Oct 20, 2026"
     Q_INVOKABLE QString emulatorListInfo() const;
 
