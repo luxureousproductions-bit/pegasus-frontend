@@ -363,10 +363,18 @@ QObject* Settings::themeStore()
         m_theme_store->setCurrentDirGetter([this]{ return m_themes.currentQmlDir(); });
         // a theme added, updated or removed: Pegasus' list read again; the
         // one in use updated: built again
-        connect(m_theme_store, &ThemeStore::themesChanged, this, [this](const QString& dir){
-            const bool current = QDir(dir).absolutePath() == QDir(m_themes.currentQmlDir()).absolutePath();
+        connect(m_theme_store, &ThemeStore::themesChanged, this, [this](const QString& dir, const QString& old_dir){
+            const QString now = QDir(m_themes.currentQmlDir()).absolutePath();
+            const bool current = QDir(dir).absolutePath() == now;
+            // the theme in use was updated into a folder of a new name: it follows
+            const bool moved = !old_dir.isEmpty() && QDir(old_dir).absolutePath() == now;
             m_themes.rescan();
-            if (current)
+            if (moved) {
+                const int index = m_themes.indexOfDir(dir);
+                if (index >= 0)
+                    m_themes.setCurrentIndex(index);
+            }
+            if (current || moved)
                 emit currentThemeUpdated();
         });
     }

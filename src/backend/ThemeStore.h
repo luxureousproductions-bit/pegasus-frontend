@@ -73,7 +73,8 @@ signals:
     void installProgress(QString id, qint64 received, qint64 total, QString stage);
     void installFinished(QString id, bool ok, QString message, QString dir);
     /// a theme was added, updated or removed: Pegasus' theme list is read again
-    void themesChanged(QString dir);
+    /// `dir` added, updated or removed; `old_dir`: where it was before, when an update moved it
+    void themesChanged(QString dir, QString old_dir);
 
 private:
     struct Entry {
@@ -119,6 +120,7 @@ private:
     void get(const QString& url, std::function<void(int status, const QByteArray& body)> done);
     void fetchInfo(size_t index, std::function<void()> done);
     void fetchSha(size_t index, std::function<void()> done);
+    void download(size_t index, const QString& id, const QString& folder);
     void finishRefresh();
-    void unpack(const QString& id, const QString& zip_path, const QString& sha);
+    void unpack(const QString& id, const QString& zip_path, const QString& sha, const QString& folder);
 };

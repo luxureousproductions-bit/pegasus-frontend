@@ -407,20 +407,32 @@ QHash<QString, ThemeStore::Installed> ThemeStore::installed() const
         }
     }
     // installed by hand: the folder named like the repository, else the
-    // theme's name (and author, when both have one)
-    for (const Entry& e : m_entries) {
+    // theme's name (and author, when both have one); each folder counts once.
+    // Entries with a branch first, so the default one doesn't take their folder
+    QSet<QString> used;
+    std::vector<const Entry*> order;
+    for (const Entry& e : m_entries)
+        if (!e.branch.isEmpty()) order.push_back(&e);
+    for (const Entry& e : m_entries)
+        if (e.branch.isEmpty()) order.push_back(&e);
+    for (const Entry* const ep : order) {
+        const Entry& e = *ep;
         if (out.contains(e.id()))
             continue;
+        // a branch is its own theme: only the folder named for it
+        // (XboxOSv2-refresh); the default branch: the plain one or -main/-master
         const Found* match = nullptr;
+        const QString wanted = e.branch.isEmpty() ? plain_name(e.repo) : plain_name(e.repo + QLatin1Char('-') + e.branch);
         for (const Found& f : by_hand) {
-            if (plain_name(f.folder) == plain_name(e.repo)) {
+            if (!used.contains(f.info.dir) && plain_name(f.folder) == wanted) {
                 match = &f;
                 break;
             }
         }
-        if (!match && !e.name.isEmpty()) {
+        // by name and author: the same for every branch, so only for the default one
+        if (!match && !e.name.isEmpty() && e.branch.isEmpty()) {
             for (const Found& f : by_hand) {
-                if (plain_name(f.name) != plain_name(e.name) || f.name.isEmpty())
+                if (used.contains(f.info.dir) || plain_name(f.name) != plain_name(e.name) || f.name.isEmpty())
                     continue;
                 const bool authors_known = !f.author.isEmpty() && !e.author.isEmpty();
                 if (!authors_known || plain_name(f.author) == plain_name(e.author)) {
@@ -429,8 +441,10 @@ QHash<QString, ThemeStore::Installed> ThemeStore::installed() const
                 }
             }
         }
-        if (match)
+        if (match) {
             out.insert(e.id(), match->info);
+            used.insert(match->info.dir);
+        }
     }
     return out;
 }
@@ -706,7 +720,7 @@ QString ThemeStore::remove(const QString& id)
         return tr("It's the theme in use: pick another theme first.");
     if (!QDir(inst.dir).removeRecursively())
         return tr("Couldn't remove `%1`.").arg(inst.dir);
-    emit themesChanged(inst.dir);
+    emit themesChanged(inst.dir, QString());
     emit listChanged();
     return {};
 }
@@ -728,8 +742,36 @@ void ThemeStore::install(const QString& id)
     emit installingChanged();
     emit installProgress(id, 0, 0, QStringLiteral("download"));
 
+    // the folder it goes in: named like GitHub's zip of it, <repo>-<branch>,
+    // so two branches of one theme (XboxOSv2-main, XboxOSv2-refresh) are two
+    // themes side by side; no branch given: the repository's default one
+    const auto with_folder = [this, index, id](const QString& default_branch){
+        if (m_installing != id || index >= m_entries.size())
+            return;
+        const Entry& entry = m_entries[index];
+        const QString branch = !entry.branch.isEmpty() ? entry.branch : default_branch;
+        QString folder = branch.isEmpty() ? entry.repo : entry.repo + QLatin1Char('-') + branch;
+        folder.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.-]")), QStringLiteral("_"));
+        download(index, id, folder);
+    };
+    if (!m_entries[index].branch.isEmpty()) {
+        with_folder(QString());
+        return;
+    }
+    const Entry& e = m_entries[index];
+    get(QStringLiteral("https://api.github.com/repos/%1/%2").arg(e.owner, e.repo),
+        [with_folder](int status, const QByteArray& body){
+            const QString branch = status == 200
+                ? QJsonDocument::fromJson(body).object().value(QStringLiteral("default_branch")).toString()
+                : QString();
+            with_folder(branch.isEmpty() ? QStringLiteral("main") : branch);
+        });
+}
+
+void ThemeStore::download(size_t index, const QString& id, const QString& folder)
+{
     // the newest commit first (to know about updates later), then the zip
-    fetchSha(index, [this, index, id]{
+    fetchSha(index, [this, index, id, folder]{
         if (m_installing != id || index >= m_entries.size())
             return;
         const Entry e = m_entries[index];
@@ -761,7 +803,7 @@ void ThemeStore::install(const QString& id)
             emit installProgress(id, received, total, QStringLiteral("download"));
         });
         const QString sha = e.sha;
-        connect(reply, &QNetworkReply::finished, this, [this, reply, id, zip_path, sha]{
+        connect(reply, &QNetworkReply::finished, this, [this, reply, id, zip_path, sha, folder]{
             const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             const bool aborted = reply->error() == QNetworkReply::OperationCanceledError;
             if (m_zip) {
@@ -778,7 +820,7 @@ void ThemeStore::install(const QString& id)
                     : status == 0 ? tr("No connection.") : tr("GitHub answered %1.").arg(status), QString());
                 return;
             }
-            unpack(id, zip_path, sha);
+            unpack(id, zip_path, sha, folder);
         });
     });
 }
@@ -789,16 +831,10 @@ void ThemeStore::cancelInstall()
         m_download->abort();
 }
 
-void ThemeStore::unpack(const QString& id, const QString& zip_path, const QString& sha)
+void ThemeStore::unpack(const QString& id, const QString& zip_path, const QString& sha, const QString& folder)
 {
     emit installProgress(id, 0, 0, QStringLiteral("unpack"));
     const Installed before = installed().value(id);
-    QString folder;
-    for (const Entry& e : m_entries) {
-        if (e.id() == id)
-            folder = e.repo;
-    }
-    folder.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.-]")), QStringLiteral("_"));
     const QJsonObject marker {
         { QStringLiteral("id"), id },
         { QStringLiteral("sha"), sha },
@@ -807,7 +843,7 @@ void ThemeStore::unpack(const QString& id, const QString& zip_path, const QStrin
     const QString themes = themesDir();
     const QString old_dir = before.dir;
     auto* const watcher = new QFutureWatcher<UnpackResult>(this);
-    connect(watcher, &QFutureWatcher<UnpackResult>::finished, this, [this, watcher, id, zip_path]{
+    connect(watcher, &QFutureWatcher<UnpackResult>::finished, this, [this, watcher, id, zip_path, old_dir]{
         const UnpackResult result = watcher->result();
         watcher->deleteLater();
         QFile::remove(zip_path);
@@ -815,7 +851,8 @@ void ThemeStore::unpack(const QString& id, const QString& zip_path, const QStrin
         emit installingChanged();
         if (result.ok) {
             Log::info(LOG_TAG, LOGMSG("Installed `%1` into `%2`").arg(id, result.dir));
-            emit themesChanged(result.dir);
+            const bool moved = !old_dir.isEmpty() && QDir(old_dir).absolutePath() != QDir(result.dir).absolutePath();
+            emit themesChanged(result.dir, moved ? old_dir : QString());
             emit listChanged();
         }
         emit installFinished(id, result.ok, result.message, result.dir);
