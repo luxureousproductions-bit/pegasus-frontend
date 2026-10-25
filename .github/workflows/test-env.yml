@@ -26,10 +26,13 @@ jobs:
           sudo apt-get install -y -qq qtbase5-dev qtbase5-private-dev qtdeclarative5-dev \
             qtmultimedia5-dev libqt5svg5-dev libqt5gamepad5-dev qttools5-dev-tools \
             qml-module-qtquick2 qml-module-qtquick-layouts qml-module-qtquick-window2 \
-            qml-module-qtquick-particles2 qml-module-qtquick-shapes qml-module-qtquick-timeline \
-            qml-module-qtgraphicaleffects qml-module-qtmultimedia qml-module-qtqml-models2 \
-            qml-module-qt-labs-qmlmodels libqt5multimedia5-plugins \
             xvfb xdotool imagemagick fonts-dejavu-core
+          # the theme's QML modules, each on its own (names differ between releases)
+          for p in qml-module-qtquick-particles2 qml-module-qtquick-shapes qml-module-qtquick-timeline \
+                   qml-module-qtgraphicaleffects qml-module-qtmultimedia qml-module-qtqml-models2 \
+                   qml-module-qt-labs-qmlmodels libqt5multimedia5-plugins qml-module-qtquick-controls2; do
+            sudo apt-get install -y -qq "$p" >/dev/null 2>&1 || echo "::warning::no package $p"
+          done
       - name: Build
         run: |
           set -o pipefail

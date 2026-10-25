@@ -1,5 +1,10 @@
 name: Build - Android
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    # Pegasus X: the test environment's branches aren't built for Android
+    branches-ignore: [pegasusx-testenv, test-results]
+  pull_request:
+  workflow_dispatch:
 
 env:
   TOOLS_URL: https://github.com/mmatyas/pegasus-frontend/releases/download/alpha1
