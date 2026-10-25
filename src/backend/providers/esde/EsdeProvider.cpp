@@ -32,6 +32,7 @@
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "providers/skraper/SkraperAssetsProvider.h"
 #include "Paths.h"
+#include "PegasusAssets.h"
 #include "utils/CommandTokenizer.h"
 #include "utils/GameFileText.h"
 #include "utils/HashMap.h"
@@ -608,20 +609,31 @@ void find_media(const QString& wanted_media_dir, const QString& system_dir,
         return;
 
     HashMap<QString, QString> existing_dirs;  // lowercase -> actual folder name
-    for (const QString& name : QDir(system_media_dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot))
+    const QStringList subdir_names = QDir(system_media_dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QString& name : subdir_names)
         existing_dirs.emplace(name.toLower(), name);
+
+    // the games by their path in lower case: covers/game.png is for Game.iso too
+    HashMap<QString, model::Game*> games_lower;
+    for (const auto& pair : extless_path_to_game)
+        games_lower.emplace(pair.first.toLower(), pair.second);
 
     constexpr auto DIR_FILTERS = QDir::Files | QDir::Readable | QDir::NoDotAndDotDot;
     constexpr auto DIR_FLAGS = QDirIterator::Subdirectories | QDirIterator::FollowSymlinks;
 
     // TODO: C++17
+    // the kind folders spelled any way ("3D Boxes", "box3d"), each read once
+    QSet<QString> claimed;
     for (const auto& asset_entry : providers::skraper::asset_dirs()) {
-        for (const QString& dir_name_lower : asset_entry.second) {
-            const auto dir_it = existing_dirs.find(dir_name_lower);
-            if (dir_it == existing_dirs.cend())
+        for (const QString& wanted : asset_entry.second) {
+          const QString wanted_plain = pegasus_assets::plain_name(wanted);
+          for (const QString& folder : subdir_names) {
+            if (claimed.contains(folder)
+                    || !pegasus_assets::same_plain_name(pegasus_assets::plain_name(folder), wanted_plain))
                 continue;
+            claimed.insert(folder);
 
-            const QDir type_dir(system_media_dir % QLatin1Char('/') % dir_it->second);
+            const QDir type_dir(system_media_dir % QLatin1Char('/') % folder);
             QDirIterator file_it(type_dir.path(), DIR_FILTERS, DIR_FLAGS);
             while (file_it.hasNext()) {
                 file_it.next();
@@ -630,14 +642,15 @@ void find_media(const QString& wanted_media_dir, const QString& system_dir,
                 // the media tree mirrors the ROM folder, eg. covers/Multidisk/Game.png
                 const QString rel_dir = type_dir.relativeFilePath(finfo.absolutePath());
                 const QString game_key = QDir::cleanPath(system_dir % QLatin1Char('/') % rel_dir
-                                                         % QLatin1Char('/') % finfo.completeBaseName());
-                const auto game_it = extless_path_to_game.find(game_key);
-                if (game_it == extless_path_to_game.cend())
+                                                         % QLatin1Char('/') % finfo.completeBaseName()).toLower();
+                const auto game_it = games_lower.find(game_key);
+                if (game_it == games_lower.cend())
                     continue;
 
                 game_it->second->assetsMut().add_file(asset_entry.first, file_it.filePath());
                 found_assets++;
             }
+          }
         }
     }
 
@@ -658,9 +671,9 @@ void find_media(const QString& wanted_media_dir, const QString& system_dir,
 
             const QString rel_dir = type_dir.relativeFilePath(finfo.absolutePath());
             const QString game_key = QDir::cleanPath(system_dir % QLatin1Char('/') % rel_dir
-                                                     % QLatin1Char('/') % finfo.completeBaseName());
-            const auto game_it = extless_path_to_game.find(game_key);
-            if (game_it == extless_path_to_game.cend())
+                                                     % QLatin1Char('/') % finfo.completeBaseName()).toLower();
+            const auto game_it = games_lower.find(game_key);
+            if (game_it == games_lower.cend())
                 continue;
 
             QVariantMap& extra = game_it->second->extraMapMut();
@@ -1053,6 +1066,9 @@ Provider& EsdeProvider::run(SearchContext& sctx)
 
 namespace {
 const QString IMPORT_FILE_NAME = QStringLiteral("esde-import.metadata.pegasus.txt");
+// the import files' format: made again at start when older (2: every picture
+// of a kind, so 3D boxes are kept beside the covers)
+const QString IMPORT_FORMAT_LINE = QStringLiteral("# pegasusx-import-format: 2");
 
 // Pegasus X: imports are written into the Pegasus X folder, never into the
 // game folders: metadata/imports/<system>.metadata.pegasus.txt defines the
@@ -1422,7 +1438,19 @@ QString game_entry(const model::Game& game, const QStringList& files, const QDir
             continue;
         if (own && !own_lists[i].second->isEmpty())
             continue;
-        stream << "assets." << key << ": " << local_path(lists[i].second->first()) << '\n';
+        // every picture of the kind (a cover and a 3D box are both box_front),
+        // the first on the key's line, the others below it
+        QStringList files;
+        for (const QString& f : *lists[i].second) {
+            const QString path = local_path(f);
+            if (!path.isEmpty() && !path.startsWith(QLatin1String("image://")) && !files.contains(path))
+                files.append(path);
+        }
+        if (files.isEmpty())
+            continue;
+        stream << "assets." << key << ": " << files.first() << '\n';
+        for (int f = 1; f < files.size(); f++)
+            stream << "  " << files.at(f) << '\n';
     }
 
     // x- fields, eg. x-manual
@@ -1672,6 +1700,7 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
             QTextStream fill(&fill_text);
             const QString header = origin
                 % "# folder: " % QDir::cleanPath(folder) % '\n'
+                % IMPORT_FORMAT_LINE % '\n'
                 % "# Made again when run again (or when games are added to a ROM\n"
                   "# folder), keeping the emulators picked in Settings > Library.\n"
                   "# Your edits and scraped data are in metadata/overrides.\n\n"
@@ -1681,7 +1710,8 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
             if (!collection_launch.isEmpty())
                 stream << "launch: " << collection_launch << '\n';
             stream << '\n';
-            fill << "# folder: " << QDir::cleanPath(folder) << '\n'
+            fill << origin << "# folder: " << QDir::cleanPath(folder) << '\n'
+                 << IMPORT_FORMAT_LINE << '\n'
                  << "# ES-DE's data for games your own metadata files define: used on top\n"
                     "# of them as Settings > ES-DE import > Use says. Not read by Pegasus\n"
                     "# itself: Pegasus X applies it.\n\n"
@@ -1974,10 +2004,40 @@ int refresh_rom_folders()
             continue;
         // the newest of its list files (an older Pegasus X wrote into the folder)
         QDateTime listed;
-        for (const QString& file : import_files_of(dir))
+        bool old_format = false;
+        QString esde_dir;  // made from ES-DE: with that ES-DE's data again
+        for (const QString& file : import_files_of(dir)) {
             listed = qMax(listed, QFileInfo(file).lastModified());
-        if (!listed.isValid() || dir_info.lastModified() <= listed)
+            QFile f(file);
+            if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+                continue;
+            bool has_format = false;
+            for (int i = 0; i < 8 && !f.atEnd(); i++) {
+                const QString line = QString::fromUtf8(f.readLine()).trimmed();
+                has_format = has_format || line == IMPORT_FORMAT_LINE;
+                static const QRegularExpression rx_esde(QStringLiteral("^# Made by Pegasus X from ES-DE \\((.+)\\)\\.$"));
+                const auto m = rx_esde.match(line);
+                if (m.hasMatch())
+                    esde_dir = m.captured(1);
+            }
+            old_format = old_format || !has_format;
+        }
+        if (!listed.isValid() || (!old_format && dir_info.lastModified() <= listed))
             continue;
+        if (!esde_dir.isEmpty() && QFileInfo(esde_dir).isDir()) {
+            ImportSetup esde_setup = load_import_setup(esde_dir);
+            QString system = entry.second;
+            if (system.isEmpty() || !esde_setup.systems.count(system))
+                system = system_of_folder(esde_setup, dir_info.fileName());
+            if (system.isEmpty())
+                continue;
+            HashMap<QString, QStringList> only;
+            only[system] = QStringList { dir };
+            const QString origin = QStringLiteral("# Made by Pegasus X from ES-DE (%1).\n").arg(esde_setup.esde_dir);
+            if (!import_systems(esde_setup, QStringList { system }, only, {}, origin, {}).folders.isEmpty())
+                refreshed++;
+            continue;
+        }
         if (!setup)
             setup.reset(new ImportSetup(rom_folder_setup()));
         // the system: the one remembered, else by the folder's name

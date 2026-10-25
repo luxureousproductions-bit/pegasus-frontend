@@ -490,6 +490,11 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
                 m_self.startActivity(settings);
                 return "permission";
             }
+            // opened again once the new build is in (UpdateReceiver)
+            try {
+                new File(m_self.getFilesDir(), UpdateReceiver.MARKER).createNewFile();
+            }
+            catch (Exception ignored) {}
             final Uri uri = FileProvider.getUriForFile(m_self, m_self.getPackageName() + ".files", new File(path));
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, "application/vnd.android.package-archive");

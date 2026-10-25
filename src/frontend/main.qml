@@ -241,6 +241,22 @@ Window {
             firstRunSetup.source = "";
         }
     }
+    // Pegasus X: a newer build found at start: Update now / Later
+    Loader {
+        id: updatePrompt
+        anchors.fill: parent
+        enabled: focus
+        visible: focus && status === Loader.Ready
+        onLoaded: item.focus = true
+        onFocusChanged: if (item && focus) item.focus = true
+    }
+    Connections {
+        target: updatePrompt.item
+        function onClose() {
+            content.focus = true;
+            updatePrompt.source = "";
+        }
+    }
 
 
     Connections {
@@ -337,11 +353,9 @@ Window {
                 if (!updateCheck.running && Internal.settings.checkUpdatesOnStart && u.state === "available"
                         && !splashScreen.updateNoteShown && !mainMenu.focus) {
                     splashScreen.updateNoteShown = true;
-                    genericMessage.setSource("dialogs/GenericOkDialog.qml", {
-                        "title": qsTr("Pegasus X update") + api.tr,
-                        "message": qsTr("Build %1 is out (this is build %2). Settings > Check for updates installs it.")
-                            .arg(u.info.latest).arg(u.info.current) + api.tr });
-                    genericMessage.focus = true;
+                    // Update now / Later
+                    updatePrompt.setSource("menu/settings/UpdatePrompt.qml");
+                    updatePrompt.focus = true;
                 }
             }
         }

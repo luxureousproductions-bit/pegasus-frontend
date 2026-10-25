@@ -261,43 +261,92 @@ void hide_from_gallery(const QString& dir)
 }
 } // namespace
 
+namespace {
+// a picked data folder -> where the art goes: its downloaded_media (ES-DE's
+// layout), or the folder itself when it is a downloaded_media folder
+QString art_dir_of(const QString& picked)
+{
+    const QString clean = QDir::cleanPath(picked);
+    if (QFileInfo(clean).fileName().compare(QLatin1String("downloaded_media"), Qt::CaseInsensitive) == 0)
+        return clean;
+    return clean + QStringLiteral("/downloaded_media");
+}
+
+// a folder of art for one system: it has kind folders in it
+bool is_system_art_dir(const QString& dir)
+{
+    static const QStringList kinds {
+        QStringLiteral("covers"), QStringLiteral("3dboxes"), QStringLiteral("backcovers"), QStringLiteral("fanart"),
+        QStringLiteral("screenshots"), QStringLiteral("titlescreens"), QStringLiteral("marquees"),
+        QStringLiteral("miximages"), QStringLiteral("physicalmedia"), QStringLiteral("videos"), QStringLiteral("manuals"),
+    };
+    for (const QString& sub : QDir(dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        if (kinds.contains(sub.toLower()))
+            return true;
+    }
+    return false;
+}
+
+// everything of `from` into `to` (what's there already is kept)
+bool move_tree(const QString& from, const QString& to)
+{
+    if (!QFileInfo::exists(to))
+        return QDir().mkpath(QFileInfo(to).absolutePath()) && QDir().rename(from, to);
+    QDirIterator it(from, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString path = it.next();
+        const QString target = to + path.mid(from.length());
+        QDir().mkpath(QFileInfo(target).absolutePath());
+        if (!QFileInfo::exists(target))
+            QFile::rename(path, target);
+    }
+    QDir(from).removeRecursively();
+    return true;
+}
+} // namespace
+
 void Settings::move_media_folder()
 {
+    // scraped art kept by older builds outside downloaded_media: the Pegasus
+    // X folder's media/, or <data folder>/<system>/<kind>
     const QString root = QDir::cleanPath(paths::writableConfigDir());
-    const QString old_dir = root + QStringLiteral("/media");
-    const QString new_dir = root + QStringLiteral("/downloaded_media");
     QSettings ini(pegasusx_settings_path(), QSettings::IniFormat);
     const QString saved = QDir::cleanPath(ini.value(QStringLiteral("data/dir")).toString());
-    // a folder picked by hand stays where it is
-    if (!saved.isEmpty() && saved != QLatin1String(".") && saved != old_dir)
-        return;
-    if (!QFileInfo(old_dir).isDir())
-        return;
-    if (saved == old_dir)
+    const bool picked = !saved.isEmpty() && saved != QLatin1String(".") && saved != root + QStringLiteral("/media");
+    if (!picked && !saved.isEmpty())
         ini.remove(QStringLiteral("data/dir"));
-    if (QFileInfo::exists(new_dir)) {
-        // both: what's only in the old one goes over, file by file
-        QDirIterator it(old_dir, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
-        while (it.hasNext()) {
-            const QString path = it.next();
-            const QString target = new_dir + path.mid(old_dir.length());
-            QDir().mkpath(QFileInfo(target).absolutePath());
-            if (!QFileInfo::exists(target))
-                QFile::rename(path, target);
-        }
+    const QString base = picked ? saved : root;
+    const QString art = art_dir_of(base);
+    if (art == base)
+        return;  // a downloaded_media folder was picked: nothing to move
+
+    std::vector<std::pair<QString, QString>> moves;  // from, to
+    if (!picked && QFileInfo(root + QStringLiteral("/media")).isDir())
+        moves.emplace_back(root + QStringLiteral("/media"), art);
+    for (const QFileInfo& finfo : QDir(base).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        const QString name = finfo.fileName().toLower();
+        if (name == QLatin1String("downloaded_media") || name == QLatin1String("media") || name == QLatin1String("themes")
+                || name == QLatin1String("metadata") || name == QLatin1String("metafiles"))
+            continue;
+        if (is_system_art_dir(finfo.absoluteFilePath()))
+            moves.emplace_back(finfo.absoluteFilePath(), art + QLatin1Char('/') + finfo.fileName());
     }
-    else if (!QDir().rename(old_dir, new_dir)) {
-        Log::warning(LOGMSG("Couldn't move `%1` to `%2`").arg(old_dir, new_dir));
+    if (moves.empty())
         return;
+    for (const auto& move : moves) {
+        if (!move_tree(move.first, move.second)) {
+            Log::warning(LOGMSG("Couldn't move `%1` to `%2`").arg(move.first, move.second));
+            continue;
+        }
+        // the metadata files Pegasus X wrote point at the new place
+        for (const QString& sub : { QStringLiteral("/metadata/overrides"), QStringLiteral("/metadata/imports"),
+                                    QStringLiteral("/metadata/imports-fill"), QStringLiteral("/metafiles") }) {
+            for (const QFileInfo& finfo : QDir(root + sub).entryInfoList({ QStringLiteral("*.metadata.pegasus.txt") }, QDir::Files))
+                rewrite_paths_in(finfo.absoluteFilePath(), move.first, move.second);
+        }
+        Log::info(LOGMSG("Scraped art moved from `%1` to `%2`").arg(move.first, move.second));
     }
-    // the metadata files Pegasus X wrote point at the new place
-    for (const QString& sub : { QStringLiteral("/metadata/overrides"), QStringLiteral("/metadata/imports"),
-                                QStringLiteral("/metadata/imports-fill"), QStringLiteral("/metafiles") }) {
-        for (const QFileInfo& finfo : QDir(root + sub).entryInfoList({ QStringLiteral("*.metadata.pegasus.txt") }, QDir::Files))
-            rewrite_paths_in(finfo.absoluteFilePath(), old_dir, new_dir);
-    }
-    hide_from_gallery(new_dir);
-    Log::info(LOGMSG("Scraped art moved from `%1` to `%2`").arg(old_dir, new_dir));
+    hide_from_gallery(art);
 }
 
 QVariantMap Settings::rootDirContents() const
@@ -1538,7 +1587,7 @@ QVariantMap scraper_defaults()
         { QStringLiteral("imageMaxSize"), QStringLiteral("2560") },
         { QStringLiteral("trimBorders"), QStringLiteral("off") },
         // fan art kept 16:9 (as ScreenScraper's): banners onto a blurred background
-        { QStringLiteral("fanartShape"), QStringLiteral("16:9") },
+        { QStringLiteral("fanartFit"), QStringLiteral("original") },
     };
 }
 
@@ -1779,7 +1828,7 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
         { "assets.cartridge", &assets.cartridgeList() }, { "assets.screenshot", &assets.screenshotList() },
         { "assets.titlescreen", &assets.titlescreenList() }, { "assets.background", &assets.backgroundList() },
         { "assets.logo", &assets.logoList() }, { "assets.video", &assets.videoList() },
-        { "assets.steam", &assets.steamList() },
+        { "assets.steam", &assets.steamList() }, { "assets.banner", &assets.bannerList() },
     };
     for (const auto& entry : slot_lists) {
         QStringList files_now;
@@ -2006,9 +2055,9 @@ QString Settings::dataDir() const
 {
     const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
     const QString saved = file.value(QStringLiteral("data/dir")).toString();
-    // nothing picked: the Pegasus X folder's downloaded_media/<system>/<kind>,
-    // laid out like ES-DE's
-    return saved.isEmpty() ? paths::writableConfigDir() + QStringLiteral("/downloaded_media") : saved;
+    // always <folder>/downloaded_media/<system>/<kind>, laid out like ES-DE's:
+    // in the Pegasus X folder, or in the folder picked
+    return art_dir_of(saved.isEmpty() ? paths::writableConfigDir() : saved);
 }
 
 void Settings::setDataDir(const QString& dir)
@@ -2016,6 +2065,8 @@ void Settings::setDataDir(const QString& dir)
     QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
     file.setValue(QStringLiteral("data/dir"), dir);
     emit dataDirChanged();
+    // art of the old layout in it: into its downloaded_media
+    move_media_folder();
 }
 
 QString Settings::lastBrowseFolder() const

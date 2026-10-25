@@ -415,9 +415,9 @@ FocusScope {
                 { "v": "640", "t": qsTr("640×480 (smallest files)") + api.tr },
                 { "v": "original", "t": qsTr("Original (as downloaded)") + api.tr },
             ] });
-            out.push({ "kind": "choice", "key": "fanartShape", "text": qsTr("Fan art shape") + api.tr, "choices": [
-                { "v": "16:9", "t": qsTr("16:9 (banners set on a blurred background)") + api.tr },
-                { "v": "original", "t": qsTr("As downloaded") + api.tr },
+            out.push({ "kind": "choice", "key": "fanartFit", "text": qsTr("Fan art shape") + api.tr, "choices": [
+                { "v": "original", "t": qsTr("As downloaded (full-screen pictures only)") + api.tr },
+                { "v": "16:9", "t": qsTr("Cropped to 16:9") + api.tr },
             ] });
             out.push({ "kind": "choice", "key": "trimBorders", "text": qsTr("Trim empty borders") + api.tr, "choices": [
                 { "v": "off", "t": qsTr("Off") + api.tr },
@@ -862,7 +862,7 @@ FocusScope {
                 onClicked: list.focus = true
             }
         }
-        // as Pegasus' own option lists: a light box on the right
+        // as Pegasus' own option lists, a box on the right (dark and square)
         Rectangle {
             id: pickerBox
             width: Math.max(vpx(320), pickerWidest.width + vpx(80))
@@ -870,7 +870,9 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             anchors.right: parent.right
             anchors.rightMargin: parent.height * 0.04
-            color: "#eee"
+            color: "#333"
+            border.color: "#555"
+            border.width: vpx(1)
             MouseArea { anchors.fill: parent }
             Text {
                 id: pickerWidest
@@ -900,13 +902,13 @@ FocusScope {
                 delegate: Rectangle {
                     width: ListView.view.width
                     height: vpx(48)
-                    color: ListView.isCurrentItem || pickMouse.containsMouse ? "#dedede" : "#eee"
+                    color: ListView.isCurrentItem || pickMouse.containsMouse ? "#4ae" : "transparent"
                     Text {
                         anchors.right: parent.right
                         anchors.rightMargin: vpx(24)
                         anchors.verticalCenter: parent.verticalCenter
                         text: modelData.t + (picker.row && root.s[picker.row.key] === modelData.v ? "   ✓" : "")
-                        color: "#444"
+                        color: "#eee"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(20)
                     }

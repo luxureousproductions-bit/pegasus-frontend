@@ -73,33 +73,39 @@ FocusScope {
             Internal.settings.lastBrowseFolder = folderModel.folder;
     }
 
-    // Pegasus X: quick jumps, in a row above the list (d-pad up from the
-    // top of the list, or Y): the drives (RB), one folder up (B), the last
-    // folder (LB), a suggested one, the ES-DE folder and Pegasus X's data folder
-    property string dataFolder: Internal.settings.dataDir
+    // Pegasus X: quick jumps, pinned in a row above the list (d-pad up from
+    // the top of the list, or Y): the Pegasus X folder, ES-DE's folder, the
+    // drives, the ROM folders (game directories), the last folder, and the
+    // suggested one when the screen gives one. The buttons for them are in
+    // the help line at the bottom
+    property string dataFolder: Internal.settings.dataDir   // kept for the screens that set it
     readonly property var shortcuts: {
         var out = [];
-        // pinned first: Pegasus X's data folder, ES-DE's folder, the drives
-        if (dataFolder !== "")
-            out.push({ "t": qsTr("Pegasus X") + api.tr, "act": "go", "path": dataFolder });
+        if (Internal.settings.rootDir !== "")
+            out.push({ "t": qsTr("Pegasus X") + api.tr, "act": "go", "path": Internal.settings.rootDir });
         if (Internal.settings.esdeImportDir !== "")
             out.push({ "t": qsTr("ES-DE") + api.tr, "act": "go", "path": Internal.settings.esdeImportDir });
-        out.push({ "t": qsTr("Drives  RB") + api.tr, "act": "drives" });
-        if (pickFolders) {
-            out.push({ "t": qsTr("Use this folder") + api.tr, "act": "use" });
-            out.push({ "t": qsTr("New folder...") + api.tr, "act": "new" });
+        out.push({ "t": qsTr("Drives") + api.tr, "act": "drives" });
+        // the ROM folders (not Pegasus X's own imports folder)
+        var dirs = Internal.settings.gameDirs;
+        for (var d = 0; d < dirs.length; d++) {
+            var dir = String(dirs[d]);
+            if (dir.indexOf("/metadata/imports") >= 0)
+                continue;
+            var dirName = dir.replace(/\/+$/, "");
+            dirName = dirName.substring(dirName.lastIndexOf("/") + 1) || dirName;
+            out.push({ "t": dirName, "act": "go", "path": dir, "rom": true });
         }
-        out.push({ "t": qsTr("Up a folder  B") + api.tr, "act": "up" });
-        // the last 5 folders: the newest is LB's
-        var recent = Internal.settings.recentBrowseFolders;
-        for (var r = 0; r < recent.length; r++) {
-            var folderName = recent[r].substring(recent[r].lastIndexOf("/") + 1) || recent[r];
-            out.push({ "t": r === 0 ? qsTr("Last folder  LB") + api.tr : folderName, "act": "go", "path": recent[r] });
-        }
+        if (Internal.settings.lastBrowseFolder !== "")
+            out.push({ "t": qsTr("Last folder") + api.tr, "act": "go", "path": Internal.settings.lastBrowseFolder });
         if (startFolder !== "")
             out.push({ "t": qsTr("Suggested") + api.tr, "act": "go", "path": startFolder });
         return out;
     }
+    // picking a folder: the buttons at the bottom
+    readonly property var folderButtons: pickFolders
+        ? [ { "t": qsTr("Use this folder") + api.tr, "act": "use" }, { "t": qsTr("Create new folder...") + api.tr, "act": "new" } ]
+        : []
     function jump(entry) {
         if (entry.act === "use") {
             root.remember();
@@ -188,6 +194,7 @@ FocusScope {
             event.accepted = true;
             (jumpRow.activeFocus ? list : jumpRow).focus = true;
         }
+
     }
 
 
@@ -215,10 +222,10 @@ FocusScope {
 
 
     Rectangle {
+        id: frame
         height: parent.height * 0.9
-        width: height * 1.5
+        width: Math.min(height * 1.5, parent.width * 0.96)
         color: "#444"
-        radius: vpx(8)
 
         anchors.centerIn: parent
 
@@ -258,8 +265,7 @@ FocusScope {
 
                 Text {
                     id: pathText
-                    text: folderModel.folder + "   ·   " + (root.onDrives ? qsTr("A open · B close · LB last folder · Y quick jumps")
-                                                             : qsTr("A open · B up · X close · LB last folder · RB drives · Y quick jumps")) + api.tr
+                    text: root.onDrives ? qsTr("Drives") + api.tr : folderModel.folder
                     width: parent.width
 
                     color: "#bbb"
@@ -293,15 +299,12 @@ FocusScope {
                     readonly property bool highlighted: ListView.view.activeFocus && ListView.isCurrentItem
                     width: jumpText.implicitWidth + vpx(24)
                     height: ListView.view.height
-                    radius: vpx(4)
-                    color: highlighted ? "#3aa" : "#2b2b2b"
-                    border.color: "#3aa"
-                    border.width: highlighted ? 0 : vpx(1)
+                    color: highlighted ? "#4ae" : (modelData.rom ? "#2f3a3a" : "#2b2b2b")
                     Text {
                         id: jumpText
                         anchors.centerIn: parent
                         text: modelData.t
-                        color: parent.highlighted ? "#111" : "#9dd"
+                        color: parent.highlighted ? "#111" : "#ddd"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(16)
                     }
@@ -315,7 +318,8 @@ FocusScope {
                 width: parent.width
                 anchors.top: jumpRow.bottom
                 anchors.topMargin: vpx(8)
-                anchors.bottom: parent.bottom
+                anchors.bottom: buttonRow.visible ? buttonRow.top : helpLine.top
+                anchors.bottomMargin: vpx(8)
                 color: "#333"
 
                 ListView {
@@ -328,12 +332,19 @@ FocusScope {
 
                     model: folderModel
                     delegate: fileDelegate
-                    // up from the top row: the quick jumps
+                    // up from the top row: the quick jumps; down from the
+                    // last one: the buttons (picking a folder)
                     Keys.onUpPressed: {
                         if (currentIndex <= 0)
                             jumpRow.focus = true;
                         else
                             decrementCurrentIndex();
+                    }
+                    Keys.onDownPressed: {
+                        if (currentIndex >= count - 1 && root.pickFolders)
+                            buttonRow.focus = true;
+                        else
+                            incrementCurrentIndex();
                     }
 
                     focus: true
@@ -382,6 +393,75 @@ FocusScope {
                         horizontalAlignment: Text.AlignHCenter
                         padding: vpx(4)
                     }
+                }
+            }
+
+            // picking a folder: Use this folder / Create new folder, square
+            // buttons at the bottom as in Pegasus' dialogs
+            Row {
+                id: buttonRow
+                visible: root.pickFolders
+                anchors.bottom: helpLine.top
+                anchors.bottomMargin: vpx(8)
+                width: parent.width
+                height: vpx(18) * 2.4
+                property int current: 0
+                onActiveFocusChanged: if (activeFocus) current = 0
+                Keys.onLeftPressed: current = Math.max(0, current - 1)
+                Keys.onRightPressed: current = Math.min(root.folderButtons.length - 1, current + 1)
+                Keys.onUpPressed: list.focus = true
+                Keys.onPressed: {
+                    if (api.keys.isAccept(event) && !event.isAutoRepeat) {
+                        event.accepted = true;
+                        root.jump(root.folderButtons[current]);
+                    }
+                }
+                Repeater {
+                    model: root.folderButtons
+                    delegate: Rectangle {
+                        readonly property bool on: (buttonRow.activeFocus && index === buttonRow.current) || buttonMouse.containsMouse
+                        width: buttonRow.width / Math.max(1, root.folderButtons.length)
+                        height: buttonRow.height
+                        color: on ? "#4ae" : (index === 0 ? "#555" : "#666")
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData.t
+                            color: "#eee"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(18)
+                            font.bold: index === 0
+                        }
+                        MouseArea {
+                            id: buttonMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: root.jump(modelData)
+                        }
+                    }
+                }
+            }
+
+            // the buttons, as Pegasus' help line
+            Rectangle {
+                id: helpLine
+                anchors.bottom: parent.bottom
+                width: parent.width
+                height: helpText.height
+                color: "#222"
+                Text {
+                    id: helpText
+                    width: parent.width
+                    text: (root.onDrives
+                        ? qsTr("A  Open     B  Close     LB  Last folder     Y  Quick jumps")
+                        : qsTr("A  Open     B  Up     X  Close     LB  Last folder     RB  Drives     Y  Quick jumps"))
+                        + (root.pickFolders ? qsTr("     ▾  Use this folder / Create new") : "") + api.tr
+                    color: "#bbb"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(15)
+                    lineHeight: 2.2
+                    verticalAlignment: Text.AlignVCenter
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideRight
                 }
             }
         }

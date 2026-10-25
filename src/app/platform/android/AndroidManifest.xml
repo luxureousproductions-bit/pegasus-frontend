@@ -68,6 +68,15 @@
             <!-- meta-data android:name="android.app.splash_screen_sticky" android:value="true"/ -->
         </activity>
 
+        <!-- Pegasus X: opened again after an update it started itself -->
+        <receiver
+            android:name="org.pegasus_frontend.android.UpdateReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
         <provider
             android:name="org.pegasus_frontend.android.LaunchFileProvider"
             android:authorities="${applicationId}.files"

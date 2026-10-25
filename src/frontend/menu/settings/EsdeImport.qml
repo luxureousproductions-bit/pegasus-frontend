@@ -89,13 +89,32 @@ FocusScope {
 
     // Three pages, each one list so the controller just goes up and down:
     //   menu:   Import, Rescan, Delete
-    //   import: the ES-DE folder, the Android option, "all systems", each
-    //           system, then Import
+    //   import: Options... (a pop-up: the ES-DE folder, what to use, the
+    //           Android option), "all systems", each system; the Import
+    //           button at the bottom
     //   rescan: the systems imported already; A imports that one again
-    //   delete: the systems imported already; A twice deletes its import
+    //   delete: the systems imported already, ticked with A; the Delete
+    //           button at the bottom deletes the ticked ones' imports
     property string page: "menu"
     property bool mergeAndroid: Internal.settings.mergeAndroid
-    property string confirmDelete: ""   // the system waiting for a second A
+    property var deletePicked: ({})     // system name -> true
+    property bool onFooter: false       // the button under the list has the cursor
+    readonly property bool hasFooter: page === "import" || (page === "delete" && scanned.length > 0)
+    readonly property int deleteCount: {
+        var n = 0;
+        for (var j = 0; j < scanned.length; j++) {
+            if (deletePicked[scanned[j].name])
+                n++;
+        }
+        return n;
+    }
+    readonly property bool hasAndroidGames: {
+        for (var k = 0; k < systems.length; k++) {
+            if (systems[k].name === "androidgames")
+                return true;
+        }
+        return false;
+    }
     readonly property var scanned: {
         var out = [];
         for (var j = 0; j < systems.length; j++) {
@@ -120,23 +139,18 @@ FocusScope {
                 out.push({ "kind": page, "sys": scanned[r] });
             return out;
         }
-        out.push({ "kind": "folder" });
-        out.push({ "kind": "use" });
-        for (var k = 0; k < systems.length; k++) {
-            if (systems[k].name === "androidgames")
-                out.push({ "kind": "androidgames" });
-        }
+        out.push({ "kind": "options" });
         if (systems.length > 0)
             out.push({ "kind": "all" });
         for (var i = 0; i < systems.length; i++)
             out.push({ "kind": "system", "sys": systems[i] });
-        out.push({ "kind": "import" });
         return out;
     }
     function openPage(name) {
         page = name;
         message = "";
-        confirmDelete = "";
+        deletePicked = {};
+        onFooter = false;
         list.currentIndex = 0;
         list.positionViewAtBeginning();
     }
@@ -147,21 +161,79 @@ FocusScope {
         progressSystem = "";
         Internal.settings.startEsdeImport([sys.name]);
     }
-    function deleteImport(sys) {
-        if (confirmDelete !== sys.name) {
-            confirmDelete = sys.name;
-            message = qsTr("Press A again to delete the import of %1. Your ROMs, ES-DE's art and your own metadata files stay.").arg(sys.fullname) + api.tr;
+    function toggleDelete(name) {
+        var copy = Object.assign({}, deletePicked);
+        copy[name] = !copy[name];
+        deletePicked = copy;
+    }
+    // the Delete button: asks first
+    function askDelete() {
+        if (deleteCount === 0) {
+            message = qsTr("Tick the systems whose imports should go first.") + api.tr;
             return;
         }
-        confirmDelete = "";
-        var removed = Internal.settings.deleteEsdeImport(sys.folders);
+        deleteDialog.focus = true;
+    }
+    function deletePickedImports() {
+        var removed = 0;
+        var names = [];
+        for (var j = 0; j < scanned.length; j++) {
+            if (!deletePicked[scanned[j].name])
+                continue;
+            removed += Internal.settings.deleteEsdeImport(scanned[j].folders);
+            names.push(scanned[j].fullname);
+        }
         otherChange = otherChange || removed > 0;
         imported = imported || removed > 0;
-        message = removed > 0 ? qsTr("Deleted the import of %1.").arg(sys.fullname) + api.tr
-                              : qsTr("Nothing to delete for %1.").arg(sys.fullname) + api.tr;
-        var keep = list.currentIndex;
+        message = removed > 0 ? qsTr("Deleted the imports of %1.").arg(names.join(", ")) + api.tr
+                              : qsTr("Nothing to delete.") + api.tr;
+        deletePicked = {};
+        onFooter = false;
         reloadSystems();
-        keepIndex = keep;
+        keepIndex = 0;
+    }
+    function footerAction() {
+        if (page === "import")
+            runImport();
+        else if (page === "delete")
+            askDelete();
+    }
+    // the options pop-up's rows
+    readonly property var optionRows: {
+        var use = Internal.settings.esdeImportUse;
+        var out = [
+            { "key": "folder", "text": qsTr("ES-DE folder") + api.tr,
+              "value": Internal.settings.esdeImportDir !== "" ? Internal.settings.esdeImportDir : qsTr("not found, A to pick it") + api.tr },
+            { "key": "use", "text": qsTr("For games in your own metadata files, use") + api.tr,
+              "value": (use === "media" ? qsTr("art only") : use === "replace" ? qsTr("art and details, replacing yours")
+                       : qsTr("art, and details you don't have")) + api.tr },
+        ];
+        if (hasAndroidGames)
+            out.push({ "key": "android", "text": qsTr("Merge Android Games into Android") + api.tr,
+                       "value": mergeAndroid ? qsTr("Yes") + api.tr : qsTr("No") + api.tr });
+        return out;
+    }
+    function optionActivated(index, step) {
+        var key = optionRows[index].key;
+        if (key === "folder") {
+            filePicker.focus = true;
+        }
+        else if (key === "use") {
+            var order = ["media", "fill", "replace"];
+            var at = order.indexOf(Internal.settings.esdeImportUse);
+            Internal.settings.esdeImportUse = order[(at + step + order.length) % order.length];
+            otherChange = true;
+            imported = true;  // applied when the library is read again
+        }
+        else if (key === "android") {
+            if (!mergeTaken) {
+                mergeStart = root.mergeAndroid;
+                mergeTaken = true;
+            }
+            Internal.settings.mergeAndroid = !root.mergeAndroid;
+            // asks to reload on the way out, unless it's back as it was
+            imported = otherChange || Internal.settings.mergeAndroid !== mergeStart;
+        }
     }
 
     function toggle(name) {
@@ -222,35 +294,18 @@ FocusScope {
         if (index < 0 || index >= rows.length)
             return;
         var row = rows[index];
-        if (row.kind === "folder")
-            filePicker.focus = true;
-        else if (row.kind === "use") {
-            var use = Internal.settings.esdeImportUse;
-            Internal.settings.esdeImportUse = use === "media" ? "fill" : use === "fill" ? "replace" : "media";
-            otherChange = true;
-            imported = true;  // applied when the library is read again
-        }
-        else if (row.kind === "androidgames") {
-            if (!mergeTaken) {
-                mergeStart = root.mergeAndroid;
-                mergeTaken = true;
-            }
-            Internal.settings.mergeAndroid = !root.mergeAndroid;
-            // asks to reload on the way out, unless it's back as it was
-            imported = otherChange || Internal.settings.mergeAndroid !== mergeStart;
-        }
+        if (row.kind === "options")
+            optionsDialog.focus = true;
         else if (row.kind === "nav")
             openPage(row.to);
         else if (row.kind === "rescan")
             rescan(row.sys);
         else if (row.kind === "delete")
-            deleteImport(row.sys);
+            toggleDelete(row.sys.name);
         else if (row.kind === "all")
             toggleAll();
         else if (row.kind === "system")
             toggle(row.sys.name);
-        else if (row.kind === "import")
-            runImport();
     }
 
     function closeMaybe() {
@@ -310,9 +365,9 @@ FocusScope {
                 ? qsTr("Pick a system to import again from ES-DE: new games, details and art come in, "
                      + "and the emulators you picked are kept.") + api.tr
                 : root.page === "delete"
-                ? qsTr("Pick a system to delete its import. Your ROMs, ES-DE's art and your own metadata files stay.") + api.tr
-                : qsTr("Turns ES-DE's game details, art and manuals into Pegasus metadata files, "
-                     + "written into each system's ROM folder. Your own metadata files are not changed.") + api.tr
+                ? qsTr("Tick the systems whose imports should go, then Delete. Your ROMs, ES-DE's art and your own metadata files stay.") + api.tr
+                : qsTr("Turns ES-DE's game details, art and manuals into Pegasus metadata, kept in the Pegasus X folder. "
+                     + "Your own metadata files are not changed.") + api.tr
             color: "#eee"
             font.family: globalFonts.sans
             font.pixelSize: vpx(17)
@@ -329,12 +384,14 @@ FocusScope {
         }
 
         Rectangle {
+            id: listArea
             anchors.top: info.bottom
-            anchors.bottom: messageText.top
+            anchors.bottom: root.hasFooter ? footer.top : messageText.top
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: vpx(15)
             anchors.topMargin: 0
+            anchors.bottomMargin: root.hasFooter ? 0 : vpx(15)
             color: "#333"
 
             ListView {
@@ -350,11 +407,14 @@ FocusScope {
                 preferredHighlightEnd: height * 0.5 + vpx(18) * 1.25
                 highlightMoveDuration: 0
 
-                onCurrentIndexChanged: root.confirmDelete = ""
                 function selectable(i) {
                     return i >= 0 && i < root.rows.length && root.rows[i].kind !== "section";
                 }
                 Keys.onUpPressed: {
+                    if (root.onFooter) {
+                        root.onFooter = false;
+                        return;
+                    }
                     var i = currentIndex - 1;
                     while (i >= 0 && !selectable(i))
                         i--;
@@ -362,11 +422,15 @@ FocusScope {
                         currentIndex = i;
                 }
                 Keys.onDownPressed: {
+                    if (root.onFooter)
+                        return;
                     var i = currentIndex + 1;
                     while (i < count && !selectable(i))
                         i++;
                     if (i < count)
                         currentIndex = i;
+                    else if (root.hasFooter)
+                        root.onFooter = true;  // the button under the list
                 }
 
                 Keys.onPressed: {
@@ -376,7 +440,10 @@ FocusScope {
                     }
                     if (api.keys.isAccept(event) && !event.isAutoRepeat) {
                         event.accepted = true;
-                        root.activate(currentIndex);
+                        if (root.onFooter)
+                            root.footerAction();
+                        else
+                            root.activate(currentIndex);
                     }
                 }
 
@@ -384,22 +451,21 @@ FocusScope {
                     readonly property bool isSection: modelData.kind === "section"
                     readonly property bool isScanned: modelData.kind === "rescan" || modelData.kind === "delete"
                     readonly property bool highlighted: !isSection && ListView.view.activeFocus
-                                                        && (ListView.isCurrentItem || rowMouse.containsMouse)
+                                                        && ((ListView.isCurrentItem && !root.onFooter) || rowMouse.containsMouse)
                     readonly property bool isSystem: modelData.kind === "system"
                     readonly property bool checked: modelData.kind === "all" ? root.allPicked
-                                                  : modelData.kind === "androidgames" ? root.mergeAndroid
+                                                  : modelData.kind === "delete" ? !!root.deletePicked[modelData.sys.name]
                                                   : isSystem ? !!root.picked[modelData.sys.name] : false
 
                     width: ListView.view.width
                     height: isSection ? vpx(18) * 2 : vpx(18) * 2.6
                     color: isSection ? "transparent" : highlighted ? "#3aa"
-                         : modelData.kind === "import" ? "#555"
-                         : modelData.kind === "folder" ? "#3a3a3a" : "transparent"
+                         : modelData.kind === "options" ? "#3a3a3a" : "transparent"
 
                     // check box
                     Rectangle {
                         id: box
-                        visible: modelData.kind === "all" || modelData.kind === "androidgames" || parent.isSystem
+                        visible: modelData.kind === "all" || modelData.kind === "delete" || parent.isSystem
                         width: vpx(20)
                         height: width
                         color: parent.checked ? (parent.highlighted ? "#111" : "#3cc") : "transparent"
@@ -415,56 +481,42 @@ FocusScope {
                         id: mainLabel
                         text: {
                             switch (modelData.kind) {
-                                case "folder":
-                                    return Internal.settings.esdeImportDir !== ""
-                                        ? qsTr("ES-DE folder: %1").arg(Internal.settings.esdeImportDir) + api.tr
-                                        : qsTr("ES-DE folder not found, select to pick it") + api.tr;
+                                case "options": return qsTr("Import options...") + api.tr;
                                 case "all": return qsTr("All systems") + api.tr;
-                                case "use": return qsTr("For games in your own metadata files, use ES-DE's") + api.tr;
                                 case "section": return modelData.text;
                                 case "rescan":
                                 case "delete": return modelData.sys.fullname;
                                 case "nav": return modelData.text;
-                                case "androidgames": return qsTr("Merge Android Games into Android") + api.tr;
-                                case "import": return root.pickedCount > 0
-                                    ? qsTr("Import %1 systems").arg(root.pickedCount) + api.tr
-                                    : qsTr("Import") + api.tr;
                                 default: return modelData.sys.fullname;
                             }
                         }
                         color: parent.isSection ? "#bbb" : parent.highlighted ? "#111" : "#eee"
                         font.family: globalFonts.sans
                         font.pixelSize: parent.isSection ? vpx(17) : vpx(18)
-                        font.bold: modelData.kind === "import" || modelData.kind === "all"
+                        font.bold: modelData.kind === "all" || modelData.kind === "options"
 
                         anchors.left: box.visible ? box.right : parent.left
                         anchors.leftMargin: vpx(14)
                         anchors.right: noteLabel.left
                         anchors.rightMargin: vpx(12)
                         anchors.verticalCenter: parent.verticalCenter
-                        horizontalAlignment: modelData.kind === "import" && !box.visible ? Text.AlignHCenter : Text.AlignLeft
+                        horizontalAlignment: Text.AlignLeft
                         elide: Text.ElideMiddle
                     }
 
                     Text {
                         id: noteLabel
                         text: {
-                            if (modelData.kind === "folder")
-                                return qsTr("change") + api.tr;
-                            if (modelData.kind === "use") {
+                            if (modelData.kind === "options") {
                                 var use = Internal.settings.esdeImportUse;
-                                return "◂ " + (use === "media" ? qsTr("art only")
+                                return (use === "media" ? qsTr("art only")
                                      : use === "replace" ? qsTr("art and details, replacing yours")
-                                     : qsTr("art, and details you don't have")) + api.tr + " ▸";
+                                     : qsTr("art, and details you don't have")) + api.tr;
                             }
                             if (modelData.kind === "nav")
                                 return modelData.note;
-                            if (modelData.kind === "rescan")
+                            if (modelData.kind === "rescan" || modelData.kind === "delete")
                                 return qsTr("%1 games").arg(modelData.sys.games) + api.tr;
-                            if (modelData.kind === "delete")
-                                return root.confirmDelete === modelData.sys.name
-                                    ? qsTr("A again to delete") + api.tr
-                                    : qsTr("%1 games").arg(modelData.sys.games) + api.tr;
                             if (!parent.isSystem)
                                 return "";
                             var parts = [qsTr("%1 games").arg(modelData.sys.games)];
@@ -515,6 +567,39 @@ FocusScope {
                 anchors.centerIn: parent
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.WordWrap
+            }
+        }
+
+        // the button under the list: Import / Delete
+        Rectangle {
+            id: footer
+            visible: root.hasFooter
+            anchors.bottom: messageText.top
+            anchors.bottomMargin: vpx(10)
+            anchors.left: listArea.left
+            anchors.right: listArea.right
+            height: root.hasFooter ? vpx(18) * 2.6 : 0
+            readonly property bool on: (root.onFooter && list.activeFocus) || footerMouse.containsMouse
+            color: on ? (root.page === "delete" ? "#d54" : "#3aa") : "#555"
+            Text {
+                anchors.centerIn: parent
+                text: root.page === "delete"
+                    ? (root.deleteCount > 0 ? qsTr("Delete %1 imports").arg(root.deleteCount) : qsTr("Delete")) + api.tr
+                    : (root.pickedCount > 0 ? qsTr("Import %1 systems").arg(root.pickedCount) : qsTr("Import")) + api.tr
+                color: parent.on ? "#111" : "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(18)
+                font.bold: true
+            }
+            MouseArea {
+                id: footerMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                onClicked: {
+                    list.focus = true;
+                    root.onFooter = true;
+                    root.footerAction();
+                }
             }
         }
 
@@ -602,17 +687,49 @@ FocusScope {
         opacity: focus ? 1.0 : 0.0
         Behavior on opacity { PropertyAnimation { duration: 300 } }
 
-        onCancel: list.focus = true
+        onCancel: optionsDialog.focus = true
         onPick: {
             // dir_path is ES-DE/settings
             var esde = dir_path.substring(0, dir_path.lastIndexOf("/"));
             Internal.settings.esdeImportDir = esde;
             root.reloadSystems();
             root.message = "";
-            list.focus = true;
+            optionsDialog.focus = true;
         }
     }
 
+
+    // Import options...
+    PegasusOptionsDialog {
+        id: optionsDialog
+        title: qsTr("Import options") + api.tr
+        rows: root.optionRows
+        onActivated: root.optionActivated(index, step)
+        onClosed: list.focus = true
+    }
+
+    // Delete: asks first
+    PegasusDialog {
+        id: deleteDialog
+        title: qsTr("Delete imports") + api.tr
+        text: {
+            var names = [];
+            for (var j = 0; j < root.scanned.length; j++) {
+                if (root.deletePicked[root.scanned[j].name])
+                    names.push(root.scanned[j].fullname);
+            }
+            return qsTr("Delete the imports of %1? Your ROMs, ES-DE's art and your own metadata files stay; the games go from the list until you import them again.")
+                .arg(names.join(", ")) + api.tr;
+        }
+        buttons: [ qsTr("Delete") + api.tr, qsTr("Cancel") + api.tr ]
+        choice: 1
+        onPicked: {
+            list.focus = true;
+            if (index === 0)
+                root.deletePickedImports();
+        }
+        onCancelled: list.focus = true
+    }
 
     ReloadQuestion {
         id: reloadDialog

@@ -458,10 +458,8 @@ QRect content_rect(const QImage& source)
 
 // a downloaded picture made smaller and/or trimmed, as the Scraper settings
 // say; untouched (same bytes) when nothing needs doing
-// fan art as 16:9 (the shape ScreenScraper's is): a taller picture is cut
-// to 16:9 around the middle; a wider one (SteamGridDB's heroes are 1920x620
-// banners) is set onto a blurred, darkened stretch of itself, so nothing of
-// it is lost
+// fan art cropped to 16:9 (Scraper > Fan art shape; off by default: kept as
+// downloaded, like ES-DE)
 QImage fit_16_9(const QImage& src)
 {
     // 16:9 by cropping, never by padding: the middle of a taller picture,
@@ -1498,7 +1496,9 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
     const size_t media_before = m_media.size();
     add(igdb_image(game.value(QStringLiteral("cover")), "cover_big_2x"), "getCovers", "assets.box_front", "covers", "2d");
     add(igdb_image(game.value(QStringLiteral("screenshots")).toArray().at(0), "1080p"), "getScreenshots", "assets.screenshot", "screenshots", "");
-    // the artwork closest to 16:9 (IGDB has them in every shape)
+    // fan art as ES-DE has it: a full-screen picture (16:9 or near), kept as
+    // downloaded. IGDB's artworks come in every shape: the one closest to
+    // 16:9 when it's close enough, else a second screenshot (never a banner)
     QJsonValue best_art;
     double best_off = 1e9;
     for (const QJsonValue& v : game.value(QStringLiteral("artworks")).toArray()) {
@@ -1511,7 +1511,15 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
             best_art = v;
         }
     }
-    add(igdb_image(best_art, "1080p"), "getFanart", "assets.background", "fanart", "");
+    const QJsonArray shots = game.value(QStringLiteral("screenshots")).toArray();
+    const bool art_fits = !best_art.isUndefined() && best_off <= 0.25;  // about 1.53:1 to 2.03:1
+    const QJsonValue fanart = art_fits ? best_art
+        : shots.size() > 1 ? shots.at(1)
+        : best_art;
+    note(LOGMSG("IGDB: fan art from %1").arg(art_fits ? QStringLiteral("an artwork (%1 off 16:9)").arg(best_off, 0, 'f', 2)
+        : shots.size() > 1 ? QStringLiteral("a screenshot (no artwork near 16:9)")
+        : best_art.isUndefined() ? QStringLiteral("nothing (no artwork)") : QStringLiteral("the closest artwork")));
+    add(igdb_image(fanart, "1080p"), "getFanart", "assets.background", "fanart", "");
     QStringList kept;
     for (auto it = m_changes.cbegin(); it != m_changes.cend(); ++it)
         kept.append(it.key());
@@ -1563,7 +1571,8 @@ void Scraper::steamGridDb(int known_id)
     struct Want { const char* path; const char* setting; const char* slot; const char* folder; const char* box; };
     const std::vector<Want> wants_all {
         { "grids", "getCovers", "assets.box_front", "covers", "2d" },
-        { "heroes", "getFanart", "assets.background", "fanart", "" },
+        // heroes are banners (1920x620), not fan art: they go in the banner slot
+        { "heroes", "getFanart", "assets.banner", "banners", "" },
         { "logos", "getLogos", "assets.logo", "marquees", "" },
     };
     auto* const todo = new std::vector<Want>();
@@ -1699,7 +1708,7 @@ void Scraper::downloadNext()
         const QString trim_setting = m_settings.value(QStringLiteral("trimBorders")).toString();
         const bool trim = trim_setting == QLatin1String("all") || (trim_setting == QLatin1String("logos") && logo);
         const bool fanart_16_9 = media.folder == QLatin1String("fanart")
-            && m_settings.value(QStringLiteral("fanartShape"), QStringLiteral("16:9")).toString() == QLatin1String("16:9");
+            && m_settings.value(QStringLiteral("fanartFit"), QStringLiteral("original")).toString() == QLatin1String("16:9");
         if (picture && (max_w > 0 || trim || fanart_16_9)) {
             auto* const watcher = new QFutureWatcher<QPair<QByteArray, QString>>(this);
             connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, media, job]{

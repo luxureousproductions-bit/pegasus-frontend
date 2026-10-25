@@ -1973,8 +1973,9 @@ FocusScope {
         }
         onPickFolder: {
             Internal.settings.dataDir = dir_path;
-            root.dataDir = dir_path;
-            root.message = qsTr("Art you pick from now on is copied into %1.").arg(dir_path) + api.tr;
+            // the art goes in its downloaded_media/<system>/<kind>
+            root.dataDir = Internal.settings.dataDir;
+            root.message = qsTr("Scraped art and art you pick go to %1/<system>/<kind> from now on.").arg(root.dataDir) + api.tr;
             pickFolders = false;
             list.focus = true;
         }
@@ -2093,8 +2094,9 @@ FocusScope {
         id: fieldDialog
 
         property var field: null
-        // a launch command wraps over several lines too (it's one line when saved)
-        readonly property bool multiLine: !!field && (field.type === "multi" || field.type === "list" || field.type === "command")
+        // a launch command wraps over several lines too (it's one line when saved);
+        // lists (developer, publisher, genres) are one line, comma separated
+        readonly property bool multiLine: !!field && (field.type === "multi" || field.type === "command")
         readonly property bool isCommand: !!field && field.type === "command"
 
         anchors.fill: parent
@@ -2105,7 +2107,7 @@ FocusScope {
         function openFor(f) {
             field = f;
             var value = root.current(f.key);
-            var text = Array.isArray(value) ? value.join("\n") : String(value || "");
+            var text = Array.isArray(value) ? value.join(f.type === "list" ? ", " : "\n") : String(value || "");
             if (f.type === "rating")
                 text = text.replace("%", "");
             // a launch command starts from the one in use, to change from there
@@ -2156,7 +2158,7 @@ FocusScope {
             var raw = multiLine ? multiInput.text : lineInput.text;
             var value;
             if (f.type === "list") {
-                value = raw.split("\n").map(function(x) { return x.trim(); }).filter(function(x) { return x !== ""; });
+                value = raw.split(/[,\n]/).map(function(x) { return x.trim(); }).filter(function(x) { return x !== ""; });
             }
             else if (f.type === "multi") {
                 value = raw.replace(/\s+$/, "");
@@ -2252,11 +2254,14 @@ FocusScope {
                 pending = true;
                 Qt.callLater(refresh);
             }
+            // genres: one line, comma separated (lineInput)
+            readonly property var input: fieldDialog.multiLine ? multiInput : lineInput
+            readonly property string sep: fieldDialog.multiLine ? "\n" : ","
             function lineBounds() {
-                var t = multiInput.text;
-                var c = multiInput.cursorPosition;
-                var start = t.lastIndexOf("\n", c - 1) + 1;
-                var end = t.indexOf("\n", c);
+                var t = input.text;
+                var c = input.cursorPosition;
+                var start = t.lastIndexOf(sep, c - 1) + 1;
+                var end = t.indexOf(sep, c);
                 return { "start": start, "end": end < 0 ? t.length : end };
             }
             function refresh() {
@@ -2265,12 +2270,12 @@ FocusScope {
                     items = [];
                     return;
                 }
-                var t = multiInput.text;
+                var t = input.text;
                 var b = lineBounds();
                 var typed = t.substring(b.start, b.end).trim().toLowerCase();
-                // the other lines: already in the list
+                // the other items: already in the list
                 var have = {};
-                var lines = (t.substring(0, b.start) + t.substring(b.end)).split("\n");
+                var lines = (t.substring(0, b.start) + t.substring(b.end)).split(sep);
                 for (var l = 0; l < lines.length; l++)
                     have[lines[l].trim().toLowerCase()] = true;
                 var starts = [], inside = [];
@@ -2306,16 +2311,19 @@ FocusScope {
                 var name = items[index];
                 if (name === undefined)
                     return;
-                var t = multiInput.text;
+                var t = input.text;
                 var b = lineBounds();
-                var before = t.substring(0, b.start) + name;
+                // the item you're on becomes the genre, then room for the next
+                var lead = (sep === "," && b.start > 0) ? " " : "";
+                var before = t.substring(0, b.start) + lead + name;
+                var after = sep === "," ? ", " : "\n";
                 if (b.end >= t.length) {
-                    multiInput.text = before + "\n";
-                    multiInput.cursorPosition = before.length + 1;
+                    input.text = before + after;
+                    input.cursorPosition = before.length + after.length;
                 }
                 else {
-                    multiInput.text = before + t.substring(b.end);
-                    multiInput.cursorPosition = before.length + 1;
+                    input.text = before + t.substring(b.end);
+                    input.cursorPosition = before.length + 1;
                 }
                 current = 0;
                 kb.focus = true;
@@ -2389,7 +2397,7 @@ FocusScope {
                     width: parent.width
                     text: fieldDialog.field
                         ? (fieldDialog.field.type === "list"
-                            ? qsTr("%1, one per line").arg(fieldDialog.field.label)
+                            ? qsTr("%1, separated by commas").arg(fieldDialog.field.label)
                             : fieldDialog.field.type === "date" ? qsTr("%1 (YYYY-MM-DD)").arg(fieldDialog.field.label)
                             : fieldDialog.field.type === "rating" ? qsTr("%1, from 0 to 100").arg(fieldDialog.field.label)
                             : fieldDialog.field.label) + api.tr
@@ -2433,6 +2441,8 @@ FocusScope {
                         Keys.onReturnPressed: fieldDialog.finish()
                         Keys.onEnterPressed: fieldDialog.finish()
                         KeyNavigation.down: kb
+                        onTextChanged: suggestBar.update()
+                        onCursorPositionChanged: suggestBar.update()
                     }
                 }
 

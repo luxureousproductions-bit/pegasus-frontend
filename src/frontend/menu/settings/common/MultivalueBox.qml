@@ -90,8 +90,10 @@ FocusScope {
         anchors.rightMargin: height * 0.04
         visible: x < parent.width
 
-        color: "#eee"
-        radius: vpx(8)
+        // Pegasus X: dark and square, as the rest of the menus
+        color: "#333"
+        border.color: "#555"
+        border.width: vpx(1)
 
         MouseArea {
             anchors.fill: parent
@@ -99,8 +101,8 @@ FocusScope {
 
         Item {
             anchors.fill: parent
-            anchors.topMargin: parent.radius
-            anchors.bottomMargin: parent.radius
+            anchors.topMargin: vpx(6)
+            anchors.bottomMargin: vpx(6)
             clip: true
 
             ListView {
@@ -141,7 +143,7 @@ FocusScope {
 
             width: ListView.view.width
             height: root.itemHeight
-            color: highlighted ? "#dedede" : "#eee"
+            color: highlighted ? "#4ae" : "transparent"
 
             Text {
                 id: label
@@ -151,7 +153,7 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
 
                 text: model.name
-                color: "#444"
+                color: "#eee"
                 font.pixelSize: root.textSize
                 font.family: globalFonts.sans
             }

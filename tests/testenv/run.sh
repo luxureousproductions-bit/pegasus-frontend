@@ -128,6 +128,12 @@ shot 08-gamedirs
 stop 08-gamedirs
 start 09-esde-import "menu/settings/EsdeImport.qml" 6
 shot 09-esde-import
+keys Return; sleep 1; shot 09-esde-import-page
+keys Return; shot 09-esde-import-options
+keys Return; sleep 1; shot 09-folder-picker
+keys Escape Escape Escape Escape
+keys Down Down Return; shot 09-esde-delete
+keys Return; shot 09-esde-delete-ticked
 stop 09-esde-import
 
 # -- 7. the theme again (the library as read after the imports) --------------------------------
