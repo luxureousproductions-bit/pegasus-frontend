@@ -16,6 +16,7 @@
 
 
 #include "LibraryRules.h"
+#include "providers/Overrides.h"
 
 #include "Log.h"
 #include "Paths.h"
@@ -757,6 +758,9 @@ void dedupe_collections(std::vector<model::Collection*>& collections, std::vecto
 
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
 {
+    // what's laid on top of the metadata files: ES-DE's data for your own
+    // games, then your edits and scraped data (Overrides.cpp)
+    providers::overrides::apply(collections, games);
     merge_android(collections, games, merge_android_enabled());
     dedupe_collections(collections, games);
     // the same picture found twice (eg. in your metadata and in a media

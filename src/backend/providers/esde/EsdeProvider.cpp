@@ -2822,6 +2822,70 @@ QString custom_key(const EmulatorSetup& setup, const QString& collection_name, c
     const QString system = setup.system_for(short_name, collection_name);
     return system.isEmpty() ? QStringLiteral("collection:") % collection_name.toLower() : system;
 }
+QString edits_file_path(const QString& collection_name)
+{
+    QString safe;
+    for (const QChar c : collection_name) {
+        if (c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_'))
+            safe += c;
+        else if (c == QLatin1Char(' '))
+            safe += QLatin1Char('_');
+    }
+    if (safe.isEmpty())
+        safe = QStringLiteral("other");
+    // Pegasus X: everything you change about a collection's games (edits,
+    // scraped data, emulators) goes here, on top of what the metadata files
+    // say; those files are never written to
+    return paths::writableConfigDir() % QStringLiteral("/metadata/overrides/") % safe
+        % QStringLiteral(".metadata.pegasus.txt");
+}
+
+// the override file of a collection, made when there's none yet, with the
+// collection's block
+MetaFile override_file(const QString& collection_name, int& coll_index)
+{
+    MetaFile file;
+    const QString path = edits_file_path(collection_name);
+    if (!file.load(path)) {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        file.path = path;
+        file.dir = QFileInfo(path).absolutePath();
+        file.lines = QStringList {
+            QStringLiteral("# Made by Pegasus X: what you changed in Settings > Library and what"),
+            QStringLiteral("# the scraper found, applied on top of your metadata files (which are"),
+            QStringLiteral("# never written to). Not read by Pegasus itself: Pegasus X applies it."),
+        };
+        file.parse();
+    }
+    coll_index = -1;
+    for (size_t b = 0; b < file.blocks.size(); b++) {
+        if (file.blocks[b].is_collection && file.blocks[b].name == collection_name)
+            coll_index = static_cast<int>(b);
+    }
+    if (coll_index < 0) {
+        if (!file.lines.isEmpty() && !file.lines.last().trimmed().isEmpty())
+            file.lines.append(QString());
+        file.lines.append(QStringLiteral("collection: ") % collection_name);
+        file.parse();
+        for (size_t b = 0; b < file.blocks.size(); b++) {
+            if (file.blocks[b].is_collection && file.blocks[b].name == collection_name)
+                coll_index = static_cast<int>(b);
+        }
+    }
+    return file;
+}
+
+// the game's block in the override file, added when there's none
+int override_game_block(MetaFile& file, int coll_index, const QString& wanted, const QString& title)
+{
+    for (size_t b = 0; b < file.blocks.size(); b++) {
+        const MetaBlock& block = file.blocks[b];
+        if (!block.is_collection && file.game_files(block).contains(wanted))
+            return static_cast<int>(b);
+    }
+    return file.add_game_block(coll_index, title.isEmpty() ? QFileInfo(wanted).completeBaseName() : title, wanted);
+}
+
 } // namespace
 
 std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root)
@@ -3048,69 +3112,6 @@ namespace {
 // one file per collection: in Pegasus' format a game belongs to every
 // collection declared above it in the same file, so with several collections
 // in one file an Xbox game written after "collection: Android" was in both
-QString edits_file_path(const QString& collection_name)
-{
-    QString safe;
-    for (const QChar c : collection_name) {
-        if (c.isLetterOrNumber() || c == QLatin1Char('-') || c == QLatin1Char('_'))
-            safe += c;
-        else if (c == QLatin1Char(' '))
-            safe += QLatin1Char('_');
-    }
-    if (safe.isEmpty())
-        safe = QStringLiteral("other");
-    // Pegasus X: everything you change about a collection's games (edits,
-    // scraped data, emulators) goes here, on top of what the metadata files
-    // say; those files are never written to
-    return paths::writableConfigDir() % QStringLiteral("/metadata/overrides/") % safe
-        % QStringLiteral(".metadata.pegasus.txt");
-}
-
-// the override file of a collection, made when there's none yet, with the
-// collection's block
-MetaFile override_file(const QString& collection_name, int& coll_index)
-{
-    MetaFile file;
-    const QString path = edits_file_path(collection_name);
-    if (!file.load(path)) {
-        QDir().mkpath(QFileInfo(path).absolutePath());
-        file.path = path;
-        file.dir = QFileInfo(path).absolutePath();
-        file.lines = QStringList {
-            QStringLiteral("# Made by Pegasus X: what you changed in Settings > Library and what"),
-            QStringLiteral("# the scraper found, applied on top of your metadata files (which are"),
-            QStringLiteral("# never written to). Not read by Pegasus itself: Pegasus X applies it."),
-        };
-        file.parse();
-    }
-    coll_index = -1;
-    for (size_t b = 0; b < file.blocks.size(); b++) {
-        if (file.blocks[b].is_collection && file.blocks[b].name == collection_name)
-            coll_index = static_cast<int>(b);
-    }
-    if (coll_index < 0) {
-        if (!file.lines.isEmpty() && !file.lines.last().trimmed().isEmpty())
-            file.lines.append(QString());
-        file.lines.append(QStringLiteral("collection: ") % collection_name);
-        file.parse();
-        for (size_t b = 0; b < file.blocks.size(); b++) {
-            if (file.blocks[b].is_collection && file.blocks[b].name == collection_name)
-                coll_index = static_cast<int>(b);
-        }
-    }
-    return file;
-}
-
-// the game's block in the override file, added when there's none
-int override_game_block(MetaFile& file, int coll_index, const QString& wanted, const QString& title)
-{
-    for (size_t b = 0; b < file.blocks.size(); b++) {
-        const MetaBlock& block = file.blocks[b];
-        if (!block.is_collection && file.game_files(block).contains(wanted))
-            return static_cast<int>(b);
-    }
-    return file.add_game_block(coll_index, title.isEmpty() ? QFileInfo(wanted).completeBaseName() : title, wanted);
-}
 
 QStringList aliases_of(const QString& key)
 {

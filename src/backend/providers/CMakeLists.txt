@@ -11,6 +11,8 @@ target_sources(pegasus-backend PRIVATE
     GameDataCache.h
     LibraryRules.cpp
     LibraryRules.h
+    Overrides.cpp
+    Overrides.h
 )
 
 
