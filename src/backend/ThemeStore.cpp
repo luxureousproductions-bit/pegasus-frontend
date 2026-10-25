@@ -340,35 +340,97 @@ void ThemeStore::saveCache() const
 
 // the themes in the themes folder: by the marker written when installed here,
 // else by the folder's name (installed by hand)
+namespace {
+// a name as it's compared: letters and digits only, lower case, without the
+// usual decoration of theme repositories
+QString plain_name(QString text)
+{
+    text = text.toLower();
+    for (const char* fluff : { "pegasus-theme-", "pegasus_theme_", "pegasustheme", "-theme", "_theme", "-master", "-main", "theme" }) {
+        const QString f = QLatin1String(fluff);
+        if (text.startsWith(f) && text.length() > f.length())
+            text = text.mid(f.length());
+        if (text.endsWith(f) && text.length() > f.length())
+            text.chop(f.length());
+    }
+    QString out;
+    for (const QChar ch : text) {
+        if (ch.isLetterOrNumber())
+            out += ch;
+    }
+    return out;
+}
+} // namespace
+
+// the themes in every themes folder Pegasus reads (the Pegasus X folder, the
+// app's own, a config folder beside the program): by the marker written when
+// installed here, else by the folder's name or the theme's name and author
+// (installed by hand or shipped with the device), so a theme shows as
+// installed once, wherever it is
 QHash<QString, ThemeStore::Installed> ThemeStore::installed() const
 {
     QHash<QString, Installed> out;
-    QDirIterator it(themesDir(), QDir::Dirs | QDir::NoDotAndDotDot);
-    QHash<QString, Installed> by_folder;
-    while (it.hasNext()) {
-        const QString dir = it.next();
-        const QString folder = QFileInfo(dir).fileName();
-        if (folder.startsWith(QLatin1Char('.')))
-            continue;
-        Installed info;
-        info.dir = dir + QLatin1Char('/');
-        QFile cfg(dir + QStringLiteral("/theme.cfg"));
-        if (cfg.open(QIODevice::ReadOnly))
-            info.version = parse_cfg(QString::fromUtf8(cfg.readAll())).value(QStringLiteral("version"));
-        QFile marker(dir + QLatin1Char('/') + MARKER);
-        if (marker.open(QIODevice::ReadOnly)) {
-            const QJsonObject o = QJsonDocument::fromJson(marker.readAll()).object();
-            info.sha = o.value(QStringLiteral("sha")).toString();
-            out.insert(o.value(QStringLiteral("id")).toString(), info);
-        }
-        else {
-            by_folder.insert(folder.toLower(), info);
+    struct Found { Installed info; QString folder; QString name; QString author; };
+    std::vector<Found> by_hand;
+    QStringList dirs { themesDir() };
+    for (const QString& config_dir : paths::configDirs()) {
+        if (!config_dir.startsWith(QLatin1Char(':')) && !dirs.contains(config_dir + QStringLiteral("/themes")))
+            dirs.append(config_dir + QStringLiteral("/themes"));
+    }
+    for (const QString& themes : dirs) {
+        QDirIterator it(themes, QDir::Dirs | QDir::NoDotAndDotDot);
+        while (it.hasNext()) {
+            const QString dir = it.next();
+            const QString folder = QFileInfo(dir).fileName();
+            if (folder.startsWith(QLatin1Char('.')) || !QFileInfo::exists(dir + QStringLiteral("/theme.cfg")))
+                continue;
+            Found found;
+            found.info.dir = dir + QLatin1Char('/');
+            found.folder = folder;
+            QFile cfg(dir + QStringLiteral("/theme.cfg"));
+            if (cfg.open(QIODevice::ReadOnly)) {
+                const QHash<QString, QString> values = parse_cfg(QString::fromUtf8(cfg.readAll()));
+                found.info.version = values.value(QStringLiteral("version"));
+                found.name = values.value(QStringLiteral("name"));
+                found.author = values.value(QStringLiteral("author"));
+            }
+            QFile marker(dir + QLatin1Char('/') + MARKER);
+            if (marker.open(QIODevice::ReadOnly)) {
+                const QJsonObject o = QJsonDocument::fromJson(marker.readAll()).object();
+                found.info.sha = o.value(QStringLiteral("sha")).toString();
+                const QString id = o.value(QStringLiteral("id")).toString();
+                if (!out.contains(id))
+                    out.insert(id, found.info);
+                continue;
+            }
+            by_hand.push_back(found);
         }
     }
-    // installed by hand: the folder named like the repository
+    // installed by hand: the folder named like the repository, else the
+    // theme's name (and author, when both have one)
     for (const Entry& e : m_entries) {
-        if (!out.contains(e.id()) && by_folder.contains(e.repo.toLower()))
-            out.insert(e.id(), by_folder.value(e.repo.toLower()));
+        if (out.contains(e.id()))
+            continue;
+        const Found* match = nullptr;
+        for (const Found& f : by_hand) {
+            if (plain_name(f.folder) == plain_name(e.repo)) {
+                match = &f;
+                break;
+            }
+        }
+        if (!match && !e.name.isEmpty()) {
+            for (const Found& f : by_hand) {
+                if (plain_name(f.name) != plain_name(e.name) || f.name.isEmpty())
+                    continue;
+                const bool authors_known = !f.author.isEmpty() && !e.author.isEmpty();
+                if (!authors_known || plain_name(f.author) == plain_name(e.author)) {
+                    match = &f;
+                    break;
+                }
+            }
+        }
+        if (match)
+            out.insert(e.id(), match->info);
     }
     return out;
 }
