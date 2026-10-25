@@ -19,6 +19,7 @@
 
 #include "AppSettings.h"
 #include "Log.h"
+#include "Paths.h"
 #include "PegasusAssets.h"
 #include "model/gaming/Assets.h"
 #include "model/gaming/Collection.h"
@@ -29,6 +30,7 @@
 #include "types/AssetType.h"
 #include "utils/PathTools.h"
 
+#include <QDir>
 #include <QUrl>
 
 
