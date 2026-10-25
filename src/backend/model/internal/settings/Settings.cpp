@@ -1393,6 +1393,8 @@ QVariantMap scraper_defaults()
         // empty borders trimmed (off, logos, all)
         { QStringLiteral("imageMaxSize"), QStringLiteral("2560") },
         { QStringLiteral("trimBorders"), QStringLiteral("off") },
+        // fan art kept 16:9 (as ScreenScraper's): banners onto a blurred background
+        { QStringLiteral("fanartShape"), QStringLiteral("16:9") },
     };
 }
 

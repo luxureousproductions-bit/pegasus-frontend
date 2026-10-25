@@ -25,7 +25,11 @@ FocusScope {
 
     signal close
 
+    // Pegasus X: how long a screen takes to open (in the log, for the test
+    // environment and for finding slow ones)
+    property real openedAt: 0
     function openScreen(url) {
+        openedAt = Date.now();
         subscreen.source = "";  // a fresh screen every time (see openModal)
         subscreen.source = url;
         subscreen.focus = true;
@@ -35,6 +39,7 @@ FocusScope {
     //       a Loader keeps the old item when given the same source again, which
     //       would show stale data and keep its old focus
     function openModal(url) {
+        openedAt = Date.now();
         modal.source = "";
         modal.source = url;
         modal.focus = true;
@@ -75,7 +80,10 @@ FocusScope {
         anchors.fill: parent
 
         enabled: focus
-        onLoaded: item.focus = focus
+        onLoaded: {
+            item.focus = focus;
+            console.log("[timing] " + source.toString().split("/").pop() + " opened in " + (Date.now() - root.openedAt) + " ms");
+        }
         onFocusChanged: if (item) item.focus = focus
     }
     Connections {
@@ -96,7 +104,10 @@ FocusScope {
         anchors.left: main.right
 
         enabled: focus
-        onLoaded: item.focus = focus
+        onLoaded: {
+            item.focus = focus;
+            console.log("[timing] " + source.toString().split("/").pop() + " opened in " + (Date.now() - root.openedAt) + " ms");
+        }
         onFocusChanged: if (item) item.focus = focus
     }
     Connections {

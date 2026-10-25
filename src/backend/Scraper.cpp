@@ -26,6 +26,8 @@
 
 #include <QBuffer>
 #include <QImage>
+#include <QColor>
+#include <QPainter>
 #include <QPair>
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -454,12 +456,51 @@ QRect content_rect(const QImage& source)
 
 // a downloaded picture made smaller and/or trimmed, as the Scraper settings
 // say; untouched (same bytes) when nothing needs doing
-QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim)
+// fan art as 16:9 (the shape ScreenScraper's is): a taller picture is cut
+// to 16:9 around the middle; a wider one (SteamGridDB's heroes are 1920x620
+// banners) is set onto a blurred, darkened stretch of itself, so nothing of
+// it is lost
+QImage fit_16_9(const QImage& src)
+{
+    const double ratio = static_cast<double>(src.width()) / static_cast<double>(src.height());
+    const double wanted = 16.0 / 9.0;
+    if (ratio > wanted * 0.97 && ratio < wanted * 1.03)
+        return src;
+    if (ratio < wanted) {
+        // taller: the middle 16:9 part
+        const int h = qRound(src.width() / wanted);
+        return src.copy(0, (src.height() - h) / 2, src.width(), h);
+    }
+    // wider: letterboxed onto a blurred stretch of itself
+    const int w = src.width();
+    const int h = qRound(w / wanted);
+    QImage canvas(w, h, QImage::Format_ARGB32);
+    canvas.fill(Qt::black);
+    QPainter p(&canvas);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+    // the blur: scaled far down and up again
+    QImage bg = src.scaled(qMax(8, w / 40), qMax(8, h / 40), Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
+                   .scaled(w, h, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    p.drawImage(0, 0, bg);
+    p.fillRect(canvas.rect(), QColor(0, 0, 0, 110));
+    p.drawImage(0, (h - src.height()) / 2, src);
+    p.end();
+    return canvas;
+}
+
+QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim, bool fanart_16_9)
 {
     QImage img;
     if (!img.loadFromData(data))
         return { data, ext };
     bool changed = false;
+    if (fanart_16_9) {
+        const QImage shaped = fit_16_9(img.convertToFormat(QImage::Format_ARGB32));
+        if (shaped.size() != img.size()) {
+            img = shaped;
+            changed = true;
+        }
+    }
     if (trim) {
         const QRect box = content_rect(img);
         // only a real border (a few pixels at least), never an empty picture
@@ -1262,7 +1303,7 @@ void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonA
                                    "multiplayer_modes.offlinemaxplayers,platforms.name,"
                                    "involved_companies.developer,involved_companies.publisher,"
                                    "involved_companies.company.name,cover.image_id,screenshots.image_id,"
-                                   "artworks.image_id;").arg(clean);
+                                   "artworks.image_id,artworks.width,artworks.height;").arg(clean);
         if (on_platform > 0)
             q += QStringLiteral(" where platforms = (%1);").arg(on_platform);
         q += QStringLiteral(" limit 10;");
@@ -1433,7 +1474,20 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
     const size_t media_before = m_media.size();
     add(igdb_image(game.value(QStringLiteral("cover")), "cover_big_2x"), "getCovers", "assets.box_front", "covers", "2d");
     add(igdb_image(game.value(QStringLiteral("screenshots")).toArray().at(0), "1080p"), "getScreenshots", "assets.screenshot", "screenshots", "");
-    add(igdb_image(game.value(QStringLiteral("artworks")).toArray().at(0), "1080p"), "getFanart", "assets.background", "fanart", "");
+    // the artwork closest to 16:9 (IGDB has them in every shape)
+    QJsonValue best_art;
+    double best_off = 1e9;
+    for (const QJsonValue& v : game.value(QStringLiteral("artworks")).toArray()) {
+        const QJsonObject a = v.toObject();
+        const double w = a.value(QStringLiteral("width")).toDouble();
+        const double h = a.value(QStringLiteral("height")).toDouble();
+        const double off = (w > 0 && h > 0) ? qAbs(w / h - 16.0 / 9.0) : 0.5;
+        if (off < best_off) {
+            best_off = off;
+            best_art = v;
+        }
+    }
+    add(igdb_image(best_art, "1080p"), "getFanart", "assets.background", "fanart", "");
     QStringList kept;
     for (auto it = m_changes.cbegin(); it != m_changes.cend(); ++it)
         kept.append(it.key());
@@ -1620,15 +1674,17 @@ void Scraper::downloadNext()
         }
         const QString trim_setting = m_settings.value(QStringLiteral("trimBorders")).toString();
         const bool trim = trim_setting == QLatin1String("all") || (trim_setting == QLatin1String("logos") && logo);
-        if (picture && (max_w > 0 || trim)) {
+        const bool fanart_16_9 = media.folder == QLatin1String("fanart")
+            && m_settings.value(QStringLiteral("fanartShape"), QStringLiteral("16:9")).toString() == QLatin1String("16:9");
+        if (picture && (max_w > 0 || trim || fanart_16_9)) {
             auto* const watcher = new QFutureWatcher<QPair<QByteArray, QString>>(this);
             connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, media, job]{
                 const QPair<QByteArray, QString> result = watcher->result();
                 watcher->deleteLater();
                 storeMedia(media, job, result.first, result.second);
             });
-            watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim]{
-                return process_image(body, ext, max_w, max_h, trim);
+            watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim, fanart_16_9]{
+                return process_image(body, ext, max_w, max_h, trim, fanart_16_9);
             }));
             return;
         }

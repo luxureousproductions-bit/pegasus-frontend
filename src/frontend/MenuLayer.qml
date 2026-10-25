@@ -39,7 +39,9 @@ FocusScope {
         menuPanel.focus = true;
         triggerClose();
     }
+    property real openedAt: 0
     function openScreen(url) {
+        openedAt = Date.now();
         subscreen.source = url;
         subscreen.focus = true;
         root.state = "sub";
@@ -110,7 +112,10 @@ FocusScope {
 
         enabled: focus
         onFocusChanged: if (item) item.focus = focus;
-        onLoaded: item.focus = focus
+        onLoaded: {
+            item.focus = focus;
+            console.log("[timing] " + source.toString().split("/").pop() + " opened in " + (Date.now() - root.openedAt) + " ms");
+        }
 
         Rectangle {
             anchors.fill: parent

@@ -762,6 +762,7 @@ FocusScope {
                 function(act) { if (act === "show") root.setCollectionHidden(entry.name, false); });
             return;
         }
+        var t0 = Date.now();
         building = true;
         collName = entry.name;
         collObj = entry.obj;
@@ -809,6 +810,7 @@ FocusScope {
         building = false;
         list.currentIndex = 1;
         list.positionViewAtBeginning();
+        console.log("[timing] Library: collection \"" + entry.name + "\" (" + list_games.length + " games) opened in " + (Date.now() - t0) + " ms");
     }
     function openGame(entry) {
         building = true;
