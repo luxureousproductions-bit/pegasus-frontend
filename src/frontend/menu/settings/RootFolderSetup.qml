@@ -41,6 +41,17 @@ FocusScope {
 
     Component.onCompleted: contents = Internal.settings.rootDirContents()
 
+    Connections {
+        target: Internal.settings
+        function onRootDirChanged(error) {
+            if (root.step !== "moving")
+                return;
+            root.error = error;
+            root.step = error === "" ? "done" : "picked";
+            dialog.choice = 0;
+        }
+    }
+
     function pickFolder() {
         filePicker.pickFolders = true;
         filePicker.fileExtensions = [];
@@ -50,7 +61,9 @@ FocusScope {
     function apply(move) {
         step = "moving";
         error = Internal.settings.setRootDir(chosen, move);
-        step = error === "" ? "done" : "picked";
+        if (error !== "")
+            step = "picked";
+        // else: the copy runs in the background, onRootDirChanged ends it
     }
     function leave() {
         if (firstRun)
@@ -87,7 +100,7 @@ FocusScope {
                         + qsTr("Pegasus X folder: %1\n\n\"Move my data\" copies what's in %2 (%3) there: your settings, themes, metadata and art, so nothing changes but the place. \"Start fresh\" leaves it behind.")
                             .arg(root.chosen).arg(now).arg(what) + api.tr;
                 case "moving":
-                    return qsTr("Copying...") + api.tr;
+                    return qsTr("Copying your settings, themes, metadata and art to %1...\n\nThis can take a while; Pegasus X keeps running.").arg(root.chosen) + api.tr;
                 case "done":
                     return qsTr("Done. Pegasus X uses %1 from its next start: it closes now, open it again.").arg(root.chosen) + api.tr;
             }

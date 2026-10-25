@@ -24,6 +24,7 @@
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
 #include "model/gaming/GameFileListModel.h"
+#include "model/gaming/GameListModel.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
@@ -83,7 +84,14 @@ void apply_game(model::Game& live, const model::Game& over, Mode mode)
             current = value;
     };
 
-    if (replace && !over.title().isEmpty() && over.title() != live.title())
+    // the title: an override block is headed by the title it was made under,
+    // so only a block that says it changed the title replaces it
+    const QStringList edited = over.extraMap().value(QStringLiteral("pegasusx-edited")).toStringList()
+        .join(QLatin1Char(',')).split(QLatin1Char(','), Qt::SkipEmptyParts);
+    bool title_edited = false;
+    for (const QString& key : edited)
+        title_edited = title_edited || key.trimmed().compare(QLatin1String("title"), Qt::CaseInsensitive) == 0;
+    if (replace && title_edited && !over.title().isEmpty() && over.title() != live.title())
         live.setTitle(over.title());
     if (details && !over.sortBy().isEmpty() && over.sortBy() != over.title() && (replace || live.sortBy().isEmpty() || live.sortBy() == live.title()))
         live.setSortBy(over.sortBy());
@@ -119,14 +127,14 @@ void apply_game(model::Game& live, const model::Game& over, Mode mode)
         live.assetsMut().set_files(type, merged);
     }
 
-    // extras (manuals, removed art, ...)
-    if (details) {
-        for (auto it = over.extraMap().cbegin(); it != over.extraMap().cend(); ++it) {
-            if (it.key() == QLatin1String("pegasusx-source"))
-                continue;
-            if (replace || !live.extraMap().contains(it.key()))
-                live.extraMapMut().insert(it.key(), it.value());
-        }
+    // extras (manuals, removed art, ...): the manual is media, the rest details
+    for (auto it = over.extraMap().cbegin(); it != over.extraMap().cend(); ++it) {
+        if (it.key() == QLatin1String("pegasusx-source") || it.key() == QLatin1String("pegasusx-edited"))
+            continue;
+        if (!details && it.key() != QLatin1String("manual"))
+            continue;
+        if (replace || !live.extraMap().contains(it.key()))
+            live.extraMapMut().insert(it.key(), it.value());
     }
 }
 
@@ -134,10 +142,24 @@ void apply_collection(model::Collection& live, const model::Collection& over, Mo
 {
     const bool replace = mode == Mode::Replace;
     if (mode != Mode::MediaOnly) {
-        if (!over.commonLaunchCmd().isEmpty() && (replace || live.commonLaunchCmd().isEmpty()))
+        // the games took the collection's command when they joined it, so
+        // a new one goes to them too (those with the old one, or none)
+        if (!over.commonLaunchCmd().isEmpty() && (replace || live.commonLaunchCmd().isEmpty())) {
+            const QString before = live.commonLaunchCmd();
             live.setCommonLaunchCmd(over.commonLaunchCmd());
-        if (!over.commonLaunchWorkdir().isEmpty() && (replace || live.commonLaunchWorkdir().isEmpty()))
+            for (model::Game* const game : live.gameList()->entries()) {
+                if (game->launchCmd().isEmpty() || game->launchCmd() == before)
+                    game->setLaunchCmd(over.commonLaunchCmd());
+            }
+        }
+        if (!over.commonLaunchWorkdir().isEmpty() && (replace || live.commonLaunchWorkdir().isEmpty())) {
+            const QString before = live.commonLaunchWorkdir();
             live.setCommonLaunchWorkdir(over.commonLaunchWorkdir());
+            for (model::Game* const game : live.gameList()->entries()) {
+                if (game->launchWorkdir().isEmpty() || game->launchWorkdir() == before)
+                    game->setLaunchWorkdir(over.commonLaunchWorkdir());
+            }
+        }
         if (!over.summary().isEmpty() && (replace || live.summary().isEmpty()))
             live.setSummary(over.summary());
         if (!over.description().isEmpty() && (replace || live.description().isEmpty()))
@@ -166,26 +188,34 @@ int apply_layer(const QString& dir, Mode mode, const QString& what,
     for (const QString& file : files)
         reader.apply_metafile(file, sctx);
 
-    int applied = 0;
-    std::unordered_set<model::Game*> done;
-    for (const auto& pair : sctx.current_filepath_to_entry_map()) {
-        model::Game* const over = pair.second ? pair.second->parentGame() : nullptr;
-        if (!over || done.count(over))
-            continue;
-        const auto live_it = live_by_file.find(pair.first);
-        if (live_it == live_by_file.cend())
-            continue;
-        done.insert(over);
-        if (!wanted(*live_it->second))
-            continue;
-        apply_game(*live_it->second, *over, mode);
-        applied++;
-    }
+    // collections first (their launch command reaches their games), so a
+    // game's own override still wins
     for (const auto& pair : sctx.current_collection_games()) {
         const auto live_it = live_colls.find(pair.first->name());
         if (live_it != live_colls.cend())
             apply_collection(*live_it->second, *pair.first, mode);
     }
+    int applied = 0;
+    std::unordered_set<model::Game*> done;
+    // by file path, and by URI (Android apps: `android:<package>`, which the
+    // reader also files under a made-up absolute path that matches nothing)
+    const auto visit = [&](const HashMap<QString, model::GameFile*>& map) {
+        for (const auto& pair : map) {
+            model::Game* const over = pair.second ? pair.second->parentGame() : nullptr;
+            if (!over || done.count(over))
+                continue;
+            const auto live_it = live_by_file.find(pair.first);
+            if (live_it == live_by_file.cend())
+                continue;
+            done.insert(over);
+            if (!wanted(*live_it->second))
+                continue;
+            apply_game(*live_it->second, *over, mode);
+            applied++;
+        }
+    };
+    visit(sctx.current_uri_to_entry_map());
+    visit(sctx.current_filepath_to_entry_map());
     sctx.discard_all();
     Log::info(LOG_TAG, LOGMSG("%1: %2 files, %3 games").arg(what).arg(files.size()).arg(applied));
     return applied;
@@ -221,8 +251,11 @@ void apply(const std::vector<model::Collection*>& collections, const std::vector
     timer.start();
     HashMap<QString, model::Game*> by_file;
     for (model::Game* const game : games) {
-        for (const model::GameFile* const file : game->filesModel()->entries())
+        for (const model::GameFile* const file : game->filesModel()->entries()) {
             by_file.emplace(file->path(), game);
+            if (file->hasUri())
+                by_file.emplace(file->uri(), game);
+        }
     }
     HashMap<QString, model::Collection*> colls;
     for (model::Collection* const coll : collections)

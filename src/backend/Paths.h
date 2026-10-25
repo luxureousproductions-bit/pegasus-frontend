@@ -43,6 +43,9 @@ QString writableConfigDir();
 QString privateConfigDir();
 /// The Pegasus X folder named in pegasusx-root.txt, or empty
 QString pegasusxRootSetting();
+/// The Pegasus X folder named in pegasusx-root.txt when it couldn't be used
+/// at this start (SD card missing?), so the app's own folder is in use; else empty
+QString pegasusxRootMissing();
 /// Writes (or with an empty path, removes) the Pegasus X folder setting.
 /// Takes effect when Pegasus X starts again.
 bool setPegasusxRootSetting(const QString& dir);

@@ -649,7 +649,19 @@ void apply_default_launches(std::vector<model::Collection*>& collections)
             continue;
         todo.push_back(coll);
         keys.emplace_back(coll->name(), coll->shortName());
-        const QString basedir = coll->commonLaunchCmdBasedir();
+        QString basedir = coll->commonLaunchCmdBasedir();
+        // an imported collection's file is in the Pegasus X folder: its ROM
+        // root is where its games are
+        if (basedir.startsWith(paths::writableConfigDir() + QStringLiteral("/metadata"))) {
+            basedir.clear();
+            for (model::Game* const game : coll->gameList()->entries()) {
+                const auto& files = game->filesModel()->entries();
+                if (files.empty() || files.front()->hasUri())
+                    continue;
+                basedir = QFileInfo(files.front()->path()).absolutePath();
+                break;
+            }
+        }
         rom_roots.append(basedir.isEmpty() ? QString() : QFileInfo(basedir).absolutePath());
     }
     if (todo.empty())

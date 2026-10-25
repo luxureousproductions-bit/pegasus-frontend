@@ -25,6 +25,7 @@
 #endif
 
 #include <QBuffer>
+#include <QImageReader>
 #include <QImage>
 #include <QColor>
 #include <QPainter>
@@ -323,7 +324,7 @@ int igdb_players(const QJsonObject& game)
 {
     int most = 0;
     for (const QJsonValue& v : game.value(QStringLiteral("multiplayer_modes")).toArray())
-        most = qMax(most, v.toObject().value(QStringLiteral("offlinemaxplayers")).toInt());
+        most = qMax(most, v.toObject().value(QStringLiteral("offlinemax")).toInt());
     if (most == 0 && igdb_names(game, QStringLiteral("game_modes")).contains(QStringLiteral("Single player")))
         most = 1;
     return most;
@@ -474,7 +475,8 @@ QImage fit_16_9(const QImage& src)
     // wider: letterboxed onto a blurred stretch of itself
     const int w = src.width();
     const int h = qRound(w / wanted);
-    QImage canvas(w, h, QImage::Format_ARGB32);
+    // a photo stays a photo (RGB → jpg later), only pictures with transparency keep it
+    QImage canvas(w, h, src.hasAlphaChannel() ? QImage::Format_ARGB32 : QImage::Format_RGB32);
     canvas.fill(Qt::black);
     QPainter p(&canvas);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
@@ -495,7 +497,7 @@ QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& 
         return { data, ext };
     bool changed = false;
     if (fanart_16_9) {
-        const QImage shaped = fit_16_9(img.convertToFormat(QImage::Format_ARGB32));
+        const QImage shaped = fit_16_9(img);
         if (shaped.size() != img.size()) {
             img = shaped;
             changed = true;
@@ -515,7 +517,8 @@ QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& 
     }
     if (!changed)
         return { data, ext };
-    const QString out_ext = (img.hasAlphaChannel() || ext == QLatin1String("png")) ? QStringLiteral("png") : QStringLiteral("jpg");
+    const bool alpha = img.hasAlphaChannel() && img.format() != QImage::Format_RGB32;
+    const QString out_ext = (alpha || ext == QLatin1String("png")) ? QStringLiteral("png") : QStringLiteral("jpg");
     QByteArray out;
     QBuffer buffer(&out);
     buffer.open(QIODevice::WriteOnly);
@@ -605,6 +608,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_stop_reason.clear();
     m_stop = false;
     m_running = true;
+    m_run++;  // answers still on their way from the last run are ignored
     note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, IGDB login: %7, SteamGridDB key: %8)")
         .arg(m_jobs.size()).arg(m_data_dir)
         .arg(m_settings.value(QStringLiteral("source")).toString())
@@ -770,9 +774,10 @@ void Scraper::sgdbSearch(const QString& name)
             return;
         }
         auto* const pending = new int(with_thumbs);
+        const int run = m_run;
         for (int i = 0; i < with_thumbs; i++) {
             const QUrl grid(QStringLiteral("https://www.steamgriddb.com/api/v2/grids/game/%1?dimensions=600x900").arg(m_sgdb_ids[static_cast<size_t>(i)]));
-            get(grid, auth, 0, [this, i, pending, candidates](int st, const QByteArray& b){
+            get(grid, auth, 0, [this, i, pending, candidates, run](int st, const QByteArray& b){
                 const QJsonArray images = QJsonDocument::fromJson(b).object().value(QStringLiteral("data")).toArray();
                 if (st == 200 && !images.isEmpty()) {
                     QVariantMap c = (*candidates)[i].toMap();
@@ -783,6 +788,8 @@ void Scraper::sgdbSearch(const QString& name)
                     delete pending;
                     const QVariantList list = *candidates;
                     delete candidates;
+                    if (run != m_run)
+                        return;  // a later run took over
                     if (m_stop)
                         next();
                     else
@@ -806,8 +813,9 @@ void Scraper::offerChoice(const QVariantList& candidates)
     // picker couldn't load them itself), then the pick
     m_choice.clear();
     m_waiting = true;
-    prefetchThumbs(candidates, [this](const QVariantList& with_pictures){
-        if (!m_waiting || m_index >= m_jobs.size())
+    const int run = m_run;
+    prefetchThumbs(candidates, [this, run](const QVariantList& with_pictures){
+        if (run != m_run || !m_waiting || m_index >= m_jobs.size())
             return;  // stopped meanwhile
         const Job& job = m_jobs[m_index];
         m_choice = QVariantMap {
@@ -848,7 +856,10 @@ void Scraper::prefetchThumbs(const QVariantList& candidates, std::function<void(
             continue;
         get(QUrl(url), {}, 0, [this, i, url, dir, list, pending, done](int status, const QByteArray& body){
             QVariantMap c = (*list)[i].toMap();
-            if (status == 200 && !QImage::fromData(body).isNull()) {
+            QBuffer buffer;
+            buffer.setData(body);
+            buffer.open(QIODevice::ReadOnly);
+            if (status == 200 && QImageReader(&buffer).canRead()) {
                 const QString name = QString::fromLatin1(QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
                 const QString path = dir + QLatin1Char('/') + name + QStringLiteral(".img");
                 QFile file(path);
@@ -1290,6 +1301,24 @@ void Scraper::igdbPost(const QByteArray& query, std::function<void(int, const QB
 }
 
 // the games of a name, on the collection's platform (else on any)
+namespace {
+// IGDB answers errors as a JSON list of {title, status, cause} objects
+QJsonArray igdb_games(int status, const QByteArray& body)
+{
+    return status == 200 ? QJsonDocument::fromJson(body).array() : QJsonArray();
+}
+QString igdb_answer(int status, const QByteArray& body)
+{
+    if (status == 200)
+        return LOGMSG("IGDB: answered 200, %1 games").arg(QJsonDocument::fromJson(body).array().size());
+    const QJsonObject err = QJsonDocument::fromJson(body).array().at(0).toObject();
+    const QString why = err.isEmpty()
+        ? QString::fromUtf8(body.left(200))
+        : err.value(QStringLiteral("title")).toString() + QLatin1String(": ") + err.value(QStringLiteral("cause")).toString();
+    return LOGMSG("IGDB: answered %1, %2").arg(status).arg(why);
+}
+} // namespace
+
 void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonArray&)> done)
 {
     const Job& job = m_jobs[m_index];
@@ -1300,7 +1329,7 @@ void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonA
     const auto query_for = [clean](int on_platform) {
         QString q = QStringLiteral("search \"%1\"; fields name,summary,storyline,first_release_date,"
                                    "total_rating,aggregated_rating,rating,genres.name,game_modes.name,"
-                                   "multiplayer_modes.offlinemaxplayers,platforms.name,"
+                                   "multiplayer_modes.offlinemax,platforms.name,"
                                    "involved_companies.developer,involved_companies.publisher,"
                                    "involved_companies.company.name,cover.image_id,screenshots.image_id,"
                                    "artworks.image_id,artworks.width,artworks.height;").arg(clean);
@@ -1312,15 +1341,14 @@ void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonA
     const int tries = m_settings.value(QStringLiteral("retries")).toInt();
     note(LOGMSG("IGDB: searching \"%1\" (system `%2`, platform %3)").arg(clean, job.system).arg(platform));
     igdbPost(query_for(platform), [this, platform, query_for, tries, done, clean](int status, const QByteArray& body){
-        const QJsonArray games = QJsonDocument::fromJson(body).array();
-        note(LOGMSG("IGDB: answered %1, %2 games%3").arg(status).arg(games.size())
-             .arg(status == 200 ? QString() : QStringLiteral(": ") + QString::fromUtf8(body.left(200))));
+        // an error comes back as a list too (of error objects), so only a 200 is a list of games
+        const QJsonArray games = igdb_games(status, body);
+        note(igdb_answer(status, body));
         if (status == 200 && games.isEmpty() && platform > 0 && !m_stop) {
             note(LOGMSG("IGDB: nothing on that platform, searching \"%1\" on every platform").arg(clean));
             igdbPost(query_for(0), [this, done](int st, const QByteArray& b){
-                const QJsonArray all = QJsonDocument::fromJson(b).array();
-                note(LOGMSG("IGDB: answered %1, %2 games").arg(st).arg(all.size()));
-                done(st, all);
+                note(igdb_answer(st, b));
+                done(st, igdb_games(st, b));
             }, tries);
             return;
         }
@@ -1363,6 +1391,13 @@ void Scraper::igdbSearch(const QString& name)
             finishGame(m_stop_reason, false);
             return;
         }
+        if (status != 200) {
+            m_failed++;
+            finishGame(status == 0
+                ? tr("IGDB: no connection")
+                : tr("IGDB error %1: see Scraper > Log").arg(status), false);
+            return;
+        }
         m_igdb_results = games;
         QVariantList candidates;
         for (const QJsonValue& v : games)
@@ -1394,7 +1429,7 @@ void Scraper::igdbAuto(bool after_other)
         }
         if (status != 200)
             Log::warning(LOG_TAG, LOGMSG("IGDB: %1 for `%2`").arg(status).arg(name));
-        if (!games.isEmpty()) {
+        if (status == 200 && !games.isEmpty()) {
             QJsonObject game = games.first().toObject();
             for (const QJsonValue& v : games) {
                 if (normalized(v.toObject().value(QStringLiteral("name")).toString()) == normalized(name)) {
@@ -1702,6 +1737,10 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.media_folder.isEmpty() ? job.collection : job.media_folder)
                       % QLatin1Char('/') % media.folder;
     QDir().mkpath(dir);
+    // the art folder is no place for the gallery app
+    QFile nomedia(m_data_dir % QStringLiteral("/.nomedia"));
+    if (!nomedia.exists() && nomedia.open(QIODevice::WriteOnly))
+        nomedia.close();
     const bool has_file = !job.path.isEmpty() && !job.path.startsWith(QLatin1String("android:"));
     // (a content:// entry: its last part, decoded)
     const QString file_part = job.path.contains(QLatin1String("://"))
@@ -1711,6 +1750,8 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     const QString file_path = dir % QLatin1Char('/') % base % QLatin1Char('.') % ext;
     QSaveFile file(file_path);
     if (!file.open(QIODevice::WriteOnly) || file.write(body) != body.size() || !file.commit()) {
+        m_picture_failures++;
+        note(LOGMSG("Couldn't write `%1`: %2").arg(file_path, file.errorString()));
         downloadNext();
         return;
     }

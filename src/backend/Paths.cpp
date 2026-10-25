@@ -25,12 +25,14 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QString>
+#include <QThread>
 
 #include <functional>
 
@@ -66,6 +68,7 @@ QString get_private_config_dir()
 }
 
 const QString ROOT_FILE = QStringLiteral("pegasusx-root.txt");
+QString s_root_missing;  // the Pegasus X folder named but not usable at this start
 
 // the Pegasus X folder, when pegasusx-root.txt names one that can be used
 QString get_appconfig_dir()
@@ -74,8 +77,22 @@ QString get_appconfig_dir()
     QFile file(own + QLatin1Char('/') + ROOT_FILE);
     if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         const QString root = QDir::cleanPath(QString::fromUtf8(file.readAll()).trimmed());
-        if (!root.isEmpty() && (QFileInfo(root).isDir() || QDir().mkpath(root)) && QFileInfo(root).isWritable())
-            return root;
+        if (!root.isEmpty()) {
+            const auto usable = [&root]{
+                return (QFileInfo(root).isDir() || QDir().mkpath(root)) && QFileInfo(root).isWritable();
+            };
+#ifdef Q_OS_ANDROID
+            // an SD card can still be mounting right after boot
+            QElapsedTimer timer;
+            timer.start();
+            while (!usable() && timer.elapsed() < 6000)
+                QThread::msleep(250);
+#endif
+            if (usable())
+                return root;
+            // the app's own folder for now, and a note about it
+            s_root_missing = root;
+        }
     }
     return own;
 }
@@ -136,8 +153,9 @@ const QStringList& configDirs()
         if (QFileInfo::exists(local_config_dir))
             paths << local_config_dir;
 
+        // Pegasus X: the Pegasus X folder, in portable mode too
+        paths << writableConfigDir();
         if (!AppSettings::general.portable) {
-            paths << writableConfigDir();
             paths << QSP::standardLocations(QSP::AppConfigLocation);
             paths << QSP::standardLocations(QSP::AppDataLocation);
 
@@ -172,6 +190,12 @@ QString privateConfigDir()
 {
     static const QString dir = get_private_config_dir();
     return dir;
+}
+
+QString pegasusxRootMissing()
+{
+    writableConfigDir();  // decided at the first call
+    return s_root_missing;
 }
 
 QString pegasusxRootSetting()

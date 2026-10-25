@@ -69,6 +69,9 @@ int esde_delete_import(const QStringList& folders);
 QString imports_game_dir();
 /// Older edits files in metafiles/ become override files (once, at startup)
 void move_edits_to_overrides();
+/// Pegasus X: makes the relative paths in an override file absolute, after
+/// it moved from `old_dir` (where they were written) to where it is now
+bool rebase_override_file(const QString& file_path, const QString& old_dir);
 
 struct EsdeImportResult {
     int systems = 0;

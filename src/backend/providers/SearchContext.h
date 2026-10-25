@@ -65,6 +65,7 @@ public:
     bool has_pending_downloads() const;
 
     const HashMap<QString, model::GameFile*>& current_filepath_to_entry_map() const { return m_filepath_to_gamefile; }
+    const HashMap<QString, model::GameFile*>& current_uri_to_entry_map() const { return m_uri_to_gamefile; }
     const HashMap<model::Collection*, std::vector<model::Game*>>& current_collection_games() const { return m_collection_games; }
 
     /// Deletes everything found so far, without finalizing (for a temporary

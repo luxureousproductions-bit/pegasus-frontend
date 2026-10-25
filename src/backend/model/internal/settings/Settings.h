@@ -75,6 +75,9 @@ class Settings : public QObject {
     Q_PROPERTY(bool rootChosen READ rootChosen NOTIFY pegasusxSettingsChanged)
     /// no folder chosen and never asked: the setup shows at the first start
     Q_PROPERTY(bool rootSetupNeeded READ rootSetupNeeded NOTIFY pegasusxSettingsChanged)
+    /// the Pegasus X folder that couldn't be used at this start (SD card
+    /// missing?), the app's own folder being used instead; else empty
+    Q_PROPERTY(QString rootMissing READ rootMissing CONSTANT)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
@@ -96,9 +99,12 @@ public:
     QString defaultRootDir() const;
     bool rootChosen() const;
     bool rootSetupNeeded() const;
+    QString rootMissing() const;
     Q_INVOKABLE void setRootSetupAsked();
     /// Makes `dir` the Pegasus X folder (from the next start); with `move_data`,
-    /// what's in the folder used now is copied there first. "" or what's wrong.
+    /// what's in the folder used now is copied there first. Returns what's
+    /// wrong right away, or "" when the work started: rootDirChanged tells how
+    /// it went (the copy runs in the background).
     Q_INVOKABLE QString setRootDir(const QString& dir, bool move_data);
     /// how much is in the folder used now (files, MB), for the setup
     Q_INVOKABLE QVariantMap rootDirContents() const;
@@ -310,6 +316,8 @@ public:
 
 signals:
     void pegasusxSettingsChanged();
+    /// setRootDir finished: `error` is empty when the folder is set
+    void rootDirChanged(QString error);
     /// Pegasus X: the theme in use was updated in the theme downloader: built again
     void currentThemeUpdated();
     /// Pegasus X: the menu closes, back to the theme (eg. "Use it now")

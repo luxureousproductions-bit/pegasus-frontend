@@ -57,6 +57,7 @@
 #include <QUrlQuery>
 #include <QDateTime>
 #include <QSettings>
+#include <QSaveFile>
 #include <QFile>
 #include <QRegularExpression>
 #include <QDir>
@@ -153,6 +154,11 @@ bool Settings::rootChosen() const
     return !paths::pegasusxRootSetting().isEmpty();
 }
 
+QString Settings::rootMissing() const
+{
+    return paths::pegasusxRootMissing();
+}
+
 bool Settings::rootSetupNeeded() const
 {
     return !rootChosen() && !QFileInfo::exists(paths::privateConfigDir() + QStringLiteral("/pegasusx-root-asked"));
@@ -196,6 +202,60 @@ int copy_tree(const QString& from, const QString& to, const QStringList& skip, Q
     }
     return copied;
 }
+
+// a text file with the old folder's paths in it: the new folder's
+void rewrite_paths_in(const QString& file_path, const QString& from, const QString& to)
+{
+    QFile file(file_path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
+    QString text = QString::fromUtf8(file.readAll());
+    file.close();
+    const QString before = text;
+    text.replace(from + QLatin1Char('/'), to + QLatin1Char('/'));
+    static const QRegularExpression rx_line_end(QStringLiteral("(^|\n)") + QRegularExpression::escape(from) + QStringLiteral("(\r?\n|$)"));
+    text.replace(rx_line_end, QStringLiteral("\1") + to + QStringLiteral("\2"));
+    if (text == before)
+        return;
+    QSaveFile out(file_path);
+    if (out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        out.write(text.toUtf8());
+        out.commit();
+    }
+}
+
+// after the copy: what in the new folder still points at the old one
+void fix_moved_root(const QString& now, const QString& dir, const QString& old_media)
+{
+    // the game directories (the imports folder is one)
+    rewrite_paths_in(dir + QStringLiteral("/game_dirs.txt"), now, dir);
+    // the art folder setting
+    {
+        QSettings ini(dir + QStringLiteral("/pegasusx.ini"), QSettings::IniFormat);
+        const QString media = QDir::cleanPath(ini.value(QStringLiteral("data/dir")).toString());
+        if (media == now + QStringLiteral("/media") || old_media == now + QStringLiteral("/media"))
+            ini.remove(QStringLiteral("data/dir"));
+        else if (media.startsWith(now + QLatin1Char('/')))
+            ini.setValue(QStringLiteral("data/dir"), dir + media.mid(now.length()));
+    }
+#ifdef WITH_COMPAT_ESDE
+    // the metadata files' relative paths were written for the old place
+    for (const QString& sub : { QStringLiteral("/metadata/overrides"), QStringLiteral("/metadata/imports"), QStringLiteral("/metadata/imports-fill") }) {
+        const QDir folder(dir + sub);
+        for (const QFileInfo& finfo : folder.entryInfoList({ QStringLiteral("*.metadata.pegasus.txt") }, QDir::Files))
+            providers::esde::rebase_override_file(finfo.absoluteFilePath(), now + sub);
+    }
+#endif
+}
+
+// the art folder is no place for the gallery app
+void hide_from_gallery(const QString& dir)
+{
+    QDir().mkpath(dir);
+    QFile marker(dir + QStringLiteral("/.nomedia"));
+    if (!marker.exists() && marker.open(QIODevice::WriteOnly))
+        marker.close();
+}
 } // namespace
 
 QVariantMap Settings::rootDirContents() const
@@ -236,22 +296,38 @@ QString Settings::setRootDir(const QString& dir_in, bool move_data)
         probe.remove();
     }
     if (move_data) {
-        QString error;
-        // the Pegasus X folder setting itself and the caches stay out
-        const int copied = copy_tree(now, dir, { QStringLiteral("pegasusx-root.txt"), QStringLiteral("pegasusx-root-asked"),
-                                                  QStringLiteral(".pegasusx-write-test") }, error);
-        if (copied < 0)
-            return error;
-        Log::info(LOGMSG("Pegasus X folder: %1 files copied from `%2` to `%3`").arg(copied).arg(now, dir));
-        // art kept in the old folder's media: in the new one's
-        const QString old_media = QDir::cleanPath(dataDir());
-        if (old_media == now + QStringLiteral("/media") || old_media.isEmpty())
-            setDataDir(QString());
+        // never over another Pegasus setup's files (upstream Pegasus's folder, say)
+        const QDir target(dir);
+        if (target.exists(QStringLiteral("settings.txt")) || target.exists(QStringLiteral("game_dirs.txt"))
+                || target.exists(QStringLiteral("metadata")) || target.exists(QStringLiteral("pegasusx.ini")))
+            return tr("%1 already holds Pegasus data. \"Use it, start fresh\" uses what's there; or pick another folder.").arg(dir);
     }
-    if (!paths::setPegasusxRootSetting(dir))
-        return tr("Couldn't save the folder setting.");
-    setRootSetupAsked();
-    emit pegasusxSettingsChanged();
+    const QString old_media = QDir::cleanPath(dataDir());
+    // the copy can take a while (the art): off the UI thread
+    QtConcurrent::run([this, now, dir, move_data, old_media]{
+        QString error;
+        if (move_data) {
+            // the Pegasus X folder setting itself and the caches stay out
+            const int copied = copy_tree(now, dir, { QStringLiteral("pegasusx-root.txt"), QStringLiteral("pegasusx-root-asked"),
+                                                      QStringLiteral(".pegasusx-write-test") }, error);
+            if (copied >= 0) {
+                Log::info(LOGMSG("Pegasus X folder: %1 files copied from `%2` to `%3`").arg(copied).arg(now, dir));
+                fix_moved_root(now, dir, old_media);
+            }
+        }
+        if (error.isEmpty()) {
+            hide_from_gallery(dir + QStringLiteral("/media"));
+            if (!paths::setPegasusxRootSetting(dir))
+                error = tr("Couldn't save the folder setting.");
+        }
+        QMetaObject::invokeMethod(this, [this, error]{
+            if (error.isEmpty()) {
+                setRootSetupAsked();
+                emit pegasusxSettingsChanged();
+            }
+            emit rootDirChanged(error);
+        }, Qt::QueuedConnection);
+    });
     return {};
 }
 
@@ -650,6 +726,16 @@ void Settings::requestAndroidGames(const QString& action, const QString& collect
             ? addAndroidGames(collection_name)
             : matchAndroidGames(collection_name);
         QMetaObject::invokeMethod(this, [this, action, collection_name, count]{
+#ifdef WITH_COMPAT_ESDE
+            // the added games are in Pegasus X's imports folder, a game directory
+            if (action == QLatin1String("add") && count > 0) {
+                QSet<QString> known;
+                AppSettings::parse_gamedirs([&known](const QString& line){ known.insert(::pretty_path(line)); });
+                const QString imports = providers::esde::imports_game_dir();
+                if (!known.contains(::pretty_path(QFileInfo(imports))))
+                    addGameDir(imports);
+            }
+#endif
             emit androidGamesDone(action, collection_name, count);
         }, Qt::QueuedConnection);
     });
@@ -1528,11 +1614,10 @@ void Settings::checkScraperAccounts()
         query.addQueryItem(QStringLiteral("client_id"), settings.value(QStringLiteral("igdbClientId")).toString().trimmed());
         query.addQueryItem(QStringLiteral("client_secret"), settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed());
         query.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("client_credentials"));
-        QUrl url(QStringLiteral("https://id.twitch.tv/oauth2/token"));
-        url.setQuery(query);
-        QNetworkRequest request(url);
+        // the secret in the body, as the scraper does, never in the URL
+        QNetworkRequest request(QUrl(QStringLiteral("https://id.twitch.tv/oauth2/token")));
         request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
-        QNetworkReply* const reply = m_netman->post(request, QByteArray());
+        QNetworkReply* const reply = m_netman->post(request, query.toString(QUrl::FullyEncoded).toUtf8());
         connect(reply, &QNetworkReply::finished, this, [reply, result, finish]{
             const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
             const bool ok = status == 200 && QJsonDocument::fromJson(reply->readAll()).object().contains(QStringLiteral("access_token"));
@@ -1941,11 +2026,12 @@ QString Settings::importArt(const QString& source, const QString& collection_nam
     const auto safe = [](QString text) {
         static const QRegularExpression rx_bad(QStringLiteral("[\\\\/:*?\"<>|]"));
         text.replace(rx_bad, QStringLiteral("_"));
-        return text.simplified();
+        return text.trimmed();  // as the scraper names its files
     };
     // media/<system>/<kind>: the collection's short name (as the scraper)
     const QString dir = clean_data + QLatin1Char('/') + safe(short_name.isEmpty() ? collection_name : short_name)
                       + QLatin1Char('/') + safe(kind_folder);
+    hide_from_gallery(clean_data);
     if (!QDir().mkpath(dir))
         return source;
     // one file per game and kind, named like the scraper names them (the

@@ -1200,6 +1200,12 @@ QString existing_collection_name(const QString& dir)
         if (match.hasMatch())
             return match.captured(1).trimmed();
     }
+    // else the name the last import used (renamed in Settings > Library, maybe)
+    for (const QString& file : import_files_of(dir)) {
+        const auto match = rx.match(read_file(file));
+        if (match.hasMatch())
+            return match.captured(1).trimmed();
+    }
     return {};
 }
 
@@ -1251,6 +1257,9 @@ QString local_path(const QString& value)
 /// The launch lines in an earlier import file, so importing again keeps the
 /// emulators picked since: game file -> command, and the collection's in
 /// `collection_launch`
+void migrate_in_folder_edits(const QString& old_path, const QString& collection_name);
+QStringList aliases_of(const QString& key);
+
 HashMap<QString, QString> previous_launches(const QString& file_path, QString& collection_launch)
 {
     HashMap<QString, QString> out;
@@ -1732,9 +1741,15 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
                 continue;
             write(fill_path, fill_text, fill_games);
             // the file an older Pegasus X wrote into the game folder would
-            // define the games a second time: gone
-            if (QFileInfo::exists(old_path) && QFile::remove(old_path))
-                Log::info(log_tag, LOGMSG("Removed `%1` (imports live in the Pegasus X folder now)").arg(old_path));
+            // define the games a second time: what was edited in it goes to
+            // the override file, then it's set aside
+            if (QFileInfo::exists(old_path)) {
+                migrate_in_folder_edits(old_path, collection_name);
+                const QString aside = old_path % QStringLiteral(".migrated");
+                QFile::remove(aside);
+                if (QFile::rename(old_path, aside))
+                    Log::info(log_tag, LOGMSG("Set aside `%1` as `%2` (imports live in the Pegasus X folder now)").arg(old_path, aside));
+            }
 
             result.games += written_games + fill_games;
             if (written_games > 0)
@@ -2112,6 +2127,51 @@ struct MetaFile {
         return rx_uri.match(value).hasMatch() && !QFileInfo(value).isAbsolute();
     }
 
+    /// A game file as written: relative when it's inside this file's folder
+    /// (so it moves with the ROM folder), absolute otherwise (the override
+    /// files live in the Pegasus X folder, which can move)
+    QString file_value(const QString& game_path) const {
+        if (is_uri(game_path))
+            return game_path;
+        const QString rel = QDir(dir).relativeFilePath(game_path);
+        return rel.startsWith(QLatin1String("..")) ? game_path : rel;
+    }
+
+    /// The paths in this file, written for `old_dir`, made absolute (after
+    /// the file moved to another folder)
+    bool rebase_from(const QString& old_dir) {
+        const QDir base(old_dir);
+        bool changed = false;
+        for (size_t b = 0; b < blocks.size(); b++) {
+            // the keys with paths, each once (set_entry replaces every entry of a key)
+            QStringList keys;
+            for (const MetaEntry& e : blocks[b].entries) {
+                const bool path_key = e.key == QLatin1String("file") || e.key == QLatin1String("files")
+                    || e.key.startsWith(QLatin1String("assets.")) || e.key == QLatin1String("x-manual");
+                if (path_key && !keys.contains(e.key))
+                    keys.append(e.key);
+            }
+            for (const QString& key : keys) {
+                QStringList values;
+                bool any = false;
+                for (const MetaEntry& e : blocks[b].entries) {
+                    if (e.key != key)
+                        continue;
+                    for (const QString& v : e.values) {
+                        const bool relative = !is_uri(v) && !QFileInfo(v).isAbsolute() && !v.startsWith(QLatin1String("image://"));
+                        values.append(relative ? ::clean_abs_path(QFileInfo(base, v)) : v);
+                        any = any || relative;
+                    }
+                }
+                if (any) {
+                    set_entry(b, { key }, key, values);
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
+
     /// Sets (or removes, if `command` is empty) the launch entry of a block
     void set_launch(int block_index, const QString& command) {
         const MetaBlock& block = blocks.at(static_cast<size_t>(block_index));
@@ -2218,7 +2278,7 @@ struct MetaFile {
             insert_at--;
         lines.insert(insert_at, QString());
         lines.insert(insert_at + 1, QStringLiteral("game: ") % title.simplified());
-        lines.insert(insert_at + 2, QStringLiteral("file: ") % (is_uri(game_path) ? game_path : QDir(dir).relativeFilePath(game_path)));
+        lines.insert(insert_at + 2, QStringLiteral("file: ") % file_value(game_path));
         parse();
         for (size_t i = 0; i < blocks.size(); i++) {
             if (blocks[i].first == insert_at + 1)
@@ -2260,7 +2320,7 @@ struct MetaFile {
         const QStringList block_lines {
             QString(),
             QStringLiteral("game: ") % title,
-            QStringLiteral("file: ") % (is_uri(game_path) ? game_path : QDir(dir).relativeFilePath(game_path)),
+            QStringLiteral("file: ") % file_value(game_path),
             QStringLiteral("launch: ") % command.simplified(),
         };
         for (int i = 0; i < block_lines.size(); i++)
@@ -2275,10 +2335,13 @@ struct MetaFile {
         if (!QFileInfo::exists(backup) && QFileInfo(path).fileName() != IMPORT_FILE_NAME)
             QFile::copy(path, backup);
 
-        QFile file(path);
+        // in one go: the library scan may be reading it
+        QSaveFile file(path);
         if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
             return QStringLiteral("Could not write to %1 (no write access?)").arg(path);
         file.write((lines.join(newline) + newline).toUtf8());
+        if (!file.commit())
+            return QStringLiteral("Could not write to %1 (%2)").arg(path, file.errorString());
         return {};
     }
 };
@@ -2655,6 +2718,35 @@ std::vector<MetaFile> files_defining(const QString& collection_name)
 } // namespace
 
 
+namespace {
+// the ROMs root of a collection's files: the parent of the folder of its
+// first metadata file, or, for an import (in the Pegasus X folder), of the
+// folder it was made from (its "# folder:" line)
+QString rom_root_of(const QStringList& files)
+{
+    for (const QString& path : files) {
+        QString folder = QFileInfo(path).absolutePath();
+        if (path.startsWith(imports_dir() % QLatin1Char('/')) || path.startsWith(imports_fill_dir() % QLatin1Char('/'))) {
+            folder.clear();
+            QFile file(path);
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                for (int i = 0; i < 8 && !file.atEnd(); i++) {
+                    const QString line = QString::fromUtf8(file.readLine()).trimmed();
+                    if (line.startsWith(QLatin1String("# folder:"))) {
+                        folder = line.mid(9).trimmed();
+                        break;
+                    }
+                }
+            }
+            if (folder.isEmpty())
+                continue;
+        }
+        return QFileInfo(folder).absolutePath();
+    }
+    return {};
+}
+} // namespace
+
 std::vector<EmulatorCollection> emulator_collections()
 {
     std::vector<EmulatorCollection> out;
@@ -2694,6 +2786,29 @@ std::vector<EmulatorCollection> emulator_collections()
         }
     }
 
+    // the override files: the emulator picked in Settings > Library wins
+    for (EmulatorCollection& coll : out) {
+        MetaFile over;
+        if (!over.load(edits_file_path(coll.name)))
+            continue;
+        for (const MetaBlock& block : over.blocks) {
+            if (block.is_collection) {
+                if (block.name != coll.name)
+                    continue;
+                const MetaEntry* launch = block.entry(QStringLiteral("launch"));
+                if (!launch)
+                    launch = block.entry(QStringLiteral("command"));
+                if (launch && !launch->values.isEmpty())
+                    coll.command = launch->values.join(QLatin1Char(' '));
+            }
+            else if (block.collection_index >= 0
+                     && over.blocks[static_cast<size_t>(block.collection_index)].name == coll.name
+                     && (block.entry(QStringLiteral("launch")) || block.entry(QStringLiteral("command")))) {
+                coll.game_overrides++;
+            }
+        }
+    }
+
     // what can launch them
     const std::shared_ptr<const EmulatorSetup> setup_ptr = shared_emulator_setup();
     const EmulatorSetup& setup = *setup_ptr;
@@ -2706,9 +2821,7 @@ std::vector<EmulatorCollection> emulator_collections()
             || coll.system == QLatin1String("android") || coll.short_name.toLower() == QLatin1String("android");
         coll.system_fullname = sys.fullname.isEmpty() ? sys.name : sys.fullname;
 
-        const QString rom_root = coll.files.isEmpty() ? QString()
-            : QFileInfo(QFileInfo(coll.files.first()).absolutePath()).absolutePath();
-        coll.options = setup.choices_for(coll.system, rom_root);
+        coll.options = setup.choices_for(coll.system, rom_root_of(coll.files));
 
         const QString key = same_command_key(coll.command);
         for (const EmulatorChoice& choice : coll.options) {
@@ -2886,6 +2999,69 @@ int override_game_block(MetaFile& file, int coll_index, const QString& wanted, c
     return file.add_game_block(coll_index, title.isEmpty() ? QFileInfo(wanted).completeBaseName() : title, wanted);
 }
 
+// the blocks an older Pegasus X marked as edited in an import file it wrote
+// into the game folder: their edited values into the collection's override file
+void migrate_in_folder_edits(const QString& old_path, const QString& collection_name)
+{
+    MetaFile old;
+    if (!old.load(old_path))
+        return;
+    int coll_index = -1;
+    MetaFile over = override_file(collection_name, coll_index);
+    const QDir old_base(old.dir);
+    int moved = 0;
+    for (const MetaBlock& block : old.blocks) {
+        if (block.is_collection)
+            continue;
+        const MetaEntry* const marker = block.entry(QStringLiteral("x-pegasusx-edited"));
+        const MetaEntry* const launch = block.entry(QStringLiteral("launch"));
+        if (!marker && !launch)
+            continue;
+        const QStringList files = old.game_files(block);
+        if (files.isEmpty())
+            continue;
+        QStringList keys;
+        if (marker) {
+            for (const QString& value : marker->values) {
+                for (const QString& k : value.split(QLatin1Char(','), QString::SkipEmptyParts))
+                    keys.append(k.trimmed().toLower());
+            }
+        }
+        const int bi = override_game_block(over, coll_index, files.first(), block.name);
+        if (bi < 0)
+            continue;
+        QStringList edited;
+        for (const QString& key : keys) {
+            if (key == QLatin1String("title")) {
+                over.set_header(static_cast<size_t>(bi), block.name);
+                edited.append(key);
+                continue;
+            }
+            QStringList values;
+            for (const MetaEntry& e : block.entries) {
+                if (!aliases_of(key).contains(e.key))
+                    continue;
+                for (const QString& v : e.values) {
+                    const bool path_key = key.startsWith(QLatin1String("assets.")) || key == QLatin1String("x-manual");
+                    values.append(path_key && !MetaFile::is_uri(v) && !QFileInfo(v).isAbsolute()
+                                  ? ::clean_abs_path(QFileInfo(old_base, v)) : v);
+                }
+            }
+            over.set_entry(static_cast<size_t>(bi), aliases_of(key), key, values);
+            edited.append(key);
+        }
+        if (launch && !launch->values.isEmpty())
+            over.set_launch(bi, launch->values.join(QLatin1Char(' ')));
+        if (!edited.isEmpty())
+            over.mark_edited(static_cast<size_t>(bi), edited);
+        moved++;
+    }
+    if (moved > 0) {
+        over.save();
+        Log::info(QStringLiteral("Metadata"), LOGMSG("Kept %1 edited games from `%2` in `%3`").arg(moved).arg(old_path, over.path));
+    }
+}
+
 } // namespace
 
 std::vector<EmulatorChoice> collection_choices(const QString& collection_name, const QString& short_name, const QString& rom_root)
@@ -3002,6 +3178,32 @@ std::vector<GameEmulator> game_emulators(const QString& collection_name)
             if (!launch || files.isEmpty())
                 continue;
             out.push_back({ files.first(), launch->values.join(QLatin1Char(' ')) });
+        }
+    }
+    // the override file: what was picked in Settings > Library wins
+    MetaFile over;
+    if (over.load(edits_file_path(collection_name))) {
+        for (const MetaBlock& block : over.blocks) {
+            if (block.is_collection || block.collection_index < 0)
+                continue;
+            if (over.blocks[static_cast<size_t>(block.collection_index)].name != collection_name)
+                continue;
+            const MetaEntry* launch = block.entry(QStringLiteral("launch"));
+            if (!launch)
+                launch = block.entry(QStringLiteral("command"));
+            const QStringList files = over.game_files(block);
+            if (!launch || files.isEmpty())
+                continue;
+            const QString command = launch->values.join(QLatin1Char(' '));
+            bool found = false;
+            for (GameEmulator& e : out) {
+                if (e.path == files.first()) {
+                    e.command = command;
+                    found = true;
+                }
+            }
+            if (!found)
+                out.push_back({ files.first(), command });
         }
     }
     return out;
@@ -3240,6 +3442,9 @@ void split_legacy_edits_file()
         stream << "\n" << parts.value(name).join(QLatin1Char('\n')) << "\n";
     }
     if (ok) {
+        // the parts' relative paths were written for metafiles/
+        for (const QString& name : order)
+            rebase_override_file(edits_file_path(name), QFileInfo(legacy).absolutePath());
         QFile::rename(legacy, legacy + QStringLiteral(".split-old"));
         QMutexLocker lock(&collection_files_mutex());
         collection_files_cache().clear();
@@ -3274,7 +3479,24 @@ void move_edits_to_overrides()
         }
         QFile::rename(metafiles % QLatin1Char('/') % name, target);
     }
+    // their relative paths were written for metafiles/
+    for (const QString& name : old)
+        rebase_override_file(overrides % QLatin1Char('/') % name.mid(QStringLiteral("pegasusx-edits-").length()), metafiles);
     Log::info(QStringLiteral("Metadata"), LOGMSG("Moved %1 edits files to `%2`").arg(old.size()).arg(overrides));
+}
+
+bool rebase_override_file(const QString& file_path, const QString& old_dir)
+{
+    MetaFile file;
+    if (!file.load(file_path) || !file.rebase_from(old_dir))
+        return false;
+    const QString error = file.save();
+    if (!error.isEmpty()) {
+        Log::warning(QStringLiteral("Metadata"), error);
+        return false;
+    }
+    Log::info(QStringLiteral("Metadata"), LOGMSG("Made the paths in `%1` absolute (it was in `%2`)").arg(file_path, old_dir));
+    return true;
 }
 
 MetadataLocation metadata_location(const QString& collection_name, const QString& game_path)
@@ -3519,15 +3741,23 @@ int match_android_games(const QString& collection_name)
         by_name.emplace(normalize_name(app.label), &app);
     }
 
+    // the games that have an emulator already, in their own file or the override file
+    QSet<QString> has_launch;
+    for (const GameEmulator& e : game_emulators(collection_name))
+        has_launch.insert(e.path);
+
+    // the matches go to the override file: your files are never written to
+    int coll_index = -1;
+    MetaFile over = override_file(collection_name, coll_index);
     int matched = 0;
-    for (MetaFile& file : files_defining(collection_name)) {
-        bool changed = false;
+    for (const MetaFile& file : files_defining(collection_name)) {
         for (size_t b = 0; b < file.blocks.size(); b++) {
             const MetaBlock& block = file.blocks[b];
             if (block.is_collection || block.collection_index < 0
                 || file.blocks[static_cast<size_t>(block.collection_index)].name != collection_name)
                 continue;
-            if (block.entry(QStringLiteral("launch")) || block.entry(QStringLiteral("command")))
+            const QStringList game_files = file.game_files(block);
+            if (game_files.isEmpty() || has_launch.contains(game_files.first()))
                 continue;
 
             // by package first, then by name
@@ -3557,13 +3787,15 @@ int match_android_games(const QString& collection_name)
             if (!app)
                 continue;
 
-            file.set_launch(static_cast<int>(b), android_app_command(app->component));
-            changed = true;
+            const int bi = override_game_block(over, coll_index, game_files.first(), block.name);
+            if (bi < 0)
+                continue;
+            over.set_launch(bi, android_app_command(app->component));
             matched++;
         }
-        if (changed && !file.save().isEmpty())
-            break;
     }
+    if (matched > 0 && !over.save().isEmpty())
+        return 0;
     return matched;
 }
 
@@ -3590,13 +3822,23 @@ int add_android_games(const QString& collection_name)
         }
     }
 
-    // the user's own file, not the ES-DE import's
-    std::stable_sort(files.begin(), files.end(), [](const MetaFile& a, const MetaFile& b) {
-        const bool a_import = QFileInfo(a.path).fileName() == IMPORT_FILE_NAME;
-        const bool b_import = QFileInfo(b.path).fileName() == IMPORT_FILE_NAME;
-        return !a_import && b_import;
-    });
-    MetaFile& target = files.front();
+    // into Pegasus X's own file for the collection, in the imports folder
+    // (a game directory): your files are never written to
+    const QString target_path = imports_dir() % QStringLiteral("/android-") % safe_file_stem(collection_name)
+                              % QStringLiteral(".metadata.pegasus.txt");
+    MetaFile target;
+    if (!target.load(target_path)) {
+        QDir().mkpath(imports_dir());
+        target.path = target_path;
+        target.dir = imports_dir();
+        target.lines = QStringList {
+            QStringLiteral("# Made by Pegasus X: the installed Android games added to a collection"),
+            QStringLiteral("# in Settings > Library > Emulators."),
+            QString(),
+            QStringLiteral("collection: ") % collection_name,
+        };
+        target.parse();
+    }
     int collection_index = -1;
     for (size_t b = 0; b < target.blocks.size(); b++) {
         if (target.blocks[b].is_collection && target.blocks[b].name == collection_name)
@@ -3604,6 +3846,13 @@ int add_android_games(const QString& collection_name)
     }
     if (collection_index < 0)
         return 0;
+    for (const MetaBlock& block : target.blocks) {
+        if (block.is_collection)
+            continue;
+        const QString from_files = package_of_files(target.game_files(block));
+        if (!from_files.isEmpty())
+            present.insert(from_files);
+    }
 
     int added = 0;
     for (const AndroidApp& app : android_apps()) {

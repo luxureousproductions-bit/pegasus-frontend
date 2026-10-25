@@ -375,6 +375,15 @@ Window {
                         firstRunSetup.setSource("menu/settings/RootFolderSetup.qml", { "firstRun": true });
                         firstRunSetup.focus = true;
                     }
+                    // the Pegasus X folder couldn't be used (SD card missing?): say so,
+                    // nothing done in this session is kept there
+                    else if (Internal.settings.rootMissing !== "" && Internal.settings.startupScreen() === "") {
+                        genericMessage.setSource("dialogs/GenericOkDialog.qml", {
+                            "title": qsTr("Pegasus X folder not found") + api.tr,
+                            "message": qsTr("%1 isn't there right now (SD card not mounted?). Pegasus X is using its own storage for this session, so what you change now isn't kept in that folder. Put the card back and start Pegasus X again, or pick another folder in Settings > Pegasus X folder.")
+                                .arg(Internal.settings.rootMissing) + api.tr });
+                        genericMessage.focus = true;
+                    }
                 }
                 // Reload all games: the theme, not the menu (content would
                 // give the focus back to the menu, still on the settings)

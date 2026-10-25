@@ -116,6 +116,7 @@ private:
     int m_saved = 0;
     int m_not_found = 0;
     int m_failed = 0;
+    int m_run = 0;  // which start() the in-flight answers belong to
     QString m_current;
     QString m_last_title;
     QString m_last_result;
