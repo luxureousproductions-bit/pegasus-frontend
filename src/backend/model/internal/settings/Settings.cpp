@@ -34,6 +34,7 @@
 
 // built on every platform
 #include "providers/LibraryRules.h"
+#include "providers/Overrides.h"
 #include "ScraperKeys.h"
 #include "Scraper.h"
 #include "ThemeStore.h"
@@ -74,7 +75,11 @@
 
 
 namespace {
-QString pegasusx_settings_path();
+// Pegasus X: settings of its own features, kept apart from Pegasus' own
+QString pegasusx_settings_path()
+{
+    return paths::writableConfigDir() + QStringLiteral("/pegasusx.ini");
+}
 
 void rewrite_gamedircfg(const std::function<void(QTextStream&)>& callback)
 {
@@ -104,6 +109,20 @@ void change_mouse_support(bool enabled)
 
 
 namespace model {
+namespace {
+// The Emulators screen's background work: one thread, so changes are written
+// in the order they were made and a read sees the changes before it
+QThreadPool* emulator_pool()
+{
+    static QThreadPool* pool = [] {
+        QThreadPool* p = new QThreadPool;
+        p->setMaxThreadCount(1);
+        p->setExpiryTimeout(-1);
+        return p;
+    }();
+    return pool;
+}
+} // namespace
 
 Settings::Settings(QObject* parent)
     : QObject(parent)
@@ -285,6 +304,7 @@ void Settings::postInit()
 #ifdef WITH_COMPAT_ESDE
     // before the library is read: no game in a collection that isn't its own
     providers::esde::split_legacy_edits_file();
+    providers::esde::move_edits_to_overrides();
 #endif
     change_mouse_support(AppSettings::general.mouse_support);
 #ifdef WITH_COMPAT_ESDE
@@ -317,10 +337,9 @@ void Settings::postInit()
         }
         QSet<QString> known;
         AppSettings::parse_gamedirs([&known](const QString& line){ known.insert(::pretty_path(line)); });
-        for (const QString& dir : written) {
-            if (!known.contains(::pretty_path(QFileInfo(dir))))
-                addGameDir(dir);
-        }
+        const QString imports = providers::esde::imports_game_dir();
+        if (!written.isEmpty() && !known.contains(::pretty_path(QFileInfo(imports))))
+            addGameDir(imports);
     }
 #endif
 
@@ -399,26 +418,6 @@ QStringList Settings::gameDirs() const
     return dirlist;
 }
 
-namespace {
-// Pegasus X: settings of its own features, kept apart from Pegasus' own
-QString pegasusx_settings_path()
-{
-    return paths::writableConfigDir() + QStringLiteral("/pegasusx.ini");
-}
-
-// The Emulators screen's background work: one thread, so changes are written
-// in the order they were made and a read sees the changes before it
-QThreadPool* emulator_pool()
-{
-    static QThreadPool* pool = [] {
-        QThreadPool* p = new QThreadPool;
-        p->setMaxThreadCount(1);
-        p->setExpiryTimeout(-1);
-        return p;
-    }();
-    return pool;
-}
-} // namespace
 
 bool Settings::esdeImportSupported() const
 {
@@ -465,6 +464,17 @@ QVariantList Settings::esdeImportSystems() const
     }
 #endif
     return out;
+}
+
+QString Settings::esdeImportUse() const
+{
+    return providers::overrides::import_fill_mode();
+}
+
+void Settings::setEsdeImportUse(const QString& mode)
+{
+    providers::overrides::set_import_fill_mode(mode);
+    emit esdeImportDirChanged();
 }
 
 bool Settings::esdeAppsAsAndroid() const
@@ -924,10 +934,9 @@ void Settings::importRomFolder(const QString& folder)
             AppSettings::parse_gamedirs([&known](const QString& line){
                 known.insert(::pretty_path(line));
             });
-            for (const QString& dir : result.folders) {
-                if (!known.contains(::pretty_path(QFileInfo(dir))))
-                    addGameDir(dir);
-            }
+            const QString imports = providers::esde::imports_game_dir();
+            if (!result.written_files.isEmpty() && !known.contains(::pretty_path(QFileInfo(imports))))
+                addGameDir(imports);
             emit romFolderImportFinished(QVariantMap {
                 { QStringLiteral("systems"), result.systems },
                 { QStringLiteral("games"), result.games },
@@ -967,10 +976,9 @@ void Settings::startEsdeImport(const QStringList& system_names)
             AppSettings::parse_gamedirs([&known](const QString& line){
                 known.insert(::pretty_path(line));
             });
-            for (const QString& folder : result.folders) {
-                if (!known.contains(::pretty_path(QFileInfo(folder))))
-                    addGameDir(folder);
-            }
+            const QString imports = providers::esde::imports_game_dir();
+            if (!result.written_files.isEmpty() && !known.contains(::pretty_path(QFileInfo(imports))))
+                addGameDir(imports);
 
             m_esde_import_running = false;
             emit esdeImportRunningChanged();

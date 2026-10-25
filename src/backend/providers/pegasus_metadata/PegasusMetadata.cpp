@@ -530,7 +530,8 @@ void Metadata::apply_entry(ParserState& ps, const metafile::Entry& entry, Search
         // Pegasus X: where the entry came from, so duplicates can be told
         // apart (Settings > Library): your own file, or an ES-DE import
         ps.cur_game->extraMapMut().insert(QStringLiteral("pegasusx-source"),
-            QStringList { QFileInfo(ps.path).fileName() == QLatin1String("esde-import.metadata.pegasus.txt")
+            QStringList { (QFileInfo(ps.path).fileName() == QLatin1String("esde-import.metadata.pegasus.txt")
+                           || QDir::cleanPath(ps.path).startsWith(paths::writableConfigDir() + QStringLiteral("/metadata/imports/")))
                 ? QStringLiteral("esde") : QStringLiteral("user") });
 
         // Add to the ones found so far

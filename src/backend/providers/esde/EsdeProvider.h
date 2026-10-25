@@ -61,9 +61,14 @@ struct EsdeImportSystem {
     QStringList imported_files;  ///< the esde-import files already written there
 };
 
-/// Removes the ES-DE import files of these folders (your own files stay).
+/// Removes the import files made from these folders (your own files stay).
 /// Returns how many were removed.
 int esde_delete_import(const QStringList& folders);
+/// The folder the import files are written to (a game directory):
+/// <Pegasus X folder>/metadata/imports
+QString imports_game_dir();
+/// Older edits files in metafiles/ become override files (once, at startup)
+void move_edits_to_overrides();
 
 struct EsdeImportResult {
     int systems = 0;

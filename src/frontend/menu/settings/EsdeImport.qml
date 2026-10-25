@@ -121,6 +121,7 @@ FocusScope {
             return out;
         }
         out.push({ "kind": "folder" });
+        out.push({ "kind": "use" });
         for (var k = 0; k < systems.length; k++) {
             if (systems[k].name === "androidgames")
                 out.push({ "kind": "androidgames" });
@@ -223,6 +224,12 @@ FocusScope {
         var row = rows[index];
         if (row.kind === "folder")
             filePicker.focus = true;
+        else if (row.kind === "use") {
+            var use = Internal.settings.esdeImportUse;
+            Internal.settings.esdeImportUse = use === "media" ? "fill" : use === "fill" ? "replace" : "media";
+            otherChange = true;
+            imported = true;  // applied when the library is read again
+        }
         else if (row.kind === "androidgames") {
             if (!mergeTaken) {
                 mergeStart = root.mergeAndroid;
@@ -413,6 +420,7 @@ FocusScope {
                                         ? qsTr("ES-DE folder: %1").arg(Internal.settings.esdeImportDir) + api.tr
                                         : qsTr("ES-DE folder not found, select to pick it") + api.tr;
                                 case "all": return qsTr("All systems") + api.tr;
+                                case "use": return qsTr("For games in your own metadata files, use ES-DE's") + api.tr;
                                 case "section": return modelData.text;
                                 case "rescan":
                                 case "delete": return modelData.sys.fullname;
@@ -443,6 +451,12 @@ FocusScope {
                         text: {
                             if (modelData.kind === "folder")
                                 return qsTr("change") + api.tr;
+                            if (modelData.kind === "use") {
+                                var use = Internal.settings.esdeImportUse;
+                                return "◂ " + (use === "media" ? qsTr("art only")
+                                     : use === "replace" ? qsTr("art and details, replacing yours")
+                                     : qsTr("art, and details you don't have")) + api.tr + " ▸";
+                            }
                             if (modelData.kind === "nav")
                                 return modelData.note;
                             if (modelData.kind === "rescan")

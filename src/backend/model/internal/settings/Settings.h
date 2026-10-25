@@ -62,6 +62,9 @@ class Settings : public QObject {
     Q_PROPERTY(QString esdeImportDir READ esdeImportDir WRITE setEsdeImportDir NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeAppsAsAndroid READ esdeAppsAsAndroid WRITE setEsdeAppsAsAndroid NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeGamesAsAndroid READ esdeGamesAsAndroid WRITE setEsdeGamesAsAndroid NOTIFY esdeImportDirChanged)
+    /// Pegasus X: for games your own metadata defines, how much of ES-DE's data is used:
+    /// "media", "fill" (details you don't have), "replace"
+    Q_PROPERTY(QString esdeImportUse READ esdeImportUse WRITE setEsdeImportUse NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeImportRunning READ esdeImportRunning NOTIFY esdeImportRunningChanged)
     Q_PROPERTY(bool mergeAndroid READ mergeAndroid WRITE setMergeAndroid NOTIFY libraryRulesChanged)
     /// Pegasus X: a newer build looked for when Pegasus X starts (off unless turned on)
@@ -128,6 +131,8 @@ public:
     QString esdeImportDir() const;
     void setEsdeImportDir(const QString&);
     Q_INVOKABLE QVariantList esdeImportSystems() const;
+    QString esdeImportUse() const;
+    void setEsdeImportUse(const QString&);
     bool esdeAppsAsAndroid() const;
     void setEsdeAppsAsAndroid(bool);
     bool esdeGamesAsAndroid() const;
