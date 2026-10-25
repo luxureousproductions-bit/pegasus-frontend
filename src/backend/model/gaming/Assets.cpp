@@ -113,6 +113,34 @@ void Assets::remove_duplicate_names()
     }
 }
 
+void Assets::keep_one_per_kind()
+{
+    for (auto& pair : m_asset_lists) {
+        QStringList& list = pair.second;
+        if (list.size() < 2)
+            continue;
+        if (pair.first == AssetType::BOX_FRONT) {
+            QString flat, box3d;
+            for (const QString& url : qAsConst(list)) {
+                if (pegasus_assets::is_3d_box(url)) {
+                    if (box3d.isEmpty())
+                        box3d = url;
+                }
+                else if (flat.isEmpty()) {
+                    flat = url;
+                }
+            }
+            list.clear();
+            if (!flat.isEmpty())
+                list.append(flat);
+            if (!box3d.isEmpty())
+                list.append(box3d);
+            continue;
+        }
+        list = QStringList { list.first() };
+    }
+}
+
 void Assets::set_files(AssetType key, const QStringList& paths)
 {
     QStringList& target = m_asset_lists[key];

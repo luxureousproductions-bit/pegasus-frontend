@@ -78,6 +78,9 @@ public:
     /// Pegasus X: of the files with the same name in one kind of art, keeps
     /// the first (the same picture found in two places)
     void remove_duplicate_names();
+    /// Pegasus X: one file of each kind (the first); the front box keeps one
+    /// flat cover and one 3D box
+    void keep_one_per_kind();
     /// Pegasus X: drops art you removed in Settings > Library, listed as
     /// "<kind>|<file>" (kind as in metadata: screenshot, box_front, ...);
     /// matched by file name, so the same picture listed elsewhere goes too

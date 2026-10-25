@@ -786,6 +786,9 @@ void apply_library_rules(std::vector<model::Collection*>& collections, std::vect
         if (!removed.isEmpty())
             game->assetsMut().remove_listed(removed);
 
+        // one picture of each kind (the first: your edits and scrapes come
+        // first, then your metadata, then media folders and imports)
+        game->assetsMut().keep_one_per_kind();
         // 3D box renders: after the flat covers in boxFront (so boxFront is
         // the flat one when there's one), and listed for themes as the
         // `box3d` extra, whatever their folder is called

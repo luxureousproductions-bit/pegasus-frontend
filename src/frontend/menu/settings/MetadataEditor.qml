@@ -391,6 +391,9 @@ FocusScope {
         "art:fanart": "fanart", "art:box3d": "3dboxes", "art:box2d": "covers", "art:boxback": "backcovers",
         "art:physical": "physicalmedia", "art:miximage": "miximages", "art:logo": "marquees",
         "art:manual": "manuals", "cart:background": "system", "cart:logo": "system",
+        "art:spine": "spines", "art:boxfull": "fullboxes", "art:tile": "tiles", "art:banner": "banners",
+        "art:poster": "posters", "art:marquee": "screenmarquees", "art:bezel": "bezels", "art:panel": "panels",
+        "art:cabinetleft": "cabinetleft", "art:cabinetright": "cabinetright", "art:music": "music",
     })
     function storeArt(key, path) {
         if (dataDir === "")
@@ -566,10 +569,24 @@ FocusScope {
         ["art:physical", qsTr("Physical Media") + api.tr, "cartridgeList", "assets.cartridge", ""],
         ["art:miximage", qsTr("Miximage") + api.tr, "steamList", "assets.steam", ""],
         ["art:logo", qsTr("Logo") + api.tr, "logoList", "assets.logo", ""],
+        // the other kinds Pegasus themes use
+        ["art:spine", qsTr("Box Spine") + api.tr, "boxSpineList", "assets.box_spine", ""],
+        ["art:boxfull", qsTr("Full Box") + api.tr, "boxFullList", "assets.box_full", ""],
+        ["art:tile", qsTr("Tile") + api.tr, "tileList", "assets.tile", ""],
+        ["art:banner", qsTr("Banner") + api.tr, "bannerList", "assets.banner", ""],
+        ["art:poster", qsTr("Poster") + api.tr, "posterList", "assets.poster", ""],
+        ["art:marquee", qsTr("Arcade Marquee") + api.tr, "marqueeList", "assets.marquee", ""],
+        ["art:bezel", qsTr("Bezel") + api.tr, "bezelList", "assets.bezel", ""],
+        ["art:panel", qsTr("Control Panel") + api.tr, "panelList", "assets.panel", ""],
+        ["art:cabinetleft", qsTr("Cabinet Left") + api.tr, "cabinetLeftList", "assets.cabinet_left", ""],
+        ["art:cabinetright", qsTr("Cabinet Right") + api.tr, "cabinetRightList", "assets.cabinet_right", ""],
+        ["art:music", qsTr("Music") + api.tr, "musicList", "assets.music", ""],
         ["art:manual", qsTr("Manual") + api.tr, "", "x-manual", ""],
     ]
+    // as Pegasus X tells them apart: "3dboxes", "3D Boxes", "box-3d"...
     function is3d(path) {
-        return /box3d|box_3d|3dbox/i.test(String(path));
+        var plain = String(path).toLowerCase().replace(/[^a-z0-9]/g, "");
+        return /3dbox|box3d|3dcover|cover3d/.test(plain);
     }
     property var origSlots: ({})  // metadata key -> every file the game has there now
     // every file of a kind has its own key: "art:screenshot#0", "art:screenshot#1"
@@ -614,6 +631,8 @@ FocusScope {
             return [".mp4", ".webm", ".mkv", ".avi", ".mov"];
         if (key === "art:manual")
             return [".pdf", ".cbz", ".cbr", ".jpg", ".png"];
+        if (key === "art:music")
+            return [".mp3", ".ogg", ".wav", ".flac", ".m4a"];
         return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"];
     }
 
@@ -697,13 +716,12 @@ FocusScope {
                 files = Array.isArray(g.extra.manual) ? g.extra.manual.slice() : [g.extra.manual];
             files = files.map(function(f) { return root.localPath(f); });
             slots[kind[3]] = files;
-            // each file its own row; the boxes: the 3D ones, the 2D ones
-            var n = 0;
+            // one file of each kind (the boxes: one 2D, one 3D)
             for (var j = 0; j < files.length; j++) {
                 if (kind[4] === "3d" && !is3d(files[j])) continue;
                 if (kind[4] === "2d" && is3d(files[j])) continue;
-                o[kind[0] + "#" + n] = files[j];
-                n++;
+                o[kind[0] + "#0"] = files[j];
+                break;
             }
         }
         origSlots = slots;
@@ -922,11 +940,8 @@ FocusScope {
             if (!kind)
                 continue;
             var slot = kind[3];
-            if (!(slot in slots))
-                slots[slot] = (origSlots[slot] || []).slice();
-            var list = slots[slot];
+            slots[slot] = true;
             var before = (key in saved) ? saved[key] : orig[key];
-            var at = before ? list.indexOf(before) : -1;
             var value = edits[key];
             if (kind[3].indexOf("assets.") === 0) {
                 var kindName = kind[3].substring(7);
@@ -938,23 +953,22 @@ FocusScope {
                         && hiddenArt.indexOf(kindName + "|" + before) < 0)
                     hiddenArt.push(kindName + "|" + before);
             }
-            if (at >= 0) {
-                if (value === "")
-                    list.splice(at, 1);
-                else
-                    list[at] = value;
-            }
-            else if (value !== "") {
-                // a first one becomes the main one (but the 2D box stays it);
-                // another of a kind goes after the ones there
-                if (kind[4] === "3d" || list.length > 0 && artKeysOf(kind[0]).indexOf(key) > 0)
-                    list.push(value);
-                else
-                    list.unshift(value);
-            }
         }
-        for (var s in slots)
-            out[s] = slots[s].filter(function(f) { return f && String(f).indexOf("image://") !== 0; });
+        // one file of each kind: the slot is what its kinds have now (the
+        // front box: the 2D one, then the 3D one); the file it replaces goes
+        for (var s in slots) {
+            var files = [];
+            for (var ki = 0; ki < artKinds.length; ki++) {
+                if (artKinds[ki][3] !== s)
+                    continue;
+                var now = current(artKinds[ki][0] + "#0");
+                if (now !== "" && String(now).indexOf("image://") !== 0)
+                    files.push(now);
+            }
+            if (s === "assets.box_front")
+                files.sort(function(a, b) { return (root.is3d(a) ? 1 : 0) - (root.is3d(b) ? 1 : 0); });
+            out[s] = files;
+        }
         if (JSON.stringify(hiddenArt) !== hiddenBefore)
             out["x-pegasusx-hidden-art"] = hiddenArt;
         // one text: a new description replaces the summary too
@@ -1268,7 +1282,7 @@ FocusScope {
                                    "muted": art === "" || isIcon, "edited": akey in root.edits, "done": akey in root.saved });
                     }
                 }
-                out.push({ "kind": "addart", "text": qsTr("Add art or a manual...") + api.tr, "value": "" });
+                out.push({ "kind": "addart", "text": qsTr("Add or replace art...") + api.tr, "value": "" });
                 out.push({ "kind": "scrapegame", "text": qsTr("Scrape this game...") + api.tr,
                            "value": root.scrapingGame ? qsTr("scraping...") + api.tr : qsTr("with the Scraper's settings") + api.tr,
                            "muted": true });
@@ -1878,6 +1892,17 @@ FocusScope {
         "art:miximage": ["miximages", "miximage"],
         "art:logo": ["wheel", "marquees", "marquee", "logos", "logo"],
         "art:manual": ["manuals", "manual"],
+        "art:spine": ["spines", "box2dside", "spine", "boxspine", "sides"],
+        "art:boxfull": ["fullboxes", "boxtexture", "boxfull", "fullbox"],
+        "art:tile": ["tiles", "tile", "icons"],
+        "art:banner": ["banners", "banner"],
+        "art:poster": ["posters", "poster", "flyers", "flyer"],
+        "art:marquee": ["screenmarquees", "screenmarquee", "screenmarqueesmall"],
+        "art:bezel": ["bezels", "bezel", "borders"],
+        "art:panel": ["panels", "panel", "controlpanel"],
+        "art:cabinetleft": ["cabinetleft", "cabinet_left"],
+        "art:cabinetright": ["cabinetright", "cabinet_right"],
+        "art:music": ["music", "soundtracks", "soundtrack"],
     })
     // "./game.steam": the game's file, from the folder of its metadata file
     function fileShown() {
@@ -1935,16 +1960,13 @@ FocusScope {
         filePicker.openAt(startDir);
         filePicker.focus = true;
     }
+    // one of each kind: picking a kind the game has replaces that one
     function addArt() {
         var entries = [];
         for (var i = 0; i < artKinds.length; i++) {
             var base = artKinds[i][0];
-            var keys = artKeysOf(base);
-            var next = 0;
-            for (var k = 0; k < keys.length; k++)
-                next = Math.max(next, parseInt(keys[k].substring(base.length + 1), 10) + 1);
-            entries.push({ "act": base + "#" + next,
-                           "text": hasArt(base) ? qsTr("%1 (another one)").arg(artKinds[i][1]) + api.tr : artKinds[i][1] });
+            entries.push({ "act": base + "#0",
+                           "text": hasArt(base) ? qsTr("%1 (replaces the one there)").arg(artKinds[i][1]) + api.tr : artKinds[i][1] });
         }
         chooser.openFor(qsTr("What kind?") + api.tr, entries, function(act) { root.pickArt(act); });
     }
