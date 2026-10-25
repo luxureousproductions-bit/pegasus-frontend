@@ -1,0 +1,61 @@
+# Pegasus X: the test environment. Builds the desktop Pegasus X with its
+# Android-only parts (ES-DE import, ROM folders, Library) using stand-ins for
+# the Android calls, runs it on a small library with every kind of source
+# (tests/testenv/fixture.sh) under a virtual screen, and takes screenshots
+# of its screens (tests/testenv/run.sh). The results (screenshots, logs, the
+# files it wrote, summary.md) are pushed to the branch "test-results".
+name: Test environment
+on:
+  workflow_dispatch:
+  # pushing a commit to this branch runs it (git push -f origin HEAD:pegasusx-testenv)
+  push:
+    branches: [pegasusx-testenv]
+
+permissions:
+  contents: write
+
+jobs:
+  testenv:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with: {submodules: 'recursive', fetch-depth: 0}
+      - name: Install Qt 5.15 and tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qtbase5-dev qtbase5-private-dev qtdeclarative5-dev \
+            qtmultimedia5-dev libqt5svg5-dev libqt5gamepad5-dev qttools5-dev-tools \
+            qml-module-qtquick2 qml-module-qtquick-layouts qml-module-qtquick-window2 \
+            qml-module-qtquick-particles2 qml-module-qtquick-shapes qml-module-qtquick-timeline \
+            qml-module-qtgraphicaleffects qml-module-qtmultimedia qml-module-qtqml-models2 \
+            qml-module-qt-labs-qmlmodels libqt5multimedia5-plugins \
+            xvfb xdotool imagemagick fonts-dejavu-core
+      - name: Build
+        run: |
+          set -o pipefail
+          mkdir build && cd build
+          qmake .. PEGASUSX_TESTENV=1
+          make -j"$(nproc)" 2>&1 | tee ../build.log
+      - name: Report build errors
+        if: failure()
+        run: |
+          grep -E "error:|Error [0-9]|undefined reference" build.log | head -n 20 | while IFS= read -r line; do
+            echo "::error::${line}"
+          done
+      - name: Fixture
+        run: bash tests/testenv/fixture.sh "$RUNNER_TEMP/px"
+      - name: Run
+        run: |
+          xvfb-run -a -s "-screen 0 1280x720x24" bash tests/testenv/run.sh build/src/app/pegasus-fe "$RUNNER_TEMP/px" results
+          echo "::notice::$(ls results/*.png | wc -l) screenshots"
+          cat results/summary.md
+      - name: Publish results (branch test-results)
+        if: always()
+        run: |
+          [ -d results ] || exit 0
+          cd results
+          git init -q
+          git checkout -q -b test-results
+          git -c user.name=pegasusx-testenv -c user.email=testenv@users.noreply.github.com add -A
+          git -c user.name=pegasusx-testenv -c user.email=testenv@users.noreply.github.com commit -q -m "Test environment: ${GITHUB_SHA:0:8} (run ${GITHUB_RUN_NUMBER})"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" test-results

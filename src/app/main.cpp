@@ -172,9 +172,16 @@ backend::CliArgs handle_cli_args(QGuiApplication& app)
                "to work perfectly with some platforms and devices (eg. arcades), in which case "
                "you can disable this feature here."));
 
+    // Pegasus X: opens a screen of the menu once the library is read (the
+    // test environment's screenshots), eg. menu/settings/ThemeDownloader.qml
+    const QCommandLineOption arg_open_screen(QStringLiteral("pegasusx-open"),
+        CMDMSG("Opens this menu screen at startup (for testing)"), QStringLiteral("qml"));
+    argparser.addOption(arg_open_screen);
+
     argparser.addHelpOption();
     argparser.addVersionOption();
     argparser.process(app); // may quit!
+    app.setProperty("pegasusxOpen", argparser.value(arg_open_screen));
 
     backend::CliArgs args;
     args.portable = argparser.isSet(arg_portable);

@@ -17,6 +17,14 @@ else {
     SOURCES += $$PWD/PowerCommands_unimpl.cpp
 }
 
+# Pegasus X: the desktop test environment runs the Android-only parts with
+# stand-ins for the Android calls
+!android:!isEmpty(PEGASUSX_TESTENV) {
+    DEFINES *= PEGASUSX_TESTENV
+    HEADERS += $$PWD/AndroidHelpers.h
+    SOURCES += $$PWD/AndroidHelpers_testenv.cpp
+}
+
 android {
     HEADERS += \
         $$PWD/AndroidAppIconProvider.h \

@@ -293,9 +293,28 @@ Window {
         property bool restoreMenu: false
         property bool toTheme: false
 
+        // Pegasus X: --pegasusx-open=<screen> (testing): that menu screen,
+        // once the library is read
+        property bool startupScreenDone: false
+        Timer {
+            id: startupScreenTimer
+            interval: 1500
+            onTriggered: {
+                if (!mainMenu.item)
+                    return restart();
+                mainMenu.focus = true;
+                mainMenu.item.openScreen(Internal.settings.startupScreen());
+            }
+        }
+
         function hideMaybe() {
             if (focus && !dataLoading && !skinLoading) {
                 content.focus = true;
+                if (!startupScreenDone) {
+                    startupScreenDone = true;
+                    if (Internal.settings.startupScreen() !== "")
+                        startupScreenTimer.start();
+                }
                 // Reload all games: the theme, not the menu (content would
                 // give the focus back to the menu, still on the settings)
                 if (toTheme && mainMenu.item)

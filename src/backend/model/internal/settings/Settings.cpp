@@ -107,6 +107,11 @@ Settings::Settings(QObject* parent)
     : QObject(parent)
 {}
 
+QString Settings::startupScreen() const
+{
+    return qApp ? qApp->property("pegasusxOpen").toString() : QString();
+}
+
 QObject* Settings::updater()
 {
     if (!m_updater)
@@ -149,6 +154,37 @@ void Settings::postInit()
     // games added to a ROM folder while Pegasus X was away: in the list
     // before the library is read (quick when nothing changed)
     providers::esde::refresh_rom_folders();
+#endif
+#if defined(PEGASUSX_TESTENV) && defined(WITH_COMPAT_ESDE)
+    // the test environment: the imports it asks for, before the library is
+    // read (PEGASUSX_TEST_ESDE_IMPORT=1, PEGASUSX_TEST_ROM_FOLDERS=a;b)
+    {
+        QStringList written;
+        if (qEnvironmentVariable("PEGASUSX_TEST_ESDE_IMPORT") == QLatin1String("1")) {
+            const auto result = providers::esde::esde_import(providers::esde::esde_default_dir(), {},
+                                                             { QStringLiteral("androidapps") }, {});
+            Log::info(LOGMSG("Test: ES-DE import: %1 systems, %2 games, error `%3`")
+                .arg(result.systems).arg(result.games).arg(result.error));
+            written += result.folders;
+        }
+        for (const QString& folder : qEnvironmentVariable("PEGASUSX_TEST_ROM_FOLDERS").split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+            const auto found = providers::esde::rom_folder_systems(folder);
+            QStringList names;
+            for (const auto& sys : found)
+                names.append(sys.name + QLatin1Char('=') + QString::number(sys.games));
+            Log::info(LOGMSG("Test: ROM folder `%1`: systems %2").arg(folder, names.join(QStringLiteral(", "))));
+            const auto result = providers::esde::rom_folder_import(folder, {});
+            Log::info(LOGMSG("Test: ROM folder import: %1 systems, %2 games, error `%3`")
+                .arg(result.systems).arg(result.games).arg(result.error));
+            written += result.folders;
+        }
+        QSet<QString> known;
+        AppSettings::parse_gamedirs([&known](const QString& line){ known.insert(::pretty_path(line)); });
+        for (const QString& dir : written) {
+            if (!known.contains(::pretty_path(QFileInfo(dir))))
+                addGameDir(dir);
+        }
+    }
 #endif
 
     m_themes.postInit();

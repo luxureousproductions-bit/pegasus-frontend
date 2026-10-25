@@ -80,6 +80,8 @@ public:
     QObject* themeStore();
     QObject* updater();
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
+    /// the screen asked for with --pegasusx-open (testing), or empty
+    Q_INVOKABLE QString startupScreen() const;
 
     bool fullscreen() const { return AppSettings::general.fullscreen; }
     void setFullscreen(bool);
