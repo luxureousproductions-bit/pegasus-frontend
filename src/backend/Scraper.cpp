@@ -1496,9 +1496,7 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
     const size_t media_before = m_media.size();
     add(igdb_image(game.value(QStringLiteral("cover")), "cover_big_2x"), "getCovers", "assets.box_front", "covers", "2d");
     add(igdb_image(game.value(QStringLiteral("screenshots")).toArray().at(0), "1080p"), "getScreenshots", "assets.screenshot", "screenshots", "");
-    // fan art as ES-DE has it: a full-screen picture (16:9 or near), kept as
-    // downloaded. IGDB's artworks come in every shape: the one closest to
-    // 16:9 when it's close enough, else a second screenshot (never a banner)
+    // the artwork closest to 16:9 (IGDB has them in every shape)
     QJsonValue best_art;
     double best_off = 1e9;
     for (const QJsonValue& v : game.value(QStringLiteral("artworks")).toArray()) {
@@ -1511,15 +1509,7 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
             best_art = v;
         }
     }
-    const QJsonArray shots = game.value(QStringLiteral("screenshots")).toArray();
-    const bool art_fits = !best_art.isUndefined() && best_off <= 0.25;  // about 1.53:1 to 2.03:1
-    const QJsonValue fanart = art_fits ? best_art
-        : shots.size() > 1 ? shots.at(1)
-        : best_art;
-    note(LOGMSG("IGDB: fan art from %1").arg(art_fits ? QStringLiteral("an artwork (%1 off 16:9)").arg(best_off, 0, 'f', 2)
-        : shots.size() > 1 ? QStringLiteral("a screenshot (no artwork near 16:9)")
-        : best_art.isUndefined() ? QStringLiteral("nothing (no artwork)") : QStringLiteral("the closest artwork")));
-    add(igdb_image(fanart, "1080p"), "getFanart", "assets.background", "fanart", "");
+    add(igdb_image(best_art, "1080p"), "getFanart", "assets.background", "fanart", "");
     QStringList kept;
     for (auto it = m_changes.cbegin(); it != m_changes.cend(); ++it)
         kept.append(it.key());
@@ -1571,8 +1561,7 @@ void Scraper::steamGridDb(int known_id)
     struct Want { const char* path; const char* setting; const char* slot; const char* folder; const char* box; };
     const std::vector<Want> wants_all {
         { "grids", "getCovers", "assets.box_front", "covers", "2d" },
-        // heroes are banners (1920x620), not fan art: they go in the banner slot
-        { "heroes", "getFanart", "assets.banner", "banners", "" },
+        { "heroes", "getFanart", "assets.background", "fanart", "" },
         { "logos", "getLogos", "assets.logo", "marquees", "" },
     };
     auto* const todo = new std::vector<Want>();
