@@ -1,8 +1,8 @@
 name: Build - Android
 on:
   push:
-    # Pegasus X: the test environment's branches aren't built for Android
-    branches-ignore: [pegasusx-testenv, test-results]
+    branches: [pegasus-x, master]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 

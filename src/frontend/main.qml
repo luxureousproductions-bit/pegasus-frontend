@@ -357,8 +357,21 @@ Window {
                     // Pegasus X: a newer build looked for, if that's turned on
                     if (Internal.settings.checkUpdatesOnStart)
                         updateCheck.start();
+                    // the test environment: one game scraped (PEGASUSX_TEST_SCRAPE=<title>)
+                    var testTitle = Internal.settings.testScrapeTitle();
+                    if (testTitle !== "") {
+                        for (var g = 0; g < api.allGames.count; g++) {
+                            var tg = api.allGames.get(g);
+                            if (tg.title === testTitle) {
+                                var coll = tg.collections.count > 0 ? tg.collections.get(0).name : "";
+                                console.log("[test] scraping \"" + testTitle + "\" in \"" + coll + "\": "
+                                            + (Internal.settings.scrapeGame(tg, coll, true) || "started"));
+                                break;
+                            }
+                        }
+                    }
                     // the first start: where everything is kept
-                    if (Internal.settings.rootSetupNeeded && Internal.settings.startupScreen() === "") {
+                    if (Internal.settings.rootSetupNeeded && Internal.settings.startupScreen() === "" && testTitle === "") {
                         firstRunSetup.setSource("menu/settings/RootFolderSetup.qml", { "firstRun": true });
                         firstRunSetup.focus = true;
                     }

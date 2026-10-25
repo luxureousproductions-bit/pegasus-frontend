@@ -3,13 +3,18 @@
 # the Android calls, runs it on a small library with every kind of source
 # (tests/testenv/fixture.sh) under a virtual screen, and takes screenshots
 # of its screens (tests/testenv/run.sh). The results (screenshots, logs, the
-# files it wrote, summary.md) are pushed to the branch "test-results".
+# files it wrote, summary.md) are pushed to the ref refs/pegasusx/test-results
+# (not a branch: git fetch origin refs/pegasusx/test-results), and summary.md
+# is the run's summary on GitHub.
+#
+# With the repository secrets IGDB_TEST_CLIENT_ID / IGDB_TEST_CLIENT_SECRET
+# (a Twitch app made for testing) and SGDB_TEST_KEY set, one game is scraped
+# for real, and what the scraper wrote is in the results.
 name: Test environment
 on:
-  workflow_dispatch:
-  # pushing a commit to this branch runs it (git push -f origin HEAD:pegasusx-testenv)
   push:
-    branches: [pegasusx-testenv]
+    branches: [pegasus-x]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -52,17 +57,21 @@ jobs:
             exit 1
           }
       - name: Run
+        env:
+          IGDB_TEST_CLIENT_ID: ${{ secrets.IGDB_TEST_CLIENT_ID }}
+          IGDB_TEST_CLIENT_SECRET: ${{ secrets.IGDB_TEST_CLIENT_SECRET }}
+          SGDB_TEST_KEY: ${{ secrets.SGDB_TEST_KEY }}
         run: |
           xvfb-run -a -s "-screen 0 1280x720x24" bash tests/testenv/run.sh build/src/app/pegasus-fe "$RUNNER_TEMP/px" results
           echo "::notice::$(ls results/*.png | wc -l) screenshots"
-          cat results/summary.md
-      - name: Publish results (branch test-results)
+          cat results/summary.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish results (refs/pegasusx/test-results)
         if: always()
         run: |
           [ -d results ] || exit 0
           cd results
           git init -q
-          git checkout -q -b test-results
+          git checkout -q -b results
           git -c user.name=pegasusx-testenv -c user.email=testenv@users.noreply.github.com add -A
           git -c user.name=pegasusx-testenv -c user.email=testenv@users.noreply.github.com commit -q -m "Test environment: ${GITHUB_SHA:0:8} (run ${GITHUB_RUN_NUMBER})"
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" test-results
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" results:refs/pegasusx/test-results

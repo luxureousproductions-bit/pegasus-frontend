@@ -54,7 +54,10 @@ shot 01-theme
 stop 01-first-start
 cp "$CFG/game_dirs.txt" "$R/files/game_dirs.txt" 2>/dev/null
 find "$T" -name "esde-import.metadata.pegasus.txt" | while read -r f; do
-    cp "$f" "$R/files/$(echo "${f#$T/}" | tr '/ ' '__')"
+    cp "$f" "$R/files/OLD-PLACE_$(echo "${f#$T/}" | tr '/ ' '__')"
+done
+find "$CFG/metadata" -type f 2>/dev/null | while read -r f; do
+    cp "$f" "$R/files/$(echo "${f#$CFG/}" | tr '/ ' '__')"
 done
 cp "$CFG/pegasusx-rom-folders.txt" "$R/files/" 2>/dev/null
 
@@ -135,6 +138,31 @@ sleep 1
 shot 10-theme-next
 stop 10-theme
 
+# -- 8. the scraper, for real, when test logins are set (IGDB; SteamGridDB) ---------------------------
+if [ -n "${IGDB_TEST_CLIENT_ID:-}" ] && [ -n "${IGDB_TEST_CLIENT_SECRET:-}" ]; then
+    cat >> "$CFG/pegasusx.ini" <<INI
+
+[scraper]
+source=igdb
+igdbClientId=$IGDB_TEST_CLIENT_ID
+igdbClientSecret=$IGDB_TEST_CLIENT_SECRET
+sgdbKey=${SGDB_TEST_KEY:-}
+overwrite=true
+INI
+    start 11-scrape-igdb "" 60 "PEGASUSX_TEST_SCRAPE=Super Mario World"
+    shot 11-scrape-igdb
+    stop 11-scrape-igdb
+    mkdir -p "$R/scraped"
+    find "$CFG/media" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/scraped/files.txt"
+    find "$CFG/media" -type f 2>/dev/null | head -n 12 | while read -r f; do
+        cp "$f" "$R/scraped/$(echo "${f#$CFG/media/}" | tr '/' '_')"
+    done
+    cp "$CFG"/metadata/overrides/*.metadata.pegasus.txt "$R/scraped/" 2>/dev/null || true
+    # the log, without the login
+    grep -h "Scraper\|\[test\]" "$R/logs/11-scrape-igdb.log" | sed "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g" > "$R/scraped/scraper.log" || true
+    sed -i "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g; s/${SGDB_TEST_KEY:-NOKEY}/<key>/g" "$R/logs/11-scrape-igdb.log" "$R/logs/11-scrape-igdb.stdout" 2>/dev/null || true
+fi
+
 # -- summary --------------------------------------------------------------------------------------
 {
     echo "# Test environment results"
@@ -150,6 +178,23 @@ stop 10-theme
     echo
     echo "## Game directories"
     sed 's/^/    /' "$R/files/game_dirs.txt" 2>/dev/null
+    echo
+    echo "## Screen open times"
+    grep -h "\[timing\]" "$R"/logs/*.log | sed 's/.*\[timing\] /    /' | sort | uniq
+    echo
+    echo "## Metadata written by Pegasus X"
+    find "$CFG/metadata" -type f 2>/dev/null | sed "s|$CFG/|    |"
+    if [ -d "$R/scraped" ]; then
+        echo
+        echo "## Scraper (IGDB test login)"
+        sed 's/^/    /' "$R/scraped/scraper.log" | tail -n 40
+        echo
+        echo "    files:"
+        sed 's/^/      /' "$R/scraped/files.txt"
+    else
+        echo
+        echo "## Scraper: no test login (secrets IGDB_TEST_CLIENT_ID / IGDB_TEST_CLIENT_SECRET not set)"
+    fi
 } > "$R/summary.md"
 
 # the image servers the scraper uses: do they answer without / with a User-Agent?

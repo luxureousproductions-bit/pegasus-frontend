@@ -106,6 +106,8 @@ public:
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
     /// the screen asked for with --pegasusx-open (testing), or empty
     Q_INVOKABLE QString startupScreen() const;
+    /// the game the test environment scrapes at startup (PEGASUSX_TEST_SCRAPE), or empty
+    Q_INVOKABLE QString testScrapeTitle() const;
 
     bool fullscreen() const { return AppSettings::general.fullscreen; }
     void setFullscreen(bool);

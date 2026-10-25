@@ -133,6 +133,11 @@ QString Settings::startupScreen() const
     return qApp ? qApp->property("pegasusxOpen").toString() : QString();
 }
 
+QString Settings::testScrapeTitle() const
+{
+    return qEnvironmentVariable("PEGASUSX_TEST_SCRAPE");
+}
+
 QString Settings::rootDir() const
 {
     return paths::writableConfigDir();
@@ -1763,6 +1768,11 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     settings.insert(QStringLiteral("overwrite"), overwrite);
     // one game: always shows what it found, to pick and accept
     settings.insert(QStringLiteral("interactive"), true);
+    // the test environment scrapes one game by itself: the first match
+    if (!qEnvironmentVariable("PEGASUSX_TEST_SCRAPE").isEmpty()) {
+        settings.insert(QStringLiteral("interactive"), false);
+        settings.insert(QStringLiteral("autoAcceptSingle"), true);
+    }
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
     const bool has_igdb = scraper_has_igdb(settings);
