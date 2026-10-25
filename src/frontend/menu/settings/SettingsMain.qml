@@ -31,6 +31,7 @@ FocusScope {
     signal openGameDirSettings
     signal openEsdeImport
     signal openThemeDownloader
+    signal openUpdater
     signal openEmulatorSettings
     signal openLibrarySettings
     signal openMetadataEditor
@@ -187,6 +188,13 @@ FocusScope {
             type: SettingsEntry.Type.Button
             buttonAction: root.reloadRequested
             section: "gaming"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Check for updates...")
+            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openUpdater
+            section: "pegasusx"
         }
     ]
 
@@ -234,6 +242,7 @@ FocusScope {
                 case "general": return QT_TR_NOOP("General");
                 case "controls": return QT_TR_NOOP("Controls");
                 case "gaming": return QT_TR_NOOP("Gaming");
+                case "pegasusx": return QT_TR_NOOP("Pegasus X");
             }
 
             text: qsTr(trText) + api.tr

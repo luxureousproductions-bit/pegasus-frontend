@@ -23,6 +23,7 @@ SOURCES += \
     Log.cpp \
     Miximage.cpp \
     ThemeStore.cpp \
+    Updater.cpp \
     Scraper.cpp \
 
 HEADERS += \
@@ -37,6 +38,7 @@ HEADERS += \
     Log.h \
     Miximage.h \
     ThemeStore.h \
+    Updater.h \
     Scraper.h \
     ScraperKeys.h \
 

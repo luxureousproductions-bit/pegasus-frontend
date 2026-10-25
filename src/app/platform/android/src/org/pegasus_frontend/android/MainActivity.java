@@ -477,6 +477,31 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
         }
     }
 
+    // Pegasus X: Android's installer for an update downloaded by the updater;
+    // "Install unknown apps" has to be allowed for Pegasus X first (its
+    // setting is opened then). Returns "" when the installer opened,
+    // "permission" when the setting was opened instead, else the error.
+    public static String installApk(String path) {
+        try {
+            if (Build.VERSION.SDK_INT >= 26 && !m_self.getPackageManager().canRequestPackageInstalls()) {
+                Intent settings = new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + m_self.getPackageName()));
+                settings.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                m_self.startActivity(settings);
+                return "permission";
+            }
+            final Uri uri = FileProvider.getUriForFile(m_self, m_self.getPackageName() + ".files", new File(path));
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/vnd.android.package-archive");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_ACTIVITY_NEW_TASK);
+            m_self.startActivity(intent);
+            return "";
+        }
+        catch (Exception e) {
+            return e.toString();
+        }
+    }
+
     public static String toContentUri(String path) {
         final Uri uri = FileProvider.getUriForFile(
             m_self,

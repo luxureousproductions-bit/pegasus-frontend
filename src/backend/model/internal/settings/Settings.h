@@ -33,6 +33,7 @@ class QNetworkAccessManager;
 
 namespace model { class Game; }
 class ThemeStore;
+class Updater;
 namespace scraper { class Scraper; struct Job; }
 
 namespace model {
@@ -70,12 +71,14 @@ class Settings : public QObject {
     QML_CONST_PROPERTY(model::Themes, themes)
     QML_CONST_PROPERTY(model::Providers, providers)
     Q_PROPERTY(QObject* themeStore READ themeStore CONSTANT)
+    Q_PROPERTY(QObject* updater READ updater CONSTANT)
 
 public:
     explicit Settings(QObject* parent = nullptr);
     void postInit();
 
     QObject* themeStore();
+    QObject* updater();
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
 
     bool fullscreen() const { return AppSettings::general.fullscreen; }
@@ -315,6 +318,7 @@ private:
     scraper::Scraper* m_scraper = nullptr;
     QPointer<model::Game> m_single_game;
     ThemeStore* m_theme_store = nullptr;
+    Updater* m_updater = nullptr;
     QString startScraperWith(QObject* collections, bool offline);  ///< scraped alone: updated when done
     QString runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings);
     bool m_library_open = false;

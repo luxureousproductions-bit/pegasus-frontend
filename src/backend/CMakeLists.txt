@@ -26,6 +26,8 @@ add_library(pegasus-backend
     Miximage.h
     ThemeStore.cpp
     ThemeStore.h
+    Updater.cpp
+    Updater.h
     Scraper.cpp
     Scraper.h
     ScraperKeys.h

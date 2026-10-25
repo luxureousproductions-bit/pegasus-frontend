@@ -183,6 +183,16 @@ QString find_game_activity(const QString& package_name)
     return result.toString();
 }
 
+QString install_apk(const QString& path)
+{
+    static constexpr auto JNI_METHOD = "installApk";
+    static constexpr auto JNI_SIGNATURE = "(Ljava/lang/String;)Ljava/lang/String;";
+    const QAndroidJniObject jni_path = QAndroidJniObject::fromString(path);
+    const auto result = QAndroidJniObject::callStaticObjectMethod(
+        jni_classname(), JNI_METHOD, JNI_SIGNATURE, jni_path.object<jstring>());
+    return result.toString();
+}
+
 QStringList granted_paths()
 {
     return query_string_array("grantedPaths");

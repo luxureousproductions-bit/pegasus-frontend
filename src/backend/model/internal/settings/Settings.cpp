@@ -37,6 +37,7 @@
 #include "ScraperKeys.h"
 #include "Scraper.h"
 #include "ThemeStore.h"
+#include "Updater.h"
 #include "model/gaming/Assets.h"
 // Android only (ES-DE import, emulators, metadata editing)
 #ifdef WITH_COMPAT_ESDE
@@ -105,6 +106,13 @@ namespace model {
 Settings::Settings(QObject* parent)
     : QObject(parent)
 {}
+
+QObject* Settings::updater()
+{
+    if (!m_updater)
+        m_updater = new Updater(this);
+    return m_updater;
+}
 
 QObject* Settings::themeStore()
 {

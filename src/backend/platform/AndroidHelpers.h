@@ -50,5 +50,8 @@ void request_saf_permission(const std::function<void()>&);
 QString run_am_call(const QStringList&);
 QString to_content_uri(const QString&);
 QString to_document_uri(const QString&);
+/// Pegasus X: Android's installer for a downloaded APK (the updater): "" when
+/// it opened, "permission" when "Install unknown apps" had to be allowed first
+QString install_apk(const QString& path);
 
 } // namespace android

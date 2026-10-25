@@ -57,6 +57,7 @@ FocusScope {
         onOpenGameDirSettings: root.openModal("GameDirEditor.qml")
         onOpenEsdeImport: root.openModal("EsdeImport.qml")
         onOpenThemeDownloader: root.openScreen("ThemeDownloader.qml")
+        onOpenUpdater: root.openModal("UpdateDialog.qml")
         onOpenEmulatorSettings: root.openScreen("EmulatorEditor.qml")
         onOpenLibrarySettings: root.openScreen("LibraryEditor.qml")
         onOpenMetadataEditor: root.openScreen("MetadataEditor.qml")

@@ -175,6 +175,29 @@ jobs:
             echo "::notice::$(git describe --always) $("$AAPT" dump badging dist/*.apk | grep -o "versionCode='[0-9]*'")"
           fi
 
+      # Pegasus X: every signed build of the pegasus-x branch becomes the
+      # newest for the in-app updater (Settings > Check for updates): the
+      # release "pegasus-x-latest" holds its APKs, named by ABI, and its notes
+      # say "build: <number>"
+      - name: Publish latest build (updater)
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/pegasus-x' && steps.sign.outputs.signed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=pegasus-x-latest
+          BUILD=$((2000 + GITHUB_RUN_NUMBER))
+          APK="dist/pegasus-x-${{ matrix.abi }}.apk"
+          cp "$(ls dist/*.apk | head -n 1)" "$APK"
+          NOTES="build: $BUILD
+          commit: ${GITHUB_SHA:0:8}
+          $(git log -1 --format=%s)"
+          git tag -f "$TAG" "$GITHUB_SHA"
+          git push -f origin "refs/tags/$TAG" || true
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "Pegasus X build $BUILD" --notes "$NOTES" || true
+          gh release edit "$TAG" --title "Pegasus X build $BUILD" --notes "$NOTES" --prerelease || true
+          gh release upload "$TAG" "$APK" --clobber
+          echo "::notice::Published build $BUILD ($APK) for the updater"
+
       # Pegasus X: a version tag (v1.0, v1.1-beta1, ...) publishes a GitHub
       # Release with the APKs. Tags with a dash are marked as pre-releases.
       # Only builds signed with the Pegasus X key are ever published.
