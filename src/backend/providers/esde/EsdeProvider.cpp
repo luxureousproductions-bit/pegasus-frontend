@@ -23,6 +23,8 @@
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
 #include "platform/AndroidHelpers.h"
+#include "Scraper.h"
+#include <QSaveFile>
 #include "providers/SearchContext.h"
 #include "providers/es2/Es2Metadata.h"
 #include "providers/es2/Es2Systems.h"
@@ -1588,33 +1590,31 @@ int esde_delete_import(const QStringList& folders)
 }
 
 
-EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, const QStringList& android_systems,
-                             const std::function<void(int, int, const QString&)>& progress)
+namespace {
+// the systems' games written into a metadata file in each of their folders
+// (ES-DE import and ROM folders); `folders_of`: the folders of a system, if
+// given (else its folders in the ROMs folders)
+EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& todo,
+                                const HashMap<QString, QStringList>& folders_of,
+                                const QStringList& android_systems, const QString& origin,
+                                const std::function<void(int, int, const QString&)>& progress)
 {
     EsdeImportResult result;
-    if (esde_dir.isEmpty() || !QFileInfo(esde_dir).isDir()) {
-        result.error = QStringLiteral("ES-DE folder not found");
-        return result;
-    }
-
-    const ImportSetup setup = load_import_setup(esde_dir);
     const QString log_tag = QStringLiteral("ES-DE import");
     const es2::Metadata metahelper(log_tag, { setup.esde_dir });
 
-    QStringList todo;
-    for (const QString& name : setup.order) {
-        if (system_names.isEmpty() || system_names.contains(name))
-            todo.append(name);
-    }
-
     int done = 0;
     for (const QString& name : todo) {
-        const EsdeSystem& sys = setup.systems.at(name);
+        const auto sys_it = setup.systems.find(name);
+        if (sys_it == setup.systems.cend())
+            continue;
+        const EsdeSystem& sys = sys_it->second;
         if (progress)
             progress(done, todo.size(), sys.fullname.isEmpty() ? name : sys.fullname);
         done++;
 
-        const QStringList folders = system_folders(sys, setup.rom_roots);
+        const auto given = folders_of.find(name);
+        const QStringList folders = given != folders_of.cend() ? given->second : system_folders(sys, setup.rom_roots);
         if (folders.isEmpty())
             continue;
 
@@ -1700,9 +1700,9 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
 
             QString text;
             QTextStream stream(&text);
-            stream << "# Made by Pegasus X from ES-DE (" << setup.esde_dir << ").\n"
-                   << "# Settings > ES-DE import replaces this file when run again,\n"
-                   << "# keeping the emulators picked in Settings > Emulators.\n\n"
+            stream << origin
+                   << "# Made again when run again (or when games are added to a ROM\n"
+                   << "# folder), keeping the emulators picked in Settings > Library.\n\n"
                    << "collection: " << collection_name << '\n'
                    << "shortname: " << short_name << '\n';
             if (!collection_launch.isEmpty())
@@ -1788,6 +1788,236 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
     if (progress)
         progress(todo.size(), todo.size(), QString());
     return result;
+}
+} // namespace
+
+EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_names, const QStringList& android_systems,
+                             const std::function<void(int, int, const QString&)>& progress)
+{
+    if (esde_dir.isEmpty() || !QFileInfo(esde_dir).isDir()) {
+        EsdeImportResult result;
+        result.error = QStringLiteral("ES-DE folder not found");
+        return result;
+    }
+    const ImportSetup setup = load_import_setup(esde_dir);
+    QStringList todo;
+    for (const QString& name : setup.order) {
+        if (system_names.isEmpty() || system_names.contains(name))
+            todo.append(name);
+    }
+    const QString origin = QStringLiteral("# Made by Pegasus X from ES-DE (%1).\n").arg(setup.esde_dir);
+    EsdeImportResult result = import_systems(setup, todo, {}, android_systems, origin, progress);
+    // remembered, to be made again when games are added (not the Android
+    // systems: their files list apps, not games in a folder)
+    for (const QString& name : todo) {
+        if (android_systems.contains(name) || name.startsWith(QLatin1String("android")))
+            continue;
+        QStringList written;
+        for (const QString& dir : system_folders(setup.systems.at(name), setup.rom_roots)) {
+            if (result.folders.contains(dir))
+                written.append(dir);
+        }
+        remember_rom_folders(written, name);
+    }
+    return result;
+}
+
+
+// -- ROM folders (Settings > Game directories) ---------------------------------------
+
+namespace {
+const QString ROM_FOLDERS_FILE = QStringLiteral("pegasusx-rom-folders.txt");
+
+QString rom_folders_path()
+{
+    return paths::writableConfigDir() % QLatin1Char('/') % ROM_FOLDERS_FILE;
+}
+
+// the system folders that have a list made by Pegasus X: "folder<TAB>system"
+std::vector<std::pair<QString, QString>> read_rom_folders()
+{
+    std::vector<std::pair<QString, QString>> out;
+    QFile file(rom_folders_path());
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return out;
+    for (const QString& line : QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'))) {
+        const int tab = line.indexOf(QLatin1Char('\t'));
+        if (tab > 0)
+            out.emplace_back(line.left(tab), line.mid(tab + 1).trimmed());
+    }
+    return out;
+}
+
+void write_rom_folders(const std::vector<std::pair<QString, QString>>& list)
+{
+    QString text;
+    for (const auto& entry : list)
+        text += entry.first % QLatin1Char('\t') % entry.second % QLatin1Char('\n');
+    QSaveFile file(rom_folders_path());
+    if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        file.write(text.toUtf8());
+        file.commit();
+    }
+}
+
+// the folder name ES-DE gives a system ("%ROMPATH%/snes" -> "snes")
+QString system_folder_name(const EsdeSystem& sys)
+{
+    if (!sys.path.contains(QLatin1String("%ROMPATH%")))
+        return {};
+    return QDir::cleanPath(sys.path).section(QLatin1Char('/'), -1).toLower();
+}
+
+// which system a folder is, by its name: ES-DE's folder names, else the
+// usual names ("Nintendo 64", "PlayStation", "SNES" ...)
+QString system_of_folder(const ImportSetup& setup, const QString& folder_name)
+{
+    const QString lower = folder_name.toLower();
+    for (const QString& name : setup.order) {
+        if (system_folder_name(setup.systems.at(name)) == lower)
+            return name;
+    }
+    const QString guess = scraper::Scraper::system_of(folder_name, folder_name);
+    return setup.systems.count(guess) ? guess : QString();
+}
+
+ImportSetup rom_folder_setup()
+{
+    // ES-DE's gamelists and art are used too when it's on the device
+    ImportSetup setup = load_import_setup(esde_default_dir());
+    setup.rom_roots.clear();
+    return setup;
+}
+
+// a folder's systems: the folder itself, or the folders in it
+HashMap<QString, QStringList> rom_folder_layout(const ImportSetup& setup, const QString& folder)
+{
+    HashMap<QString, QStringList> out;
+    const QString clean = QDir::cleanPath(folder);
+    const QString self = system_of_folder(setup, QFileInfo(clean).fileName());
+    if (!self.isEmpty()) {
+        out[self].append(clean);
+        return out;
+    }
+    for (const QFileInfo& sub : QDir(clean).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name)) {
+        const QString name = system_of_folder(setup, sub.fileName());
+        if (!name.isEmpty())
+            out[name].append(QDir::cleanPath(sub.absoluteFilePath()));
+    }
+    return out;
+}
+} // namespace
+
+void remember_rom_folders(const QStringList& folders, const QString& system)
+{
+    if (folders.isEmpty())
+        return;
+    std::vector<std::pair<QString, QString>> list = read_rom_folders();
+    for (const QString& folder : folders) {
+        bool known = false;
+        for (auto& entry : list) {
+            if (entry.first == folder) {
+                known = true;
+                if (!system.isEmpty())
+                    entry.second = system;
+            }
+        }
+        if (!known)
+            list.emplace_back(folder, system);
+    }
+    write_rom_folders(list);
+}
+
+std::vector<EsdeImportSystem> rom_folder_systems(const QString& folder)
+{
+    std::vector<EsdeImportSystem> out;
+    const ImportSetup setup = rom_folder_setup();
+    const HashMap<QString, QStringList> layout = rom_folder_layout(setup, folder);
+    for (const auto& entry : layout) {
+        const EsdeSystem& sys = setup.systems.at(entry.first);
+        EsdeImportSystem item;
+        item.name = entry.first;
+        item.fullname = sys.fullname.isEmpty() ? entry.first : sys.fullname;
+        item.short_name = pegasus_short_name(entry.first);
+        item.folders = entry.second;
+        const QStringList extensions = parse_extensions(sys.extensions);
+        for (const QString& dir : entry.second) {
+            item.games += quick_game_count(dir, extensions);
+            item.has_gamelist = item.has_gamelist || QFileInfo::exists(dir % QStringLiteral("/gamelist.xml"));
+            if (QFileInfo::exists(dir % QLatin1Char('/') % IMPORT_FILE_NAME))
+                item.imported_files.append(dir % QLatin1Char('/') % IMPORT_FILE_NAME);
+        }
+        if (item.games > 0)
+            out.push_back(std::move(item));
+    }
+    std::sort(out.begin(), out.end(), [](const EsdeImportSystem& a, const EsdeImportSystem& b) {
+        return a.fullname.compare(b.fullname, Qt::CaseInsensitive) < 0;
+    });
+    return out;
+}
+
+EsdeImportResult rom_folder_import(const QString& folder, const std::function<void(int, int, const QString&)>& progress)
+{
+    const ImportSetup setup = rom_folder_setup();
+    const HashMap<QString, QStringList> layout = rom_folder_layout(setup, folder);
+    if (layout.empty()) {
+        EsdeImportResult result;
+        result.error = QStringLiteral("No game systems found in %1 (folders are named like snes, gba or psx)").arg(folder);
+        return result;
+    }
+    QStringList todo;
+    for (const QString& name : setup.order) {
+        if (layout.count(name))
+            todo.append(name);
+    }
+    const QString origin = QStringLiteral("# Made by Pegasus X from the ROM folder %1.\n").arg(QDir::cleanPath(folder));
+    EsdeImportResult result = import_systems(setup, todo, layout, {}, origin, progress);
+    for (const QString& name : todo) {
+        const auto it = layout.find(name);
+        QStringList written;
+        for (const QString& dir : it->second) {
+            if (result.folders.contains(dir))
+                written.append(dir);
+        }
+        remember_rom_folders(written, name);
+    }
+    return result;
+}
+
+int refresh_rom_folders()
+{
+    // a folder changed since its list was made (games added or removed): made again
+    const std::vector<std::pair<QString, QString>> list = read_rom_folders();
+    if (list.empty())
+        return 0;
+    std::unique_ptr<ImportSetup> setup;
+    int refreshed = 0;
+    for (const auto& entry : list) {
+        const QString& dir = entry.first;
+        const QFileInfo list_file(dir % QLatin1Char('/') % IMPORT_FILE_NAME);
+        const QFileInfo dir_info(dir);
+        if (!dir_info.isDir() || !list_file.exists())
+            continue;
+        if (dir_info.lastModified() <= list_file.lastModified())
+            continue;
+        if (!setup)
+            setup.reset(new ImportSetup(rom_folder_setup()));
+        // the system: the one remembered, else by the folder's name
+        QString system = entry.second;
+        if (system.isEmpty() || !setup->systems.count(system))
+            system = system_of_folder(*setup, dir_info.fileName());
+        if (system.isEmpty())
+            continue;
+        HashMap<QString, QStringList> only;
+        only[system] = QStringList { dir };
+        const QString origin = QStringLiteral("# Made by Pegasus X from the ROM folder %1.\n").arg(dir);
+        const EsdeImportResult result = import_systems(*setup, QStringList { system }, only, {}, origin, {});
+        if (!result.folders.isEmpty())
+            refreshed++;
+    }
+    if (refreshed > 0)
+        Log::info(QStringLiteral("ROM folders"), LOGMSG("%1 game lists made again (new or removed games)").arg(refreshed));
+    return refreshed;
 }
 
 

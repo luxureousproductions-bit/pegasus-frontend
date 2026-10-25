@@ -94,7 +94,8 @@ FocusScope {
             id: info
 
             text: qsTr("Pegasus will look for collection files (metadata.pegasus.txt or "
-                     + "metadata.txt)\nin the following directories:") + api.tr
+                     + "metadata.txt)\nin the following directories. A ROM folder without them "
+                     + "(eg. ROMs with snes, gba, psx folders) gets a game list made by Pegasus X.") + api.tr
             color: "#eee"
             font.family: globalFonts.sans
             font.pixelSize: vpx(18)
@@ -227,6 +228,167 @@ FocusScope {
         onPick: {
             Internal.settings.addGameDir(dir_path);
             list.focus = true;
+            // Pegasus X: a ROM folder without metadata: its games listed
+            if (!Internal.settings.folderHasMetadata(dir_path)) {
+                var systems = Internal.settings.romFolderSystems(dir_path);
+                if (systems.length > 0)
+                    romDialog.openFor(dir_path, systems);
+            }
+        }
+    }
+
+
+    // -- Pegasus X: a ROM folder's game lists -----------------------------------------
+
+    FocusScope {
+        id: romDialog
+
+        property string folder: ""
+        property var systems: []
+        property bool working: false
+        property string result: ""
+        property int choice: 0
+
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+        z: 5
+
+        function openFor(dir, found) {
+            folder = dir;
+            systems = found;
+            working = false;
+            result = "";
+            choice = 0;
+            focus = true;
+        }
+        function accept() {
+            if (working)
+                return;
+            if (result !== "") {
+                list.focus = true;
+                return;
+            }
+            if (choice === 1) {
+                list.focus = true;
+                return;
+            }
+            working = true;
+            Internal.settings.importRomFolder(folder);
+        }
+        Connections {
+            target: Internal.settings
+            function onRomFolderImportFinished(res) {
+                if (!romDialog.visible)
+                    return;
+                romDialog.working = false;
+                romDialog.result = res.error
+                    ? res.error
+                    : qsTr("%1 games listed in %2 systems. New games you add to these folders show up by themselves.")
+                        .arg(res.games).arg(res.systems) + api.tr;
+                root.mSettingsChanged = true;  // read again when you leave
+            }
+        }
+
+        Keys.onPressed: {
+            if (event.isAutoRepeat)
+                return;
+            event.accepted = true;
+            if (api.keys.isAccept(event))
+                accept();
+            else if (api.keys.isCancel(event) && !working)
+                list.focus = true;
+        }
+        Keys.onLeftPressed: choice = 0
+        Keys.onRightPressed: choice = 1
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.5
+            MouseArea { anchors.fill: parent }
+        }
+        Column {
+            anchors.centerIn: parent
+            width: Math.min(parent.width * 0.75, vpx(720))
+
+            Rectangle {
+                width: parent.width
+                height: vpx(20) * 2.25
+                color: "#333"
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    anchors.left: parent.left
+                    anchors.leftMargin: vpx(15)
+                    text: qsTr("ROM folder") + api.tr
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(20)
+                    font.bold: true
+                }
+            }
+            Rectangle {
+                width: parent.width
+                height: romBody.height + vpx(36)
+                color: "#555"
+                Column {
+                    id: romBody
+                    anchors.centerIn: parent
+                    width: parent.width - vpx(36)
+                    spacing: vpx(10)
+                    Text {
+                        width: parent.width
+                        text: romDialog.result !== "" ? romDialog.result
+                            : romDialog.working ? qsTr("Listing the games...") + api.tr
+                            : qsTr("There's no metadata file in this folder, but there are games. Pegasus X can list them, with a collection for each system (a gamelist.xml there is used too), and keeps the lists up to date when you add games.") + api.tr
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(18)
+                        wrapMode: Text.WordWrap
+                    }
+                    Repeater {
+                        model: romDialog.result === "" ? romDialog.systems : []
+                        delegate: Text {
+                            width: romBody.width
+                            text: "•  " + modelData.fullname + "  ·  "
+                                  + qsTr("%1 games").arg(modelData.games) + api.tr
+                                  + (modelData.hasGamelist ? "  ·  gamelist.xml" : "")
+                            color: "#ddd"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(17)
+                            elide: Text.ElideRight
+                        }
+                    }
+                }
+            }
+            Row {
+                width: parent.width
+                visible: !romDialog.working
+                Repeater {
+                    model: romDialog.result !== "" ? [ qsTr("Ok") + api.tr ]
+                                                   : [ qsTr("List the games") + api.tr, qsTr("Not now") + api.tr ]
+                    delegate: Rectangle {
+                        readonly property bool on: romDialog.result !== "" || index === romDialog.choice
+                        width: parent.width / (romDialog.result !== "" ? 1 : 2)
+                        height: vpx(18) * 2.25
+                        color: on ? "#4ae" : "#666"
+                        Text {
+                            anchors.centerIn: parent
+                            text: modelData
+                            color: "#eee"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(18)
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: {
+                                romDialog.choice = index;
+                                romDialog.accept();
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

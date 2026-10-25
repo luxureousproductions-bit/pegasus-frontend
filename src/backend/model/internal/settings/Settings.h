@@ -109,6 +109,12 @@ public:
     bool esdeImportRunning() const { return m_esde_import_running; }
     /// Runs in the background: esdeImportProgress while it works, then esdeImportFinished
     Q_INVOKABLE void startEsdeImport(const QStringList& system_names);
+    /// Pegasus X: a ROM folder's systems with games ([{ name, fullname, games, folders, hasGamelist, listed }])
+    Q_INVOKABLE QVariantList romFolderSystems(const QString& folder);
+    /// whether a folder has a Pegasus metadata file of its own
+    Q_INVOKABLE bool folderHasMetadata(const QString& folder);
+    /// Makes a ROM folder's game lists (background: romFolderImportFinished)
+    Q_INVOKABLE void importRomFolder(const QString& folder);
 
     // Pegasus X: emulators
     Q_INVOKABLE QVariantList emulatorCollections() const;
@@ -289,6 +295,7 @@ signals:
     void esdeImportRunningChanged();
     void esdeImportProgress(int done, int total, QString system);
     void esdeImportFinished(QVariantMap result);
+    void romFolderImportFinished(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
     void collectionDetailsReady(QString collection, QVariantMap details);
     void emulatorSaved(QString collection, QString gamePath, QString error);

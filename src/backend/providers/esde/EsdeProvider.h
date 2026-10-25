@@ -93,6 +93,24 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
                              const std::function<void(int, int, const QString&)>& progress);
 
 
+// -- ROM folders (Settings > Game directories) ---------------------------------------
+// A ROM folder without metadata gets the same kind of file as the ES-DE
+// import, for each system in it (the folder itself, eg. ".../snes", or the
+// system folders in it): its games, with a gamelist.xml there (and ES-DE's
+// gamelists and art, if ES-DE is on the device). Remembered, and made again
+// when games are added or removed.
+
+/// The systems with games in a folder (by its name or its folders' names)
+std::vector<EsdeImportSystem> rom_folder_systems(const QString& folder);
+/// Writes the game lists of a ROM folder's systems
+EsdeImportResult rom_folder_import(const QString& folder, const std::function<void(int, int, const QString&)>& progress);
+/// The remembered folders whose games changed since their list was made: made
+/// again. Returns how many. Quick when nothing changed.
+int refresh_rom_folders();
+/// Remembers system folders with a list made by Pegasus X (for refresh_rom_folders)
+void remember_rom_folders(const QStringList& folders, const QString& system);
+
+
 // -- Emulators (Settings > Emulators) ---------------------------------------------
 
 /// One emulator that can launch a system's games

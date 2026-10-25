@@ -137,6 +137,11 @@ void Settings::postInit()
     providers::esde::split_legacy_edits_file();
 #endif
     change_mouse_support(AppSettings::general.mouse_support);
+#ifdef WITH_COMPAT_ESDE
+    // games added to a ROM folder while Pegasus X was away: in the list
+    // before the library is read (quick when nothing changed)
+    providers::esde::refresh_rom_folders();
+#endif
 
     m_themes.postInit();
 }
@@ -692,6 +697,65 @@ QString Settings::testEmulatorCommand(const QString& command, const QString& gam
     Q_UNUSED(command);
     Q_UNUSED(game_path);
     return QStringLiteral("Not supported on this platform");
+#endif
+}
+
+QVariantList Settings::romFolderSystems(const QString& folder)
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& sys : providers::esde::rom_folder_systems(folder)) {
+        out.append(QVariantMap {
+            { QStringLiteral("name"), sys.name },
+            { QStringLiteral("fullname"), sys.fullname },
+            { QStringLiteral("games"), sys.games },
+            { QStringLiteral("folders"), sys.folders },
+            { QStringLiteral("hasGamelist"), sys.has_gamelist },
+            { QStringLiteral("listed"), !sys.imported_files.isEmpty() },
+        });
+    }
+#else
+    Q_UNUSED(folder);
+#endif
+    return out;
+}
+
+bool Settings::folderHasMetadata(const QString& folder)
+{
+    for (const QFileInfo& finfo : QDir(folder).entryInfoList(QDir::Files | QDir::Readable)) {
+        const QString name = finfo.fileName();
+        if (name == QLatin1String("metadata.pegasus.txt") || name == QLatin1String("metadata.txt")
+                || name.endsWith(QLatin1String(".metadata.pegasus.txt")) || name.endsWith(QLatin1String(".metadata.txt")))
+            return true;
+    }
+    return false;
+}
+
+void Settings::importRomFolder(const QString& folder)
+{
+#ifdef WITH_COMPAT_ESDE
+    QtConcurrent::run([this, folder]{
+        const auto result = providers::esde::rom_folder_import(folder, {});
+        // back on the main thread: each system folder is a game directory, so
+        // Pegasus reads its list
+        QMetaObject::invokeMethod(this, [this, result]{
+            QSet<QString> known;
+            AppSettings::parse_gamedirs([&known](const QString& line){
+                known.insert(::pretty_path(line));
+            });
+            for (const QString& dir : result.folders) {
+                if (!known.contains(::pretty_path(QFileInfo(dir))))
+                    addGameDir(dir);
+            }
+            emit romFolderImportFinished(QVariantMap {
+                { QStringLiteral("systems"), result.systems },
+                { QStringLiteral("games"), result.games },
+                { QStringLiteral("error"), result.error },
+            });
+        }, Qt::QueuedConnection);
+    });
+#else
+    emit romFolderImportFinished(QVariantMap { { QStringLiteral("error"), QStringLiteral("Not supported on this platform") }, { QStringLiteral("folder"), folder } });
 #endif
 }
 
@@ -1779,6 +1843,10 @@ QVariantMap Settings::themeSystemArt(const QString& collection_name, const QStri
 
 void Settings::reloadAllGames()
 {
+#ifdef WITH_COMPAT_ESDE
+    // games added to a ROM folder since its list was made: in the list
+    providers::esde::refresh_rom_folders();
+#endif
     emit reloadAllRequested();
     reloadProviders();
 }
