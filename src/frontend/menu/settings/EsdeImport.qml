@@ -204,12 +204,12 @@ FocusScope {
         var out = [
             { "key": "folder", "text": qsTr("ES-DE folder") + api.tr,
               "value": Internal.settings.esdeImportDir !== "" ? Internal.settings.esdeImportDir : qsTr("not found, A to pick it") + api.tr },
-            { "key": "use", "text": qsTr("For games in your own metadata files, use") + api.tr,
+            { "key": "use", "cycle": true, "text": qsTr("For games in your own metadata files, use") + api.tr,
               "value": (use === "media" ? qsTr("art only") : use === "replace" ? qsTr("art and details, replacing yours")
                        : qsTr("art, and details you don't have")) + api.tr },
         ];
         if (hasAndroidGames)
-            out.push({ "key": "android", "text": qsTr("Merge Android Games into Android") + api.tr,
+            out.push({ "key": "android", "cycle": true, "text": qsTr("Merge Android Games into Android") + api.tr,
                        "value": mergeAndroid ? qsTr("Yes") + api.tr : qsTr("No") + api.tr });
         return out;
     }

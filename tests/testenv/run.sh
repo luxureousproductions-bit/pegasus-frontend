@@ -131,7 +131,7 @@ shot 09-esde-import
 keys Return; sleep 1; shot 09-esde-import-page
 keys Return; shot 09-esde-import-options
 keys Return; sleep 1; shot 09-folder-picker
-keys Escape Escape Escape Escape
+keys Escape Escape Escape
 keys Down Down Return; shot 09-esde-delete
 keys Return; shot 09-esde-delete-ticked
 stop 09-esde-import

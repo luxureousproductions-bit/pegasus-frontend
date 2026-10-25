@@ -26,7 +26,7 @@ FocusScope {
 
     property string title: ""
     property string text: ""            // a line above the rows, if any
-    property var rows: []               // [{ text, value }]
+    property var rows: []               // [{ text, value, cycle }] (cycle: ◂ ▸ change it)
     property string closeLabel: qsTr("Close") + api.tr
     property real dialogWidth: Math.min(parent.width * 0.8, vpx(760))
 
@@ -151,7 +151,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, parent.width * 0.55)
                     text: modelData.value !== undefined && modelData.value !== ""
-                        ? (parent.on ? "◂ " + modelData.value + " ▸" : modelData.value) : ""
+                        ? (parent.on && modelData.cycle ? "◂ " + modelData.value + " ▸" : modelData.value) : ""
                     color: parent.on ? "#fff" : "#bbb"
                     font.family: globalFonts.sans
                     font.pixelSize: root.textSize * 0.85
