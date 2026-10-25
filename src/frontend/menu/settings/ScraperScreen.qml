@@ -416,8 +416,9 @@ FocusScope {
                 { "v": "original", "t": qsTr("Original (as downloaded)") + api.tr },
             ] });
             out.push({ "kind": "choice", "key": "fanartFit", "text": qsTr("Fan art shape") + api.tr, "choices": [
-                { "v": "original", "t": qsTr("As downloaded (full-screen pictures only)") + api.tr },
-                { "v": "16:9", "t": qsTr("Cropped to 16:9") + api.tr },
+                { "v": "original", "t": qsTr("As downloaded") + api.tr },
+                { "v": "16:9", "t": qsTr("Cropped to 16:9 (sides cut)") + api.tr },
+                { "v": "stretch", "t": qsTr("Stretched to 16:9 (nothing cut)") + api.tr },
             ] });
             out.push({ "kind": "choice", "key": "trimBorders", "text": qsTr("Trim empty borders") + api.tr, "choices": [
                 { "v": "off", "t": qsTr("Off") + api.tr },

@@ -460,6 +460,19 @@ QRect content_rect(const QImage& source)
 // say; untouched (same bytes) when nothing needs doing
 // fan art cropped to 16:9 (Scraper > Fan art shape; off by default: kept as
 // downloaded, like ES-DE)
+// fan art stretched to 16:9: nothing cut, everything made taller (or wider)
+QImage stretch_16_9(const QImage& src)
+{
+    const double ratio = static_cast<double>(src.width()) / static_cast<double>(src.height());
+    const double wanted = 16.0 / 9.0;
+    if (ratio > wanted * 0.97 && ratio < wanted * 1.03)
+        return src;
+    // the longer side kept, the other one changed to fit
+    if (ratio > wanted)
+        return src.scaled(src.width(), qRound(src.width() / wanted), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+    return src.scaled(qRound(src.height() * wanted), src.height(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+}
+
 QImage fit_16_9(const QImage& src)
 {
     // 16:9 by cropping, never by padding: the middle of a taller picture,
@@ -477,14 +490,15 @@ QImage fit_16_9(const QImage& src)
     return src.copy((src.width() - w) / 2, 0, w, src.height());
 }
 
-QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim, bool fanart_16_9)
+// fanart_mode: 0 as downloaded, 1 cropped to 16:9, 2 stretched to 16:9
+QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim, int fanart_mode)
 {
     QImage img;
     if (!img.loadFromData(data))
         return { data, ext };
     bool changed = false;
-    if (fanart_16_9) {
-        const QImage shaped = fit_16_9(img);
+    if (fanart_mode > 0) {
+        const QImage shaped = fanart_mode == 2 ? stretch_16_9(img) : fit_16_9(img);
         if (shaped.size() != img.size()) {
             img = shaped;
             changed = true;
@@ -1696,17 +1710,18 @@ void Scraper::downloadNext()
         }
         const QString trim_setting = m_settings.value(QStringLiteral("trimBorders")).toString();
         const bool trim = trim_setting == QLatin1String("all") || (trim_setting == QLatin1String("logos") && logo);
-        const bool fanart_16_9 = media.folder == QLatin1String("fanart")
-            && m_settings.value(QStringLiteral("fanartFit"), QStringLiteral("original")).toString() == QLatin1String("16:9");
-        if (picture && (max_w > 0 || trim || fanart_16_9)) {
+        const QString fit = m_settings.value(QStringLiteral("fanartFit"), QStringLiteral("original")).toString();
+        const int fanart_mode = media.folder != QLatin1String("fanart") ? 0
+            : fit == QLatin1String("16:9") ? 1 : fit == QLatin1String("stretch") ? 2 : 0;
+        if (picture && (max_w > 0 || trim || fanart_mode > 0)) {
             auto* const watcher = new QFutureWatcher<QPair<QByteArray, QString>>(this);
             connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, media, job]{
                 const QPair<QByteArray, QString> result = watcher->result();
                 watcher->deleteLater();
                 storeMedia(media, job, result.first, result.second);
             });
-            watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim, fanart_16_9]{
-                return process_image(body, ext, max_w, max_h, trim, fanart_16_9);
+            watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim, fanart_mode]{
+                return process_image(body, ext, max_w, max_h, trim, fanart_mode);
             }));
             return;
         }
