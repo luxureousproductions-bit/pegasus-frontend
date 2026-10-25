@@ -513,6 +513,15 @@ QString Scraper::system_of(const QString& collection_name, const QString& short_
     return {};
 }
 
+// a line for the log page (and the log file), with the time
+void Scraper::note(const QString& line)
+{
+    m_log.append(QDateTime::currentDateTime().toString(QStringLiteral("HH:mm:ss ")) + line);
+    while (m_log.size() > 400)
+        m_log.removeFirst();
+    Log::info(LOG_TAG, line);
+}
+
 QVariantMap Scraper::state() const
 {
     return QVariantMap {
@@ -555,7 +564,14 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_stop_reason.clear();
     m_stop = false;
     m_running = true;
-    Log::info(LOG_TAG, LOGMSG("Scraping %1 games into `%2`").arg(m_jobs.size()).arg(m_data_dir));
+    note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, IGDB login: %7, SteamGridDB key: %8)")
+        .arg(m_jobs.size()).arg(m_data_dir)
+        .arg(m_settings.value(QStringLiteral("source")).toString())
+        .arg(interactive() ? QStringLiteral("yes") : QStringLiteral("no"))
+        .arg(m_settings.value(QStringLiteral("overwrite")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"))
+        .arg(m_dev_id.isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes"))
+        .arg(igdbReady() ? QStringLiteral("yes") : QStringLiteral("missing"))
+        .arg(m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes")));
     report();
     next();
 }
@@ -1166,18 +1182,21 @@ void Scraper::igdbToken(std::function<void(int)> done)
     query.addQueryItem(QStringLiteral("client_id"), m_settings.value(QStringLiteral("igdbClientId")).toString().trimmed());
     query.addQueryItem(QStringLiteral("client_secret"), m_settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed());
     query.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("client_credentials"));
-    QUrl url(QStringLiteral("https://id.twitch.tv/oauth2/token"));
-    url.setQuery(query);
-    QNetworkRequest request(url);
+    // the login goes in the body, as Twitch documents it
+    QNetworkRequest request{QUrl(QStringLiteral("https://id.twitch.tv/oauth2/token"))};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     request.setTransferTimeout(60000);
     request.setRawHeader("User-Agent", USER_AGENT);
-    QNetworkReply* const reply = m_net->post(request, QByteArray());
+    QNetworkReply* const reply = m_net->post(request, query.toString(QUrl::FullyEncoded).toUtf8());
     connect(reply, &QNetworkReply::finished, this, [this, reply, done]{
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QJsonObject answer = QJsonDocument::fromJson(reply->readAll()).object();
+        const QByteArray body = reply->readAll();
+        const QJsonObject answer = QJsonDocument::fromJson(body).object();
         reply->deleteLater();
         const QString token = answer.value(QStringLiteral("access_token")).toString();
+        note(LOGMSG("IGDB: Twitch login answered %1%2").arg(status == 0 ? QStringLiteral("nothing (no connection?)") : QString::number(status))
+             .arg(status == 200 && !token.isEmpty() ? QStringLiteral(", token received")
+                  : QStringLiteral(": ") + QString::fromUtf8(body.left(200))));
         if (status == 200 && !token.isEmpty()) {
             m_igdb_token = token;
             // a minute early, so it doesn't run out mid-search
@@ -1250,11 +1269,17 @@ void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonA
         return q.toUtf8();
     };
     const int tries = m_settings.value(QStringLiteral("retries")).toInt();
-    igdbPost(query_for(platform), [this, platform, query_for, tries, done](int status, const QByteArray& body){
+    note(LOGMSG("IGDB: searching \"%1\" (system `%2`, platform %3)").arg(clean, job.system).arg(platform));
+    igdbPost(query_for(platform), [this, platform, query_for, tries, done, clean](int status, const QByteArray& body){
         const QJsonArray games = QJsonDocument::fromJson(body).array();
+        note(LOGMSG("IGDB: answered %1, %2 games%3").arg(status).arg(games.size())
+             .arg(status == 200 ? QString() : QStringLiteral(": ") + QString::fromUtf8(body.left(200))));
         if (status == 200 && games.isEmpty() && platform > 0 && !m_stop) {
-            igdbPost(query_for(0), [done](int st, const QByteArray& b){
-                done(st, QJsonDocument::fromJson(b).array());
+            note(LOGMSG("IGDB: nothing on that platform, searching \"%1\" on every platform").arg(clean));
+            igdbPost(query_for(0), [this, done](int st, const QByteArray& b){
+                const QJsonArray all = QJsonDocument::fromJson(b).array();
+                note(LOGMSG("IGDB: answered %1, %2 games").arg(st).arg(all.size()));
+                done(st, all);
             }, tries);
             return;
         }
@@ -1346,6 +1371,8 @@ void Scraper::igdbAuto(bool after_other)
 void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
 {
     const Job& job = m_jobs[m_index];
+    note(LOGMSG("IGDB: using \"%1\"%2").arg(game.value(QStringLiteral("name")).toString())
+         .arg(after_other ? QStringLiteral(" for what's still missing") : QString()));
     const bool overwrite = m_settings.value(QStringLiteral("overwrite")).toBool();
     const auto open_key = [this, overwrite](const char* key, bool has) {
         return !m_changes.contains(QLatin1String(key)) && (overwrite || !has);
@@ -1403,9 +1430,20 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
         if (media.url.isValid() && slotFree(job, media))
             m_media.push_back(media);
     };
+    const size_t media_before = m_media.size();
     add(igdb_image(game.value(QStringLiteral("cover")), "cover_big_2x"), "getCovers", "assets.box_front", "covers", "2d");
     add(igdb_image(game.value(QStringLiteral("screenshots")).toArray().at(0), "1080p"), "getScreenshots", "assets.screenshot", "screenshots", "");
     add(igdb_image(game.value(QStringLiteral("artworks")).toArray().at(0), "1080p"), "getFanart", "assets.background", "fanart", "");
+    QStringList kept;
+    for (auto it = m_changes.cbegin(); it != m_changes.cend(); ++it)
+        kept.append(it.key());
+    note(LOGMSG("IGDB: details to save: %1; pictures to download: %2 (cover %3, screenshots %4, artworks %5)%6")
+         .arg(kept.isEmpty() ? QStringLiteral("none") : kept.join(QStringLiteral(", ")))
+         .arg(m_media.size() - media_before)
+         .arg(game.value(QStringLiteral("cover")).isObject() ? QStringLiteral("yes") : QStringLiteral("no"))
+         .arg(game.value(QStringLiteral("screenshots")).toArray().size())
+         .arg(game.value(QStringLiteral("artworks")).toArray().size())
+         .arg(!overwrite && m_media.size() == media_before ? QStringLiteral(" (Overwrite is off: slots that have a file keep it)") : QString()));
 }
 
 void Scraper::fillMore()
@@ -1558,10 +1596,11 @@ void Scraper::downloadNext()
         if (status != 200 || body.isEmpty()) {
             m_picture_failures++;
             m_picture_error = status;
-            Log::warning(LOG_TAG, LOGMSG("Download `%1`: %2").arg(media.url.toString()).arg(status));
+            note(LOGMSG("Download failed (%1): %2").arg(status).arg(media.url.toString()));
             downloadNext();
             return;
         }
+        note(LOGMSG("Downloaded %1 (%2 KB) -> %3").arg(media.folder).arg(body.size() / 1024).arg(media.url.toString()));
         QString ext = media.ext.toLower();
         if (ext.isEmpty())
             ext = QStringLiteral("png");
@@ -1781,6 +1820,8 @@ void Scraper::save()
     // metadata editing is Android only for now
     const QString error = tr("saving isn't supported on this platform yet");
 #endif
+    note(LOGMSG("Saving `%1` (%2) into the metadata of `%3`: %4").arg(title, job.path, job.collection)
+         .arg(error.isEmpty() ? QStringLiteral("ok") : error));
     if (!error.isEmpty()) {
         m_failed++;
         finishGame(error, false);

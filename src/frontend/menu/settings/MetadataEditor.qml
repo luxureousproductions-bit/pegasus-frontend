@@ -294,10 +294,25 @@ FocusScope {
     function scrapeThisGame() {
         if (scrapingGame)
             return;
-        chooser.openFor(qsTr("Scrape \"%1\"").arg(current("title")) + api.tr, [
+        var s = Internal.settings.scraperSettings();
+        var sourceName = s.source === "igdb" ? "IGDB" : s.source === "steamgriddb" ? "SteamGridDB" : "ScreenScraper";
+        chooser.openFor(qsTr("Scrape \"%1\" from %2").arg(current("title")).arg(sourceName) + api.tr, [
             { "act": "fill", "text": qsTr("Fill what's empty") + api.tr },
             { "act": "replace", "text": qsTr("Replace with what's found") + api.tr },
+            { "act": "source", "text": qsTr("Scrape from: %1  (change)").arg(sourceName) + api.tr },
+            { "act": "options", "text": qsTr("Scraper options... (content, pictures, accounts)") + api.tr },
         ], function(act) {
+            if (act === "source") {
+                var next = s.source === "screenscraper" ? "igdb" : s.source === "igdb" ? "steamgriddb" : "screenscraper";
+                Internal.settings.setScraperSetting("source", next);
+                Qt.callLater(root.scrapeThisGame);
+                return;
+            }
+            if (act === "options") {
+                scraperLoader.active = true;
+                scraperLoader.focus = true;
+                return;
+            }
             var error = Internal.settings.scrapeGame(root.game.obj, root.gameColl(), act === "replace");
             if (error !== "") {
                 root.message = error;
@@ -396,9 +411,13 @@ FocusScope {
             return path;
         var second = key.indexOf(p2) === 0;
         var plain = artBase(second ? key.substring(p2.length) : key);
+        // named after the game's file, as the scraper names its files (an
+        // Android app has no file: its title)
+        var gameFile = (page === "game" && game && game.path && game.path.indexOf("android:") !== 0)
+            ? String(game.path).split("/").pop().replace(/\.[^.]+$/, "") : "";
         var name = plain === "cart:background" ? "background"
                  : plain === "cart:logo" ? "logo"
-                 : String(current("title") || (game ? game.title : "art"));
+                 : (gameFile || String(current("title") || (game ? game.title : "art")));
         return Internal.settings.importArt(path, second ? coll2Name : gameColl(), artDataFolders[plain] || "art", name);
     }
     function pickDataFolder() {

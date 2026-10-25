@@ -82,6 +82,8 @@ public:
     void stop();
     bool running() const { return m_running; }
     QVariantMap state() const;
+    /// what the scraper did lately (Library > Scraper > Log), newest last
+    const QStringList& log() const { return m_log; }
 
     /// The ES-DE system of a collection, for ScreenScraper's system id
     static QString system_of(const QString& collection_name, const QString& short_name);
@@ -119,6 +121,8 @@ private:
     bool m_last_ok = true;
     QString m_stop_reason;
     QVariantMap m_last_changes;  ///< what the last game saved (shown at once for one game)
+    QStringList m_log;           ///< the last few hundred lines of what happened
+    void note(const QString& line);
     QVariantMap m_preview;       ///< the last game as the Scraper page shows it (picture, details)
     int m_picture_failures = 0;  ///< pictures of this game that didn't download
     int m_picture_error = 0;     ///< ... and the last answer

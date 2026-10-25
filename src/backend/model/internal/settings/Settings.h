@@ -232,6 +232,8 @@ public:
     Q_INVOKABLE QString scrapeGame(QObject* game, const QString& collection_name, bool overwrite);
     /// { running, done, total, current, title, result, ok, saved, notFound, failed, stopReason }
     Q_INVOKABLE QVariantMap scraperState() const;
+    /// Pegasus X: what the scraper did lately (Library > Scraper > Log)
+    Q_INVOKABLE QStringList scraperLog() const;
     /// Settings > Library is open: it reads the library again when you leave;
     /// otherwise a finished scrape does it
     Q_PROPERTY(bool libraryOpen MEMBER m_library_open)

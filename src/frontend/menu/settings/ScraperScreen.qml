@@ -29,7 +29,8 @@ FocusScope {
 
     anchors.fill: parent
 
-    property string page: "main"   // main, systems, accounts, content, miximage, other, running
+    property string page: "main"   // main, systems, accounts, content, miximage, other, running, log
+    property var logLines: []
     property var s: Internal.settings.scraperSettings()
     property string message: ""
     property var accounts: ({})    // what the last check said
@@ -293,6 +294,8 @@ FocusScope {
             out.push({ "kind": "page", "to": "content", "text": qsTr("Content settings") + api.tr, "value": "" });
             out.push({ "kind": "page", "to": "miximage", "text": qsTr("Miximage settings") + api.tr, "value": "" });
             out.push({ "kind": "page", "to": "other", "text": qsTr("Other settings") + api.tr, "value": "" });
+            out.push({ "kind": "page", "to": "log", "text": qsTr("Log") + api.tr,
+                       "value": qsTr("what the scraper did") + api.tr });
             out.push({ "kind": "start", "text": (s.systems || []).length > 0
                 ? qsTr("Start · %1 games").arg(gameCount) + api.tr : qsTr("Start") + api.tr });
             return out;
@@ -367,6 +370,13 @@ FocusScope {
             out.push({ "kind": "info", "text": qsTr("The offline generator makes miximages for the systems picked on the Scraper page from the art the games already have, without going online.") + api.tr, "value": "" });
             return out;
         }
+        if (page === "log") {
+            if (logLines.length === 0)
+                out.push({ "kind": "info", "text": qsTr("Nothing yet: scrape a game first.") + api.tr, "value": "" });
+            for (i = logLines.length - 1; i >= 0; i--)
+                out.push({ "kind": "info", "text": logLines[i], "value": "" });
+            return out;
+        }
         if (page === "running") {
             var total = run.total || 0;
             out.push({ "kind": "progress", "text": run.running
@@ -427,12 +437,14 @@ FocusScope {
         "main": qsTr("Library > Scraper"), "systems": qsTr("Scraper > Systems"),
         "accounts": qsTr("Scraper > Accounts"), "content": qsTr("Scraper > Content"),
         "miximage": qsTr("Scraper > Miximages"), "other": qsTr("Scraper > Other settings"),
-        "running": qsTr("Scraper > Scraping"),
+        "running": qsTr("Scraper > Scraping"), "log": qsTr("Scraper > Log"),
     })
 
     // -- Doing things ------------------------------------------------------------
 
     function openPage(to) {
+        if (to === "log")
+            logLines = Internal.settings.scraperLog();
         page = to;
         message = "";
         list.currentIndex = 0;

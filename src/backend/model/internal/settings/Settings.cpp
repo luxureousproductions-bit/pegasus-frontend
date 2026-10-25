@@ -1592,6 +1592,11 @@ QString Settings::startScraperWith(QObject* collections, bool offline)
     return runScraper(std::move(jobs), settings);
 }
 
+QStringList Settings::scraperLog() const
+{
+    return m_scraper ? m_scraper->log() : QStringList();
+}
+
 QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, bool overwrite)
 {
     if (m_scraper && m_scraper->running())
@@ -1781,15 +1786,19 @@ QString Settings::importArt(const QString& source, const QString& collection_nam
     const QString dir = clean_data + QLatin1Char('/') + safe(collection_name) + QLatin1Char('/') + safe(kind_folder);
     if (!QDir().mkpath(dir))
         return source;
-    // A new name each time (the time it was picked): picture views keep a
-    // file they've shown by its path, so reusing the old name kept showing
-    // the old picture. (Earlier copies stay: the metadata may still point at
-    // one until the change is saved.)
+    // one file per game and kind, named like the scraper names them (the
+    // game's file), written over; older time-stamped copies go. Library's
+    // picture views don't cache, so the new picture shows at once.
     const QString base = safe(name);
     const QString ext = QFileInfo(source).suffix();
-    const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMddHHmmss"));
-    const QString target = dir + QLatin1Char('/') + base + QLatin1Char('~') + stamp
-        + (ext.isEmpty() ? QString() : QLatin1Char('.') + ext);
+    const QString target = dir + QLatin1Char('/') + base + (ext.isEmpty() ? QString() : QLatin1Char('.') + ext);
+    static const QRegularExpression rx_stamp(QStringLiteral("^~\\d{14}$"));
+    for (const QFileInfo& other : QDir(dir).entryInfoList(QDir::Files)) {
+        const QString stem = other.completeBaseName();
+        const bool same = stem == base || (stem.startsWith(base) && rx_stamp.match(stem.mid(base.length())).hasMatch());
+        if (same)
+            QFile::remove(other.absoluteFilePath());
+    }
     if (!QFile::copy(source, target)) {
         Log::warning(LOGMSG("Could not copy `%1` to `%2`").arg(source, target));
         return source;
