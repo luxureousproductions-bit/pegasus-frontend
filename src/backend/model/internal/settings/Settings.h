@@ -64,6 +64,8 @@ class Settings : public QObject {
     Q_PROPERTY(bool esdeGamesAsAndroid READ esdeGamesAsAndroid WRITE setEsdeGamesAsAndroid NOTIFY esdeImportDirChanged)
     Q_PROPERTY(bool esdeImportRunning READ esdeImportRunning NOTIFY esdeImportRunningChanged)
     Q_PROPERTY(bool mergeAndroid READ mergeAndroid WRITE setMergeAndroid NOTIFY libraryRulesChanged)
+    /// Pegasus X: a newer build looked for when Pegasus X starts (off unless turned on)
+    Q_PROPERTY(bool checkUpdatesOnStart READ checkUpdatesOnStart WRITE setCheckUpdatesOnStart NOTIFY pegasusxSettingsChanged)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
@@ -79,6 +81,8 @@ public:
 
     QObject* themeStore();
     QObject* updater();
+    bool checkUpdatesOnStart() const;
+    void setCheckUpdatesOnStart(bool);
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
     /// the screen asked for with --pegasusx-open (testing), or empty
     Q_INVOKABLE QString startupScreen() const;
@@ -281,6 +285,7 @@ public:
     Q_INVOKABLE void reloadProviders();
 
 signals:
+    void pegasusxSettingsChanged();
     /// Pegasus X: the theme in use was updated in the theme downloader: built again
     void currentThemeUpdated();
     /// Pegasus X: the menu closes, back to the theme (eg. "Use it now")

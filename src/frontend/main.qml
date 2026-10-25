@@ -307,6 +307,30 @@ Window {
             }
         }
 
+        // Pegasus X: "Check for updates when Pegasus X starts": a note on the
+        // theme when a newer build is out (nothing downloaded by itself)
+        Timer {
+            id: updateCheck
+            interval: 3000
+            onTriggered: Internal.settings.updater.check()
+        }
+        Connections {
+            target: Internal.settings.updater
+            function onChanged() {
+                var u = Internal.settings.updater;
+                if (!updateCheck.running && Internal.settings.checkUpdatesOnStart && u.state === "available"
+                        && !splashScreen.updateNoteShown && !mainMenu.focus) {
+                    splashScreen.updateNoteShown = true;
+                    genericMessage.setSource("dialogs/GenericOkDialog.qml", {
+                        "title": qsTr("Pegasus X update") + api.tr,
+                        "message": qsTr("Build %1 is out (this is build %2). Settings > Check for updates installs it.")
+                            .arg(u.info.latest).arg(u.info.current) + api.tr });
+                    genericMessage.focus = true;
+                }
+            }
+        }
+        property bool updateNoteShown: false
+
         function hideMaybe() {
             if (focus && !dataLoading && !skinLoading) {
                 content.focus = true;
@@ -314,6 +338,9 @@ Window {
                     startupScreenDone = true;
                     if (Internal.settings.startupScreen() !== "")
                         startupScreenTimer.start();
+                    // Pegasus X: a newer build looked for, if that's turned on
+                    if (Internal.settings.checkUpdatesOnStart)
+                        updateCheck.start();
                 }
                 // Reload all games: the theme, not the menu (content would
                 // give the focus back to the menu, still on the settings)

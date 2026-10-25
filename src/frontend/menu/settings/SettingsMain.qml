@@ -73,6 +73,21 @@ FocusScope {
 
     readonly property list<SettingsEntry> optionList: [
         SettingsEntry {
+            label: QT_TR_NOOP("Check for updates...")
+            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openUpdater
+            section: "pegasusx"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Check for updates when Pegasus X starts")
+            desc: QT_TR_NOOP("A short note on the theme when a newer build is out. Nothing is downloaded by itself.")
+            type: SettingsEntry.Type.Bool
+            boolValue: Internal.settings.checkUpdatesOnStart
+            boolSetter: (val) => Internal.settings.checkUpdatesOnStart = val
+            section: "pegasusx"
+        },
+        SettingsEntry {
             label: QT_TR_NOOP("Language")
             type: SettingsEntry.Type.Select
             selectBox: localeBox
@@ -188,13 +203,6 @@ FocusScope {
             type: SettingsEntry.Type.Button
             buttonAction: root.reloadRequested
             section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Check for updates...")
-            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openUpdater
-            section: "pegasusx"
         }
     ]
 

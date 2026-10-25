@@ -112,6 +112,19 @@ QString Settings::startupScreen() const
     return qApp ? qApp->property("pegasusxOpen").toString() : QString();
 }
 
+bool Settings::checkUpdatesOnStart() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return file.value(QStringLiteral("updater/checkOnStart"), false).toBool();
+}
+
+void Settings::setCheckUpdatesOnStart(bool value)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("updater/checkOnStart"), value);
+    emit pegasusxSettingsChanged();
+}
+
 QObject* Settings::updater()
 {
     if (!m_updater)
