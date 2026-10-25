@@ -43,6 +43,7 @@ namespace scraper {
 /// the library can be read again meanwhile)
 struct Job {
     QString collection;
+    QString media_folder;    ///< the collection's folder in the media folder (its short name, eg. "snes")
     QString system;          ///< ES-DE's name for the collection's system, if known
     QString title;
     QString path;            ///< the first file, or the game's android: URI

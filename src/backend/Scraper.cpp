@@ -1643,7 +1643,8 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     // next scrape and the same whatever the title becomes. Android apps (no
     // file, an android: entry) use the title.
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
-    const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.collection) % QLatin1Char('/') % media.folder;
+    const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.media_folder.isEmpty() ? job.collection : job.media_folder)
+                      % QLatin1Char('/') % media.folder;
     QDir().mkpath(dir);
     const bool has_file = !job.path.isEmpty() && !job.path.startsWith(QLatin1String("android:"));
     // (a content:// entry: its last part, decoded)

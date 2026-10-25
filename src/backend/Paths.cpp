@@ -25,6 +25,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
@@ -49,7 +50,7 @@ void create_dir_if_not_exists(const QString& dir_path)
     QDir(dir_path).mkpath(QLatin1String(".")); // does nothing if already exists
 }
 
-QString get_appconfig_dir()
+QString get_private_config_dir()
 {
 #ifdef Q_OS_ANDROID
     const QString dir_path = QSP::writableLocation(QSP::GenericDataLocation)
@@ -62,6 +63,21 @@ QString get_appconfig_dir()
 #endif
     create_dir_if_not_exists(dir_path);
     return dir_path;
+}
+
+const QString ROOT_FILE = QStringLiteral("pegasusx-root.txt");
+
+// the Pegasus X folder, when pegasusx-root.txt names one that can be used
+QString get_appconfig_dir()
+{
+    const QString own = get_private_config_dir();
+    QFile file(own + QLatin1Char('/') + ROOT_FILE);
+    if (file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        const QString root = QDir::cleanPath(QString::fromUtf8(file.readAll()).trimmed());
+        if (!root.isEmpty() && (QFileInfo(root).isDir() || QDir().mkpath(root)) && QFileInfo(root).isWritable())
+            return root;
+    }
+    return own;
 }
 
 QString get_cache_dir()
@@ -150,6 +166,32 @@ QString writableConfigDir()
 {
     static const QString config_dir = get_appconfig_dir();
     return config_dir;
+}
+
+QString privateConfigDir()
+{
+    static const QString dir = get_private_config_dir();
+    return dir;
+}
+
+QString pegasusxRootSetting()
+{
+    QFile file(privateConfigDir() + QLatin1Char('/') + ROOT_FILE);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+        return {};
+    return QDir::cleanPath(QString::fromUtf8(file.readAll()).trimmed());
+}
+
+bool setPegasusxRootSetting(const QString& dir)
+{
+    const QString path = privateConfigDir() + QLatin1Char('/') + ROOT_FILE;
+    if (dir.isEmpty())
+        return !QFileInfo::exists(path) || QFile::remove(path);
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
+        return false;
+    file.write(QDir::cleanPath(dir).toUtf8() + '\n');
+    return true;
 }
 
 QString writableCacheDir()

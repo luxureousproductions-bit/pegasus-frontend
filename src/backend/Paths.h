@@ -33,8 +33,19 @@ QString app_dir_path();
 /// Returns the directory paths where config files may be located
 const QStringList& configDirs();
 
-/// Returns a directory path where persistent data could be stored
+/// Returns a directory path where persistent data could be stored.
+/// Pegasus X: the Pegasus X folder, when one was chosen (see privateConfigDir)
 QString writableConfigDir();
+
+/// Pegasus X: the app's own config folder (on Android, in its app storage).
+/// A file `pegasusx-root.txt` there names the Pegasus X folder: everything
+/// (settings, themes, metadata, logs, art) lives in that folder instead.
+QString privateConfigDir();
+/// The Pegasus X folder named in pegasusx-root.txt, or empty
+QString pegasusxRootSetting();
+/// Writes (or with an empty path, removes) the Pegasus X folder setting.
+/// Takes effect when Pegasus X starts again.
+bool setPegasusxRootSetting(const QString& dir);
 
 /// Returns a directory path where cache data could be stored
 QString writableCacheDir();

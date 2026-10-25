@@ -67,20 +67,6 @@ FocusScope {
         libStart = libState();
         Internal.settings.libraryOpen = true;  // a finished scrape waits for you to leave
         list.currentIndex = 1;  // the first option, below the title
-        // the first time: offer to set up the data folder
-        if (Internal.settings.dataDir === "" && !Internal.settings.dataDirAsked)
-            askDataFolder.start();
-    }
-    Timer {
-        id: askDataFolder
-        interval: 300
-        onTriggered: {
-            Internal.settings.dataDirAsked = true;
-            chooser.openFor(qsTr("Set up a Pegasus X data folder? It's where art you pick (and later, scraped art) is kept, in a folder you name, anywhere you like.") + api.tr, [
-                { "act": "now", "text": qsTr("Set it up now") + api.tr },
-                { "act": "later", "text": qsTr("Later (Library > Data folder)") + api.tr },
-            ], function(act) { if (act === "now") root.pickDataFolder(); });
-        }
     }
 
     // -- Library: hidden games and collections, Android sections -------------------
@@ -418,7 +404,8 @@ FocusScope {
         var name = plain === "cart:background" ? "background"
                  : plain === "cart:logo" ? "logo"
                  : (gameFile || String(current("title") || (game ? game.title : "art")));
-        return Internal.settings.importArt(path, second ? coll2Name : gameColl(), artDataFolders[plain] || "art", name);
+        var collShort = second ? (coll2Obj ? coll2Obj.shortName : "") : (collObj ? collObj.shortName : "");
+        return Internal.settings.importArt(path, second ? coll2Name : gameColl(), artDataFolders[plain] || "art", name, collShort);
     }
     function pickDataFolder() {
         filePicker.pickFolders = true;
@@ -1135,8 +1122,7 @@ FocusScope {
                 var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
                 out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
                 out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
-                           "value": root.dataDir !== "" ? root.dataDir : qsTr("not set: art stays where you pick it") + api.tr,
-                           "muted": root.dataDir === "" });
+                           "value": root.dataDir, "muted": false });
                 out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
                            "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
                            "muted": hiddenCount === 0 });

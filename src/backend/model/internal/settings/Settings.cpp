@@ -44,6 +44,7 @@
 #include "providers/esde/EsdeProvider.h"
 #endif
 
+#include <QCoreApplication>
 #include <QCursor>
 #include <algorithm>
 #include <QLocale>
@@ -110,6 +111,128 @@ Settings::Settings(QObject* parent)
 QString Settings::startupScreen() const
 {
     return qApp ? qApp->property("pegasusxOpen").toString() : QString();
+}
+
+QString Settings::rootDir() const
+{
+    return paths::writableConfigDir();
+}
+
+QString Settings::defaultRootDir() const
+{
+    return paths::privateConfigDir();
+}
+
+bool Settings::rootChosen() const
+{
+    return !paths::pegasusxRootSetting().isEmpty();
+}
+
+bool Settings::rootSetupNeeded() const
+{
+    return !rootChosen() && !QFileInfo::exists(paths::privateConfigDir() + QStringLiteral("/pegasusx-root-asked"));
+}
+
+void Settings::setRootSetupAsked()
+{
+    QFile file(paths::privateConfigDir() + QStringLiteral("/pegasusx-root-asked"));
+    if (file.open(QIODevice::WriteOnly))
+        file.write("asked\n");
+    emit pegasusxSettingsChanged();
+}
+
+namespace {
+// the files and folders of one folder into another (what's already there is
+// kept when the copy fails); returns how many files were copied, -1 on error
+int copy_tree(const QString& from, const QString& to, const QStringList& skip, QString& error)
+{
+    int copied = 0;
+    QDirIterator it(from, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString path = it.next();
+        const QString rel = path.mid(from.length() + 1);
+        const QString top = rel.section(QLatin1Char('/'), 0, 0);
+        if (skip.contains(top))
+            continue;
+        const QFileInfo info = it.fileInfo();
+        const QString target = to + QLatin1Char('/') + rel;
+        if (info.isDir()) {
+            QDir().mkpath(target);
+            continue;
+        }
+        QDir().mkpath(QFileInfo(target).absolutePath());
+        if (QFileInfo::exists(target))
+            QFile::remove(target);
+        if (!QFile::copy(path, target)) {
+            error = QStringLiteral("Couldn't copy %1").arg(rel);
+            return -1;
+        }
+        copied++;
+    }
+    return copied;
+}
+} // namespace
+
+QVariantMap Settings::rootDirContents() const
+{
+    qint64 files = 0, bytes = 0;
+    QDirIterator it(paths::writableConfigDir(), QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        files++;
+        bytes += it.fileInfo().size();
+    }
+    return QVariantMap {
+        { QStringLiteral("files"), files },
+        { QStringLiteral("mb"), static_cast<double>(bytes) / 1048576.0 },
+        { QStringLiteral("dir"), paths::writableConfigDir() },
+    };
+}
+
+QString Settings::setRootDir(const QString& dir_in, bool move_data)
+{
+    const QString dir = QDir::cleanPath(dir_in);
+    const QString now = QDir::cleanPath(paths::writableConfigDir());
+    if (dir.isEmpty())
+        return tr("Pick a folder first.");
+    if (!QFileInfo(dir).isDir() && !QDir().mkpath(dir))
+        return tr("Couldn't make the folder %1.").arg(dir);
+    if (dir == now) {
+        setRootSetupAsked();
+        return {};
+    }
+    if (dir.startsWith(now + QLatin1Char('/')))
+        return tr("The folder can't be inside the one used now.");
+    {
+        QFile probe(dir + QStringLiteral("/.pegasusx-write-test"));
+        if (!probe.open(QIODevice::WriteOnly))
+            return tr("Pegasus X can't write in %1. Pick a folder on this device's storage.").arg(dir);
+        probe.close();
+        probe.remove();
+    }
+    if (move_data) {
+        QString error;
+        // the Pegasus X folder setting itself and the caches stay out
+        const int copied = copy_tree(now, dir, { QStringLiteral("pegasusx-root.txt"), QStringLiteral("pegasusx-root-asked"),
+                                                  QStringLiteral(".pegasusx-write-test") }, error);
+        if (copied < 0)
+            return error;
+        Log::info(LOGMSG("Pegasus X folder: %1 files copied from `%2` to `%3`").arg(copied).arg(now, dir));
+        // art kept in the old folder's media: in the new one's
+        const QString old_media = QDir::cleanPath(dataDir());
+        if (old_media == now + QStringLiteral("/media") || old_media.isEmpty())
+            setDataDir(QString());
+    }
+    if (!paths::setPegasusxRootSetting(dir))
+        return tr("Couldn't save the folder setting.");
+    setRootSetupAsked();
+    emit pegasusxSettingsChanged();
+    return {};
+}
+
+void Settings::quitApp()
+{
+    QCoreApplication::quit();
 }
 
 bool Settings::checkUpdatesOnStart() const
@@ -1485,6 +1608,7 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
     const model::Collection* const coll_ptr = &coll;
     scraper::Job job;
     job.collection = coll_ptr->name();
+    job.media_folder = coll_ptr->shortName().isEmpty() ? coll_ptr->name() : coll_ptr->shortName();
     job.system = system;
     job.title = game->title();
     job.path = path;
@@ -1723,7 +1847,9 @@ int Settings::emulatorListAgeDays() const
 QString Settings::dataDir() const
 {
     const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
-    return file.value(QStringLiteral("data/dir")).toString();
+    const QString saved = file.value(QStringLiteral("data/dir")).toString();
+    // nothing picked: the Pegasus X folder's media, as media/<system>/<kind>
+    return saved.isEmpty() ? paths::writableConfigDir() + QStringLiteral("/media") : saved;
 }
 
 void Settings::setDataDir(const QString& dir)
@@ -1781,7 +1907,7 @@ bool Settings::makeDir(const QString& path) const
 }
 
 QString Settings::importArt(const QString& source, const QString& collection_name,
-                            const QString& kind_folder, const QString& name) const
+                            const QString& kind_folder, const QString& name, const QString& short_name) const
 {
     const QString data = dataDir();
     if (data.isEmpty() || source.isEmpty() || !QFileInfo(source).isFile())
@@ -1796,7 +1922,9 @@ QString Settings::importArt(const QString& source, const QString& collection_nam
         text.replace(rx_bad, QStringLiteral("_"));
         return text.simplified();
     };
-    const QString dir = clean_data + QLatin1Char('/') + safe(collection_name) + QLatin1Char('/') + safe(kind_folder);
+    // media/<system>/<kind>: the collection's short name (as the scraper)
+    const QString dir = clean_data + QLatin1Char('/') + safe(short_name.isEmpty() ? collection_name : short_name)
+                      + QLatin1Char('/') + safe(kind_folder);
     if (!QDir().mkpath(dir))
         return source;
     // one file per game and kind, named like the scraper names them (the

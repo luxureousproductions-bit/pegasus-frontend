@@ -225,6 +225,22 @@ Window {
         target: genericMessage.item
         function onClose() { content.focus = true; }
     }
+    // Pegasus X: the first start's folder setup
+    Loader {
+        id: firstRunSetup
+        anchors.fill: parent
+        enabled: focus
+        visible: focus && status === Loader.Ready
+        onLoaded: item.focus = true
+        onFocusChanged: if (item && focus) item.focus = true
+    }
+    Connections {
+        target: firstRunSetup.item
+        function onClose() {
+            content.focus = true;
+            firstRunSetup.source = "";
+        }
+    }
 
 
     Connections {
@@ -341,6 +357,11 @@ Window {
                     // Pegasus X: a newer build looked for, if that's turned on
                     if (Internal.settings.checkUpdatesOnStart)
                         updateCheck.start();
+                    // the first start: where everything is kept
+                    if (Internal.settings.rootSetupNeeded && Internal.settings.startupScreen() === "") {
+                        firstRunSetup.setSource("menu/settings/RootFolderSetup.qml", { "firstRun": true });
+                        firstRunSetup.focus = true;
+                    }
                 }
                 // Reload all games: the theme, not the menu (content would
                 // give the focus back to the menu, still on the settings)

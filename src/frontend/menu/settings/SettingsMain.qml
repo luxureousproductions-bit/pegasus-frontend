@@ -32,6 +32,7 @@ FocusScope {
     signal openEsdeImport
     signal openThemeDownloader
     signal openUpdater
+    signal openRootFolder
     signal openEmulatorSettings
     signal openLibrarySettings
     signal openMetadataEditor
@@ -77,6 +78,13 @@ FocusScope {
             desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openUpdater
+            section: "pegasusx"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Pegasus X folder...")
+            desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openRootFolder
             section: "pegasusx"
         },
         SettingsEntry {

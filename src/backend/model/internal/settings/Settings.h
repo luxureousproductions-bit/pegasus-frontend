@@ -66,6 +66,12 @@ class Settings : public QObject {
     Q_PROPERTY(bool mergeAndroid READ mergeAndroid WRITE setMergeAndroid NOTIFY libraryRulesChanged)
     /// Pegasus X: a newer build looked for when Pegasus X starts (off unless turned on)
     Q_PROPERTY(bool checkUpdatesOnStart READ checkUpdatesOnStart WRITE setCheckUpdatesOnStart NOTIFY pegasusxSettingsChanged)
+    /// Pegasus X: the Pegasus X folder (settings, themes, metadata, logs, art)
+    Q_PROPERTY(QString rootDir READ rootDir NOTIFY pegasusxSettingsChanged)
+    Q_PROPERTY(QString defaultRootDir READ defaultRootDir CONSTANT)
+    Q_PROPERTY(bool rootChosen READ rootChosen NOTIFY pegasusxSettingsChanged)
+    /// no folder chosen and never asked: the setup shows at the first start
+    Q_PROPERTY(bool rootSetupNeeded READ rootSetupNeeded NOTIFY pegasusxSettingsChanged)
     Q_PROPERTY(QStringList androidGrantedDirs READ androidGrantedDirs NOTIFY androidDirsChanged)
 
     QML_CONST_PROPERTY(model::KeyEditor, keyEditor)
@@ -83,6 +89,17 @@ public:
     QObject* updater();
     bool checkUpdatesOnStart() const;
     void setCheckUpdatesOnStart(bool);
+    QString rootDir() const;
+    QString defaultRootDir() const;
+    bool rootChosen() const;
+    bool rootSetupNeeded() const;
+    Q_INVOKABLE void setRootSetupAsked();
+    /// Makes `dir` the Pegasus X folder (from the next start); with `move_data`,
+    /// what's in the folder used now is copied there first. "" or what's wrong.
+    Q_INVOKABLE QString setRootDir(const QString& dir, bool move_data);
+    /// how much is in the folder used now (files, MB), for the setup
+    Q_INVOKABLE QVariantMap rootDirContents() const;
+    Q_INVOKABLE void quitApp();
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
     /// the screen asked for with --pegasusx-open (testing), or empty
     Q_INVOKABLE QString startupScreen() const;
@@ -262,7 +279,7 @@ public:
     /// A copy of `source` in the data folder (<data>/<collection>/<kind>/<name>.<ext>),
     /// or `source` itself if there's no data folder, it's already in it, or copying fails
     Q_INVOKABLE QString importArt(const QString& source, const QString& collection_name,
-                                  const QString& kind_folder, const QString& name) const;
+                                  const QString& kind_folder, const QString& name, const QString& short_name) const;
     /// The first of these folders that exists, or empty
     Q_INVOKABLE QString firstExistingDir(const QStringList& paths) const;
     /// Every genre used in the library, A to Z
