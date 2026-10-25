@@ -205,7 +205,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: "#0c0d0e"
+        color: "#222"
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
@@ -240,19 +240,26 @@ FocusScope {
         spacing: vpx(10)
         Repeater {
             model: root.tabs
-            delegate: Rectangle {
+            delegate: Item {
                 readonly property bool on: root.tab === modelData.v
-                width: tabText.width + vpx(34)
-                height: vpx(34)
-                radius: height / 2
-                color: on ? "#2a5f5f" : "#1b1e20"
+                width: tabText.width + vpx(30)
+                height: vpx(44)
                 Text {
                     id: tabText
                     anchors.centerIn: parent
                     text: modelData.v === "all" ? modelData.t : modelData.t + " (" + root.countOf(modelData.v) + ")"
-                    color: parent.on ? "#fff" : "#aaa"
+                    color: parent.on ? "#eee" : "#999"
                     font.family: globalFonts.sans
-                    font.pixelSize: vpx(15)
+                    font.pixelSize: vpx(19)
+                    font.capitalization: Font.AllUppercase
+                    font.italic: true
+                }
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: vpx(3)
+                    color: "#3aa"
+                    visible: parent.on
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -272,13 +279,11 @@ FocusScope {
         anchors.left: parent.left
         anchors.leftMargin: vpx(40)
         width: parent.width * 0.36
-        color: "#16191b"
-        radius: vpx(10)
+        color: "transparent"
 
         ListView {
             id: list
             anchors.fill: parent
-            anchors.margins: vpx(6)
             clip: true
             focus: true
             model: root.rows
@@ -288,26 +293,33 @@ FocusScope {
             preferredHighlightEnd: height * 0.7
             onCurrentIndexChanged: root.pictureIndex = 0
 
-            delegate: Rectangle {
+            // rows as in Pegasus' settings: the highlighted one underlined
+            delegate: Item {
                 readonly property bool isOn: ListView.isCurrentItem
                 readonly property var e: modelData.entry
                 width: ListView.view.width
-                height: vpx(52)
-                radius: vpx(7)
-                color: isOn ? "#2a5f5f" : "transparent"
+                height: vpx(22) * 2.4
+
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: vpx(3)
+                    color: "#3aa"
+                    visible: parent.isOn
+                }
 
                 Text {
                     id: rowName
                     anchors.left: parent.left
-                    anchors.leftMargin: vpx(14)
+                    anchors.leftMargin: vpx(16)
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, parent.width - badge.width - vpx(40))
-                    text: modelData.kind === "add" ? "＋  " + qsTr("Add a theme from a GitHub link") + api.tr
-                        : modelData.kind === "refresh" ? "⟳  " + qsTr("Check for new themes and updates") + api.tr
+                    text: modelData.kind === "add" ? qsTr("Add a theme from a GitHub link...") + api.tr
+                        : modelData.kind === "refresh" ? qsTr("Check for new themes and updates") + api.tr
                         : parent.e.name
-                    color: modelData.kind === "theme" ? "#eee" : "#5cc"
+                    color: "#eee"
                     font.family: globalFonts.sans
-                    font.pixelSize: vpx(18)
+                    font.pixelSize: vpx(20)
                     elide: Text.ElideRight
                 }
                 Text {
@@ -318,32 +330,26 @@ FocusScope {
                     anchors.baseline: rowName.baseline
                     visible: modelData.kind === "theme"
                     text: parent.e ? parent.e.author : ""
-                    color: parent.isOn ? "#bdd" : "#8aa"
+                    color: "#999"
                     font.family: globalFonts.sans
-                    font.pixelSize: vpx(13)
+                    font.pixelSize: vpx(15)
                     elide: Text.ElideRight
                 }
-                Rectangle {
+                // what it is here, as Pegasus shows a value: on the right
+                Text {
                     id: badge
                     readonly property string kind: !parent.e ? "" : parent.e.current ? "current"
                         : parent.e.update ? "update" : parent.e.installed ? "installed" : ""
                     visible: kind !== ""
                     anchors.right: parent.right
-                    anchors.rightMargin: vpx(12)
+                    anchors.rightMargin: vpx(16)
                     anchors.verticalCenter: parent.verticalCenter
-                    width: visible ? badgeText.width + vpx(18) : 0
-                    height: vpx(22)
-                    radius: height / 2
-                    color: kind === "update" ? "#5a4415" : kind === "current" ? "#1f4d5a" : "#24452e"
-                    Text {
-                        id: badgeText
-                        anchors.centerIn: parent
-                        text: badge.kind === "update" ? qsTr("Update") + api.tr
-                            : badge.kind === "current" ? qsTr("In use") + api.tr : qsTr("Installed") + api.tr
-                        color: badge.kind === "update" ? "#fc6" : badge.kind === "current" ? "#8de" : "#9e9"
-                        font.family: globalFonts.sans
-                        font.pixelSize: vpx(12)
-                    }
+                    width: visible ? implicitWidth : 0
+                    text: kind === "update" ? qsTr("Update") + api.tr
+                        : kind === "current" ? qsTr("In use") + api.tr : qsTr("Installed") + api.tr
+                    color: kind === "update" ? "#fc6" : "#c0c0c0"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(17)
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -385,10 +391,7 @@ FocusScope {
             anchors.left: parent.left
             anchors.right: parent.right
             height: Math.min(width * 9 / 16, parent.height * 0.6)
-            color: "#151718"
-            radius: vpx(10)
-            border.color: "#2c3134"
-            border.width: vpx(2)
+            color: "#333"
             visible: root.entry !== null
 
             Image {
@@ -431,10 +434,9 @@ FocusScope {
             Repeater {
                 model: root.pictures.length
                 delegate: Rectangle {
-                    width: vpx(8)
-                    height: width
-                    radius: width / 2
-                    color: index === root.pictureIndex ? "#5cc" : "#444"
+                    width: vpx(18)
+                    height: vpx(3)
+                    color: index === root.pictureIndex ? "#3aa" : "#555"
                 }
             }
         }
@@ -476,7 +478,7 @@ FocusScope {
                         parts.push(qsTr("installed") + api.tr);
                     return parts.join("  ·  ");
                 }
-                color: "#8aa"
+                color: "#999"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(15)
                 elide: Text.ElideRight
@@ -501,7 +503,7 @@ FocusScope {
             Text {
                 width: parent.width
                 text: root.entry ? root.entry.url : ""
-                color: "#5cc"
+                color: "#999"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(14)
                 elide: Text.ElideMiddle
@@ -562,7 +564,7 @@ FocusScope {
 
     // -- Installing ------------------------------------------------------------------
 
-    FocusScope {
+    PegasusDialog {
         id: installDialog
 
         property var e: null
@@ -573,12 +575,19 @@ FocusScope {
         property bool ok: false
         property string result: ""
         property string dir: ""
-        property int choice: 0
 
-        anchors.fill: parent
-        enabled: focus
-        visible: focus
-        z: 5
+        title: e ? (e.installed ? qsTr("Updating %1") : qsTr("Installing %1")).arg(e.name) + api.tr : ""
+        busy: !done
+        buttons: !done ? [] : ok ? [ qsTr("Use it now") + api.tr, qsTr("Stay here") + api.tr ] : [ qsTr("Ok") + api.tr ]
+        text: {
+            if (done)
+                return ok ? qsTr("Done. \"Use it now\" switches to it and opens its home screen.") + api.tr : result;
+            if (stage === "unpack")
+                return qsTr("Unpacking...") + api.tr;
+            var mb = function(b) { return (b / 1048576).toFixed(1); };
+            return (total > 0 ? qsTr("Downloading... %1 of %2 MB").arg(mb(received)).arg(mb(total))
+                              : qsTr("Downloading... %1 MB").arg(mb(received))) + api.tr;
+        }
 
         function openFor(entry) {
             e = entry;
@@ -603,242 +612,91 @@ FocusScope {
             result = msg;
             dir = d;
         }
-        function leave() {
+
+        onPicked: {
+            var d = dir;
             list.focus = true;
+            if (ok && index === 0)
+                root.useIt({ "dir": d });
+        }
+        onCancelled: {
+            if (!done)
+                root.store.cancelInstall();
+            else
+                list.focus = true;
         }
 
-        Keys.onPressed: {
-            if (event.isAutoRepeat)
-                return;
-            event.accepted = true;
-            if (!done) {
-                if (api.keys.isCancel(event))
-                    root.store.cancelInstall();
-                return;
-            }
-            if (api.keys.isCancel(event)) {
-                leave();
-            }
-            else if (api.keys.isAccept(event)) {
-                if (ok && choice === 0) {
-                    var entry = e;
-                    leave();
-                    root.useIt({ "dir": dir, "name": entry ? entry.name : "" });
-                }
-                else {
-                    leave();
-                }
-            }
+        Text {
+            width: parent.width
+            text: installDialog.e ? installDialog.e.url : ""
+            color: "#c0c0c0"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(15)
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideMiddle
         }
-        Keys.onLeftPressed: choice = 0
-        Keys.onRightPressed: choice = 1
-
+        // how far: the download's size isn't always known (then it slides)
         Rectangle {
-            anchors.fill: parent
-            color: "#000"
-            opacity: 0.6
-            MouseArea { anchors.fill: parent }
-        }
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.6, vpx(640))
-            height: dialogColumn.height + vpx(52)
-            color: "#2b2e30"
-            radius: vpx(10)
-            border.color: "#3aa"
-            border.width: vpx(2)
-
-            Column {
-                id: dialogColumn
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                anchors.margins: vpx(26)
-                spacing: vpx(10)
-
-                Text {
-                    width: parent.width
-                    text: installDialog.e ? (installDialog.e.installed ? qsTr("Updating %1") : qsTr("Installing %1")).arg(installDialog.e.name) + api.tr : ""
-                    color: "#eee"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(24)
-                    font.bold: true
-                    elide: Text.ElideRight
-                }
-                Text {
-                    width: parent.width
-                    text: installDialog.e ? installDialog.e.url : ""
-                    color: "#8aa"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(15)
-                    elide: Text.ElideMiddle
-                }
-                // how far: the download's size isn't always known (then it slides)
-                Rectangle {
-                    width: parent.width
-                    height: vpx(14)
-                    radius: height / 2
-                    color: "#16191b"
-                    clip: true
-                    visible: !installDialog.done
-                    readonly property bool known: installDialog.total > 0 && installDialog.stage === "download"
-                    Rectangle {
-                        visible: parent.known
-                        height: parent.height
-                        radius: height / 2
-                        color: "#3aa"
-                        width: parent.width * Math.min(1, installDialog.received / Math.max(1, installDialog.total))
-                    }
-                    Rectangle {
-                        visible: !parent.known
-                        height: parent.height
-                        width: parent.width * 0.3
-                        radius: height / 2
-                        color: "#3aa"
-                        NumberAnimation on x {
-                            from: -installDialog.width * 0.2
-                            to: installDialog.width * 0.6
-                            duration: 1200
-                            loops: Animation.Infinite
-                            running: installDialog.visible && !installDialog.done
-                        }
-                    }
-                }
-                Text {
-                    width: parent.width
-                    text: {
-                        if (installDialog.done)
-                            return installDialog.ok
-                                ? qsTr("Done. \"Use it now\" switches to it and opens its home screen.") + api.tr
-                                : installDialog.result;
-                        if (installDialog.stage === "unpack")
-                            return qsTr("Unpacking...") + api.tr;
-                        var mb = function(b) { return (b / 1048576).toFixed(1); };
-                        return installDialog.total > 0
-                            ? qsTr("Downloading... %1 of %2 MB").arg(mb(installDialog.received)).arg(mb(installDialog.total)) + api.tr
-                            : qsTr("Downloading... %1 MB").arg(mb(installDialog.received)) + api.tr;
-                    }
-                    color: installDialog.done && !installDialog.ok ? "#e8b06a" : "#bbb"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(16)
-                    wrapMode: Text.WordWrap
-                }
-                Row {
-                    width: parent.width
-                    spacing: vpx(12)
-                    visible: installDialog.done
-                    Repeater {
-                        model: installDialog.ok ? [ qsTr("Use it now") + api.tr, qsTr("Stay here") + api.tr ] : [ qsTr("OK") + api.tr ]
-                        delegate: Rectangle {
-                            readonly property bool on: installDialog.ok ? index === installDialog.choice : true
-                            width: (parent.width - vpx(12) * (installDialog.ok ? 1 : 0)) / (installDialog.ok ? 2 : 1)
-                            height: vpx(46)
-                            radius: vpx(7)
-                            color: on ? "#2a5f5f" : "#3a3f42"
-                            Text {
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: "#eee"
-                                font.family: globalFonts.sans
-                                font.pixelSize: vpx(17)
-                            }
-                            MouseArea {
-                                anchors.fill: parent
-                                onClicked: {
-                                    installDialog.choice = index;
-                                    if (installDialog.ok && index === 0) {
-                                        var d = installDialog.dir;
-                                        installDialog.leave();
-                                        root.useIt({ "dir": d });
-                                    }
-                                    else {
-                                        installDialog.leave();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Text {
-                    width: parent.width
-                    visible: !installDialog.done
-                    text: qsTr("B stop") + api.tr
-                    color: "#888"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(14)
-                    horizontalAlignment: Text.AlignHCenter
+            width: parent.width
+            height: vpx(10)
+            color: "#333"
+            clip: true
+            visible: !installDialog.done
+            readonly property bool known: installDialog.total > 0 && installDialog.stage === "download"
+            Rectangle {
+                visible: parent.known
+                height: parent.height
+                color: "#4ae"
+                width: parent.width * Math.min(1, installDialog.received / Math.max(1, installDialog.total))
+            }
+            Rectangle {
+                visible: !parent.known
+                height: parent.height
+                width: parent.width * 0.3
+                color: "#4ae"
+                NumberAnimation on x {
+                    from: -installDialog.dialogWidth * 0.3
+                    to: installDialog.dialogWidth
+                    duration: 1200
+                    loops: Animation.Infinite
+                    running: installDialog.visible && !installDialog.done
                 }
             }
+        }
+        Text {
+            width: parent.width
+            visible: !installDialog.done
+            text: qsTr("B stop") + api.tr
+            color: "#bbb"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(15)
+            horizontalAlignment: Text.AlignHCenter
         }
     }
 
 
     // -- Removing: asked first ----------------------------------------------------
 
-    FocusScope {
+    PegasusDialog {
         id: confirm
 
-        property string question: ""
         property string what: ""
-        anchors.fill: parent
-        enabled: focus
-        visible: focus
-        z: 5
+        title: qsTr("Theme downloader") + api.tr
+        buttons: [ qsTr("Yes") + api.tr, qsTr("No") + api.tr ]
 
         function openFor(q, w) {
-            question = q;
+            text = q;
             what = w;
+            choice = 1;
             focus = true;
         }
-        Keys.onPressed: {
-            if (event.isAutoRepeat)
-                return;
-            event.accepted = true;
-            if (api.keys.isAccept(event)) {
-                var w = what;
-                list.focus = true;
+        onPicked: {
+            var w = what;
+            list.focus = true;
+            if (index === 0)
                 root.confirmed(w);
-            }
-            else if (api.keys.isCancel(event)) {
-                list.focus = true;
-            }
         }
-        Rectangle {
-            anchors.fill: parent
-            color: "#000"
-            opacity: 0.6
-            MouseArea { anchors.fill: parent; onClicked: list.focus = true }
-        }
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.55, vpx(560))
-            height: confirmColumn.height + vpx(48)
-            color: "#2b2e30"
-            radius: vpx(10)
-            Column {
-                id: confirmColumn
-                anchors.centerIn: parent
-                width: parent.width - vpx(48)
-                spacing: vpx(16)
-                Text {
-                    width: parent.width
-                    text: confirm.question
-                    color: "#eee"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(20)
-                    wrapMode: Text.WordWrap
-                    horizontalAlignment: Text.AlignHCenter
-                }
-                Text {
-                    width: parent.width
-                    text: qsTr("A yes · B no") + api.tr
-                    color: "#999"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(15)
-                    horizontalAlignment: Text.AlignHCenter
-                }
-            }
-        }
+        onCancelled: list.focus = true
     }
 
 
@@ -885,33 +743,40 @@ FocusScope {
             MouseArea { anchors.fill: parent }
         }
         Rectangle {
+            id: linkTitle
             width: Math.min(parent.width * 0.75, vpx(860))
-            height: linkColumn.height + vpx(40)
+            height: vpx(20) * 2.25
             anchors.horizontalCenter: parent.horizontalCenter
             y: vpx(30)
-            color: "#444"
-            radius: vpx(8)
+            color: "#333"
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: vpx(15)
+                text: qsTr("A theme's GitHub link (paste works too)") + api.tr
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(20)
+                font.bold: true
+            }
+        }
+        Rectangle {
+            width: linkTitle.width
+            height: linkColumn.height + vpx(36)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: linkTitle.bottom
+            color: "#555"
             Column {
                 id: linkColumn
                 anchors.top: parent.top
                 anchors.left: parent.left
                 anchors.right: parent.right
-                anchors.margins: vpx(20)
+                anchors.margins: vpx(18)
                 spacing: vpx(12)
-                Text {
-                    width: parent.width
-                    text: qsTr("A theme's GitHub link (paste works too)") + api.tr
-                    color: "#eee"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(19)
-                    horizontalAlignment: Text.AlignHCenter
-                }
                 Rectangle {
                     width: parent.width
                     height: vpx(52)
                     color: "#333"
-                    border.color: "#3aa"
-                    border.width: vpx(2)
                     TextInput {
                         id: linkInput
                         anchors.fill: parent

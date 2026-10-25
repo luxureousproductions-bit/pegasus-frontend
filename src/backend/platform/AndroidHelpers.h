@@ -18,6 +18,8 @@
 #pragma once
 
 #include <QString>
+#include <QStringList>
+#include <functional>
 
 
 namespace android {
