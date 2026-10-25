@@ -20,6 +20,8 @@
 
 #include "Log.h"
 #include "Paths.h"
+#include "PegasusAssets.h"
+#include "types/AssetType.h"
 #include "model/gaming/Collection.h"
 #include "model/gaming/CollectionListModel.h"
 #include "model/gaming/Assets.h"
@@ -783,6 +785,21 @@ void apply_library_rules(std::vector<model::Collection*>& collections, std::vect
         const QStringList removed = game->extraMap().value(QStringLiteral("pegasusx-hidden-art")).toStringList();
         if (!removed.isEmpty())
             game->assetsMut().remove_listed(removed);
+
+        // 3D box renders: after the flat covers in boxFront (so boxFront is
+        // the flat one when there's one), and listed for themes as the
+        // `box3d` extra, whatever their folder is called
+        const QStringList& fronts = game->assets().get(AssetType::BOX_FRONT);
+        if (fronts.size() > 0) {
+            QStringList flat, boxes;
+            for (const QString& f : fronts)
+                (pegasus_assets::is_3d_box(f) ? boxes : flat).append(f);
+            if (!boxes.isEmpty()) {
+                if (!flat.isEmpty() && fronts.front() != flat.front())
+                    game->assetsMut().set_files(AssetType::BOX_FRONT, flat + boxes);
+                game->extraMapMut().insert(QStringLiteral("box3d"), boxes);
+            }
+        }
     }
     apply_hidden(collections, games);
     apply_default_launches(collections);

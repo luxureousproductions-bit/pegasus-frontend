@@ -20,6 +20,7 @@
 #include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
+#include "PegasusAssets.h"
 #include "model/gaming/Collection.h"
 #include "model/gaming/CollectionListModel.h"
 #include "model/gaming/Game.h"
@@ -213,8 +214,9 @@ void rewrite_paths_in(const QString& file_path, const QString& from, const QStri
     file.close();
     const QString before = text;
     text.replace(from + QLatin1Char('/'), to + QLatin1Char('/'));
-    static const QRegularExpression rx_line_end(QStringLiteral("(^|\n)") + QRegularExpression::escape(from) + QStringLiteral("(\r?\n|$)"));
-    text.replace(rx_line_end, QStringLiteral("\1") + to + QStringLiteral("\2"));
+    // the folder itself on a line of its own (game_dirs.txt)
+    const QRegularExpression rx_line_end(QStringLiteral("(^|\\n)") + QRegularExpression::escape(from) + QStringLiteral("(\\r?\\n|$)"));
+    text.replace(rx_line_end, QStringLiteral("\\1") + to + QStringLiteral("\\2"));
     if (text == before)
         return;
     QSaveFile out(file_path);
@@ -233,7 +235,8 @@ void fix_moved_root(const QString& now, const QString& dir, const QString& old_m
     {
         QSettings ini(dir + QStringLiteral("/pegasusx.ini"), QSettings::IniFormat);
         const QString media = QDir::cleanPath(ini.value(QStringLiteral("data/dir")).toString());
-        if (media == now + QStringLiteral("/media") || old_media == now + QStringLiteral("/media"))
+        if (media == now + QStringLiteral("/media") || media == now + QStringLiteral("/downloaded_media")
+                || old_media == now + QStringLiteral("/media") || old_media == now + QStringLiteral("/downloaded_media"))
             ini.remove(QStringLiteral("data/dir"));
         else if (media.startsWith(now + QLatin1Char('/')))
             ini.setValue(QStringLiteral("data/dir"), dir + media.mid(now.length()));
@@ -257,6 +260,45 @@ void hide_from_gallery(const QString& dir)
         marker.close();
 }
 } // namespace
+
+void Settings::move_media_folder()
+{
+    const QString root = QDir::cleanPath(paths::writableConfigDir());
+    const QString old_dir = root + QStringLiteral("/media");
+    const QString new_dir = root + QStringLiteral("/downloaded_media");
+    QSettings ini(pegasusx_settings_path(), QSettings::IniFormat);
+    const QString saved = QDir::cleanPath(ini.value(QStringLiteral("data/dir")).toString());
+    // a folder picked by hand stays where it is
+    if (!saved.isEmpty() && saved != QLatin1String(".") && saved != old_dir)
+        return;
+    if (!QFileInfo(old_dir).isDir())
+        return;
+    if (saved == old_dir)
+        ini.remove(QStringLiteral("data/dir"));
+    if (QFileInfo::exists(new_dir)) {
+        // both: what's only in the old one goes over, file by file
+        QDirIterator it(old_dir, QDir::Files | QDir::Hidden, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString path = it.next();
+            const QString target = new_dir + path.mid(old_dir.length());
+            QDir().mkpath(QFileInfo(target).absolutePath());
+            if (!QFileInfo::exists(target))
+                QFile::rename(path, target);
+        }
+    }
+    else if (!QDir().rename(old_dir, new_dir)) {
+        Log::warning(LOGMSG("Couldn't move `%1` to `%2`").arg(old_dir, new_dir));
+        return;
+    }
+    // the metadata files Pegasus X wrote point at the new place
+    for (const QString& sub : { QStringLiteral("/metadata/overrides"), QStringLiteral("/metadata/imports"),
+                                QStringLiteral("/metadata/imports-fill"), QStringLiteral("/metafiles") }) {
+        for (const QFileInfo& finfo : QDir(root + sub).entryInfoList({ QStringLiteral("*.metadata.pegasus.txt") }, QDir::Files))
+            rewrite_paths_in(finfo.absoluteFilePath(), old_dir, new_dir);
+    }
+    hide_from_gallery(new_dir);
+    Log::info(LOGMSG("Scraped art moved from `%1` to `%2`").arg(old_dir, new_dir));
+}
 
 QVariantMap Settings::rootDirContents() const
 {
@@ -316,7 +358,7 @@ QString Settings::setRootDir(const QString& dir_in, bool move_data)
             }
         }
         if (error.isEmpty()) {
-            hide_from_gallery(dir + QStringLiteral("/media"));
+            hide_from_gallery(dir + QStringLiteral("/downloaded_media"));
             if (!paths::setPegasusxRootSetting(dir))
                 error = tr("Couldn't save the folder setting.");
         }
@@ -390,6 +432,9 @@ void Settings::postInit()
             providers::esde::invalidate_emulator_setup();
     });
 #endif
+    // scraped art kept in <Pegasus X folder>/media by older builds: in
+    // downloaded_media now (ES-DE's name), the paths to it with it
+    move_media_folder();
 #ifdef WITH_COMPAT_ESDE
     // before the library is read: no game in a collection that isn't its own
     providers::esde::split_legacy_edits_file();
@@ -1712,7 +1757,6 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
     const auto local = [](const QString& url) {
         return url.startsWith(QLatin1String("file:")) ? QUrl(url).toLocalFile() : url;
     };
-    static const QRegularExpression rx_3d(QStringLiteral("box3d|box_3d|3dbox"), QRegularExpression::CaseInsensitiveOption);
     const model::Assets& assets = game->assets();
     const model::Collection* const coll_ptr = &coll;
     scraper::Job job;
@@ -1746,7 +1790,7 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
         job.slot_files.insert(QLatin1String(entry.first), files_now);
         if (QLatin1String(entry.first) == QLatin1String("assets.box_front")) {
             for (const QString& f : files_now) {
-                if (rx_3d.match(f).hasMatch()) job.has_box3d = true;
+                if (pegasus_assets::is_3d_box(f)) job.has_box3d = true;
                 else job.has_box2d = true;
             }
         }
@@ -1890,7 +1934,7 @@ QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap
     const bool has_ss = scraperHasScreenScraper();
     QString data = dataDir();
     if (data.isEmpty())
-        data = paths::writableConfigDir() + QStringLiteral("/media");
+        data = paths::writableConfigDir() + QStringLiteral("/downloaded_media");
 
     if (!m_scraper) {
         m_scraper = new scraper::Scraper(this);
@@ -1962,8 +2006,9 @@ QString Settings::dataDir() const
 {
     const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
     const QString saved = file.value(QStringLiteral("data/dir")).toString();
-    // nothing picked: the Pegasus X folder's media, as media/<system>/<kind>
-    return saved.isEmpty() ? paths::writableConfigDir() + QStringLiteral("/media") : saved;
+    // nothing picked: the Pegasus X folder's downloaded_media/<system>/<kind>,
+    // laid out like ES-DE's
+    return saved.isEmpty() ? paths::writableConfigDir() + QStringLiteral("/downloaded_media") : saved;
 }
 
 void Settings::setDataDir(const QString& dir)

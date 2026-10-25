@@ -82,7 +82,7 @@ FocusScope {
         },
         SettingsEntry {
             label: QT_TR_NOOP("Pegasus X folder...")
-            desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
+            desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openRootFolder
             section: "pegasusx"

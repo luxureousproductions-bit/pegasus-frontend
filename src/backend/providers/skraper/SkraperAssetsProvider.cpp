@@ -18,6 +18,7 @@
 #include "SkraperAssetsProvider.h"
 
 #include "Log.h"
+#include "PegasusAssets.h"
 #include "model/gaming/Assets.h"
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
@@ -28,6 +29,8 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
+#include <QSet>
+#include <QVariantMap>
 #include <QStringBuilder>
 #include <array>
 #include <functional>
@@ -88,7 +91,9 @@ HashMap<QString, model::Game*> build_gamepath_db(const HashMap<QString, model::G
     // TODO: C++17
     for (const auto& entry : filepath_to_entry_map) {
         const QFileInfo finfo(entry.first);
-        QString path = ::clean_abs_dir(finfo) % '/' % finfo.completeBaseName();
+        // lower case: "game.png" is for "Game.iso" too (Android's storage
+        // doesn't tell them apart either)
+        QString path = (::clean_abs_dir(finfo) % '/' % finfo.completeBaseName()).toLower();
         map.emplace(std::move(path), entry.second->parentGame());
     }
 
@@ -171,6 +176,13 @@ const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
             QStringLiteral("box3d"),
             QStringLiteral("3dbox"),
             QStringLiteral("3dboxes"),
+            QStringLiteral("boxes3d"),
+            QStringLiteral("3dboxart"),
+            QStringLiteral("boxart3d"),
+            QStringLiteral("box2d"),
+            QStringLiteral("2dbox"),
+            QStringLiteral("2dboxes"),
+            QStringLiteral("frontcover"),
         }},
         { AssetType::BOX_FULL, {
             QStringLiteral("boxtexture"),
@@ -236,6 +248,9 @@ const HashMap<AssetType, QStringList, EnumHash>& asset_dirs()
         { AssetType::VIDEO, {
             QStringLiteral("videos"),
             QStringLiteral("video"),
+            QStringLiteral("videosnap"),
+            QStringLiteral("videosnaps"),
+            QStringLiteral("snapvideo"),
         }},
     };
     return ASSET_DIRS;
@@ -259,6 +274,7 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
     const HashMap<QString, model::Game*> extless_path_to_game = build_gamepath_db(sctx.current_filepath_to_entry_map());
 
     size_t found_assets_cnt = 0;
+    QSet<QString> claimed;
     for (const QString& root_dir : sctx.pegasus_game_dirs()) {
         for (const QString& media_dir_subpath : MEDIA_DIRS) {
             // Pegasus X: "Media" or "Skraper" too on case-sensitive storage
@@ -267,23 +283,45 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
                 continue;
             const QString game_media_dir = found_media_dir % QLatin1Char('/');
 
-            // Map the lowercase name of each folder to its actual name, so eg.
-            // both "Covers" and "covers" are found on case-sensitive storage
-            HashMap<QString, QString> existing_dirs;
+            // each folder by its plain name, so "Covers", "covers", "3D Boxes",
+            // "3d_box" and "box-3d" are all found, singular or plural
             const QStringList subdir_names = QDir(game_media_dir).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
-            for (const QString& subdir_name : subdir_names)
-                existing_dirs.emplace(subdir_name.toLower(), subdir_name);
+
+            // manuals: to themes as the `manual` extra, like an x-manual field
+            for (const QString& dir_name : subdir_names) {
+                const QString plain = pegasus_assets::plain_name(dir_name);
+                if (!pegasus_assets::same_plain_name(plain, QStringLiteral("manual")) && plain != QLatin1String("docs"))
+                    continue;
+                const QString search_dir = game_media_dir % dir_name;
+                const int subpath_len = media_dir_subpath.length() + dir_name.length();
+                for_each_file(search_dir, [&](const QString& dir, const QString& name) {
+                    const int dot = name.lastIndexOf(QLatin1Char('.'));
+                    if (dot <= 0 || name.mid(dot + 1).toLower() != QLatin1String("pdf"))
+                        return;
+                    const QString game_path = (QDir::cleanPath(dir).remove(root_dir.length(), subpath_len)
+                                               % '/' % name.left(dot)).toLower();
+                    const auto it = extless_path_to_game.find(game_path);
+                    if (it == extless_path_to_game.cend())
+                        return;
+                    QVariantMap& extra = it->second->extraMapMut();
+                    if (!extra.contains(QStringLiteral("manual")))
+                        extra.insert(QStringLiteral("manual"), QStringList { dir % QLatin1Char('/') % name });
+                });
+            }
 
             // TODO: C++17
             for (const auto& asset_dir_entry : ASSET_DIRS) {
                 const AssetType asset_type = asset_dir_entry.first;
                 const QStringList& dir_names = asset_dir_entry.second;
-                for (const QString& dir_name_lower : dir_names) {
-                    const auto existing_it = existing_dirs.find(dir_name_lower);
-                    if (existing_it == existing_dirs.cend())
+                for (const QString& wanted : dir_names) {
+                  const QString wanted_plain = pegasus_assets::plain_name(wanted);
+                  for (const QString& dir_name : subdir_names) {
+                    if (!pegasus_assets::same_plain_name(pegasus_assets::plain_name(dir_name), wanted_plain))
                         continue;
-
-                    const QString& dir_name = existing_it->second;
+                    // a folder found under an earlier name of this or another kind is read once
+                    if (claimed.contains(game_media_dir % dir_name))
+                        continue;
+                    claimed.insert(game_media_dir % dir_name);
                     const QString search_dir = game_media_dir % dir_name;
                     const int subpath_len = media_dir_subpath.length() + dir_name.length();
 
@@ -292,8 +330,8 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
                         // is for <game dir>/Sub/Game.*
                         const int dot = name.lastIndexOf(QLatin1Char('.'));
                         const QString basename = dot > 0 ? name.left(dot) : name;
-                        const QString game_path = QDir::cleanPath(dir).remove(root_dir.length(), subpath_len)
-                                                % '/' % basename;
+                        const QString game_path = (QDir::cleanPath(dir).remove(root_dir.length(), subpath_len)
+                                                % '/' % basename).toLower();
                         const auto it = extless_path_to_game.find(game_path);
                         if (it == extless_path_to_game.cend())
                             return;
@@ -302,6 +340,7 @@ Provider& SkraperAssetsProvider::run(SearchContext& sctx)
                         game.assetsMut().add_file(asset_type, dir % QLatin1Char('/') % name);
                         found_assets_cnt++;
                     });
+                  }
                 }
             }
         }

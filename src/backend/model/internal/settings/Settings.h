@@ -90,6 +90,8 @@ class Settings : public QObject {
 public:
     explicit Settings(QObject* parent = nullptr);
     void postInit();
+    /// older builds' <Pegasus X folder>/media -> downloaded_media
+    void move_media_folder();
 
     QObject* themeStore();
     QObject* updater();

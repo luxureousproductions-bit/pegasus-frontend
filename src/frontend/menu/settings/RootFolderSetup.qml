@@ -21,7 +21,7 @@ import QtQuick 2.6
 
 
 // Pegasus X: the Pegasus X folder, where everything lives (settings, themes,
-// metadata, logs, art as media/<system>/<kind>). Shown at the first start,
+// metadata, logs, art as downloaded_media/<system>/<kind>). Shown at the first start,
 // and from Settings > Pegasus X folder. Changing it means starting Pegasus X
 // again, so the last step closes the app.
 FocusScope {
@@ -93,7 +93,7 @@ FocusScope {
             switch (root.step) {
                 case "intro":
                     return (root.firstRun ? qsTr("Welcome to Pegasus X.") + api.tr + "\n\n" : "")
-                        + qsTr("Everything Pegasus X keeps (settings, themes, game metadata, scraped art, logs) lives in one folder. Right now that's %1 (%2), inside the app, which goes when the app is uninstalled and is awkward to reach. You can pick a folder of your own instead, like PegasusX on the internal storage or an SD card: art goes to media/<system>/<kind> in it, themes to themes/.")
+                        + qsTr("Everything Pegasus X keeps (settings, themes, game metadata, scraped art, logs) lives in one folder. Right now that's %1 (%2), inside the app, which goes when the app is uninstalled and is awkward to reach. You can pick a folder of your own instead, like PegasusX on the internal storage or an SD card: scraped art goes to downloaded_media/<system>/<kind> in it, themes to themes/.")
                             .arg(Internal.settings.rootChosen ? now : qsTr("the app's own storage") + api.tr).arg(what) + api.tr;
                 case "picked":
                     return (root.error !== "" ? root.error + "\n\n" : "")

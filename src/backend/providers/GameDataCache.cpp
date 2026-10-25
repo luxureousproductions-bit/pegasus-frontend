@@ -164,6 +164,47 @@ void add_metadata_fingerprints(QJsonArray& out, const QString& dir_path)
         add_file_fingerprint(out, it.next());
 }
 
+// Pegasus X: the media folders of a game directory (and of its system
+// folders): a picture added or removed changes its folder's time, so the
+// list is read again instead of the cached one missing it
+void add_media_fingerprints(QJsonArray& out, const QString& game_dir)
+{
+    const auto is_media = [](const QString& name) {
+        const QString lower = name.toLower();
+        return lower == QLatin1String("media") || lower == QLatin1String(".media") || lower == QLatin1String("skraper")
+            || lower == QLatin1String("downloaded_media");
+    };
+    const auto add_dir = [&out](const QString& path) {
+        const QFileInfo fi(path);
+        QJsonObject item;
+        item[QStringLiteral("dir")] = fi.absoluteFilePath();
+        item[QStringLiteral("mtime")] = QString::number(fi.lastModified().toMSecsSinceEpoch());
+        out.append(item);
+    };
+    const auto add_media_tree = [&](const QString& media_dir) {
+        add_dir(media_dir);
+        // its kind folders (covers, 3dboxes, ...) and one level below them
+        const QFileInfoList kinds = QDir(media_dir).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden, QDir::Name);
+        for (const QFileInfo& kind : kinds) {
+            add_dir(kind.absoluteFilePath());
+            for (const QFileInfo& sub : QDir(kind.absoluteFilePath()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+                add_dir(sub.absoluteFilePath());
+        }
+    };
+    const QFileInfoList children = QDir(game_dir).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden, QDir::Name);
+    for (const QFileInfo& child : children) {
+        if (is_media(child.fileName())) {
+            add_media_tree(child.absoluteFilePath());
+            continue;
+        }
+        // a system folder with its own media folder (ROMs/psvita/media)
+        for (const QFileInfo& sub : QDir(child.absoluteFilePath()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden)) {
+            if (is_media(sub.fileName()))
+                add_media_tree(sub.absoluteFilePath());
+        }
+    }
+}
+
 QJsonObject collection_to_json(const model::Collection& collection)
 {
     QJsonObject obj;
@@ -265,6 +306,11 @@ QString GameDataCache::buildFingerprint(
     for (const QString& dir : sctx.root_game_dirs())
         add_metadata_fingerprints(metadata_files, dir);
     root[QStringLiteral("metadata_files")] = metadata_files;
+
+    QJsonArray media_dirs;
+    for (const QString& dir : sctx.root_game_dirs())
+        add_media_fingerprints(media_dirs, dir);
+    root[QStringLiteral("media_dirs")] = media_dirs;
 
     // files of other data sources, eg. ES-DE's gamelists
     QJsonArray provider_files;

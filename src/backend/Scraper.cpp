@@ -24,6 +24,7 @@
 #include "providers/esde/EsdeProvider.h"
 #endif
 
+#include "PegasusAssets.h"
 #include <QBuffer>
 #include <QImageReader>
 #include <QImage>
@@ -463,31 +464,19 @@ QRect content_rect(const QImage& source)
 // it is lost
 QImage fit_16_9(const QImage& src)
 {
+    // 16:9 by cropping, never by padding: the middle of a taller picture,
+    // the middle of a wider one (IGDB's artworks are often banner-wide);
+    // padding showed as bars above and below
     const double ratio = static_cast<double>(src.width()) / static_cast<double>(src.height());
     const double wanted = 16.0 / 9.0;
     if (ratio > wanted * 0.97 && ratio < wanted * 1.03)
         return src;
     if (ratio < wanted) {
-        // taller: the middle 16:9 part
         const int h = qRound(src.width() / wanted);
         return src.copy(0, (src.height() - h) / 2, src.width(), h);
     }
-    // wider: letterboxed onto a blurred stretch of itself
-    const int w = src.width();
-    const int h = qRound(w / wanted);
-    // a photo stays a photo (RGB → jpg later), only pictures with transparency keep it
-    QImage canvas(w, h, src.hasAlphaChannel() ? QImage::Format_ARGB32 : QImage::Format_RGB32);
-    canvas.fill(Qt::black);
-    QPainter p(&canvas);
-    p.setRenderHint(QPainter::SmoothPixmapTransform);
-    // the blur: scaled far down and up again
-    QImage bg = src.scaled(qMax(8, w / 40), qMax(8, h / 40), Qt::IgnoreAspectRatio, Qt::SmoothTransformation)
-                   .scaled(w, h, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-    p.drawImage(0, 0, bg);
-    p.fillRect(canvas.rect(), QColor(0, 0, 0, 110));
-    p.drawImage(0, (h - src.height()) / 2, src);
-    p.end();
-    return canvas;
+    const int w = qRound(src.height() * wanted);
+    return src.copy((src.width() - w) / 2, 0, w, src.height());
 }
 
 QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim, bool fanart_16_9)
@@ -1782,7 +1771,7 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
         // replaced: the old files of that kind go
         QStringList kept;
         for (const QString& f : list) {
-            const bool is3d = f.contains(QLatin1String("3dbox"), Qt::CaseInsensitive) || f.contains(QLatin1String("box3d"), Qt::CaseInsensitive);
+            const bool is3d = pegasus_assets::is_3d_box(f);
             if (media.kind == QLatin1String("2d") && is3d) kept.append(f);
             if (media.kind == QLatin1String("3d") && !is3d) kept.append(f);
         }
@@ -1858,8 +1847,7 @@ void Scraper::makeMiximage()
             const QString path = f.startsWith(QLatin1String("file:")) ? QUrl(f).toLocalFile() : f;
             if (path.isEmpty() || path.contains(QLatin1String("://")))
                 continue;
-            const bool is3d = path.contains(QLatin1String("3dbox"), Qt::CaseInsensitive)
-                || path.contains(QLatin1String("box3d"), Qt::CaseInsensitive);
+            const bool is3d = pegasus_assets::is_3d_box(path);
             if ((want3d == 0 && is3d) || (want3d == 1 && !is3d))
                 continue;
             if (QFileInfo(path).isFile())

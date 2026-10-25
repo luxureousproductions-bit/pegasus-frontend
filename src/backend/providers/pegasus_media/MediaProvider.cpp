@@ -31,6 +31,7 @@
 #include <QFileInfo>
 #include <QStringBuilder>
 #include <QStringList>
+#include <QVariantMap>
 #include <array>
 
 
@@ -72,11 +73,12 @@ HashMap<QString, model::Game*> create_lookup_map(const HashMap<QString, model::G
         const QFileInfo fi(pair.first);
         model::Game* const game_ptr = pair.second->parentGame();
 
-        QString extless_path = ::clean_abs_dir(fi) % QChar('/') % fi.completeBaseName();
+        // Pegasus X: lower case, so media/game/ is for Game.iso too
+        QString extless_path = (::clean_abs_dir(fi) % QChar('/') % fi.completeBaseName()).toLower();
         out.emplace(std::move(extless_path), game_ptr);
 
         // NOTE: the files are not necessarily in the same directory
-        QString title_path = ::clean_abs_dir(fi) % QChar('/') % game_ptr->title();
+        QString title_path = (::clean_abs_dir(fi) % QChar('/') % game_ptr->title()).toLower();
         out.emplace(std::move(title_path), game_ptr);
     }
 
@@ -115,10 +117,20 @@ Provider& MediaProvider::run(SearchContext& sctx)
                 dir_it.next();
                 const QFileInfo fileinfo = dir_it.fileInfo();
 
-                const QString lookup_key = ::clean_abs_dir(fileinfo).remove(dir_base.length(), media_subdir_name.size());
+                const QString lookup_key = ::clean_abs_dir(fileinfo).remove(dir_base.length(), media_subdir_name.size()).toLower();
                 const auto lookup_it = lookup_map.find(lookup_key);
                 if (lookup_it == lookup_map.cend())
                     continue;
+
+                // Pegasus X: media/<game>/manual.pdf
+                if (fileinfo.suffix().toLower() == QLatin1String("pdf")) {
+                    if (pegasus_assets::same_plain_name(pegasus_assets::plain_name(fileinfo.completeBaseName()), QStringLiteral("manual"))) {
+                        QVariantMap& extra = lookup_it->second->extraMapMut();
+                        if (!extra.contains(QStringLiteral("manual")))
+                            extra.insert(QStringLiteral("manual"), QStringList { dir_it.filePath() });
+                    }
+                    continue;
+                }
 
                 const AssetType asset_type = detect_asset_type(fileinfo.completeBaseName(), fileinfo.suffix().toLower());
                 if (asset_type == AssetType::UNKNOWN)

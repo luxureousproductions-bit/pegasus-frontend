@@ -21,6 +21,7 @@
 #include "utils/HashMap.h"
 
 #include <QString>
+#include <QStringList>
 
 
 namespace pegasus_assets {
@@ -123,6 +124,13 @@ AssetType str_to_type(const QString& str)
     if (it != map.cend())
         return it->second;
 
+    // Pegasus X: spelled any way ("3D Box", "box-front", "Screenshots")
+    const QString plain = plain_name(str);
+    for (const auto& entry : map) {
+        if (same_plain_name(plain, plain_name(entry.first)))
+            return entry.second;
+    }
+
     // Pegasus X: any case ("BoxFront", "COVERS"), so file and folder names
     // spelled differently are found on Linux like on Android and Windows
     for (const auto& entry : map) {
@@ -136,6 +144,57 @@ AssetType str_to_type(const QString& str)
     }
 
     return AssetType::UNKNOWN;
+}
+
+QString plain_name(const QString& text)
+{
+    QString out;
+    out.reserve(text.size());
+    for (const QChar ch : text) {
+        if (ch.isLetterOrNumber())
+            out += ch.toLower();
+    }
+    return out;
+}
+
+bool same_plain_name(const QString& plain, const QString& wanted)
+{
+    if (plain.isEmpty() || wanted.isEmpty())
+        return false;
+    if (plain == wanted)
+        return true;
+    const auto plural_of = [](const QString& one, const QString& many) {
+        return many.length() > one.length() && many.startsWith(one)
+            && (many.mid(one.length()) == QLatin1String("s") || many.mid(one.length()) == QLatin1String("es"));
+    };
+    return plural_of(plain, wanted) || plural_of(wanted, plain);
+}
+
+bool is_3d_box(const QString& path)
+{
+    static const QStringList names {
+        QStringLiteral("3dbox"), QStringLiteral("box3d"), QStringLiteral("3dboxart"),
+        QStringLiteral("boxart3d"), QStringLiteral("3dcover"), QStringLiteral("cover3d"),
+        QStringLiteral("boxes3d"), QStringLiteral("3dboxfront"), QStringLiteral("boxfront3d"),
+    };
+    // the folder it's in, then its own name ("<game>/3dbox.png")
+    const QStringList parts = QString(path).replace(QLatin1Char('\\'), QLatin1Char('/')).split(QLatin1Char('/'), Qt::SkipEmptyParts);
+    for (int i = parts.size() - 1; i >= 0 && i >= parts.size() - 3; i--) {
+        QString part = parts.at(i);
+        if (i == parts.size() - 1) {
+            const int dot = part.lastIndexOf(QLatin1Char('.'));
+            if (dot > 0)
+                part = part.left(dot);
+        }
+        const QString plain = plain_name(part);
+        for (const QString& name : names) {
+            if (same_plain_name(plain, name))
+                return true;
+        }
+    }
+    // a name that has it in it ("ps2-3dbox-front")
+    const QString all = plain_name(path);
+    return all.contains(QLatin1String("3dbox")) || all.contains(QLatin1String("box3d"));
 }
 
 } // namespace pegasus_assets

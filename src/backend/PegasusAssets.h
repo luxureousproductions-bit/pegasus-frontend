@@ -25,4 +25,13 @@ namespace pegasus_assets {
 
 AssetType str_to_type(const QString&);
 
+/// Pegasus X: a folder or file name as names are compared: lower case,
+/// letters and digits only ("3D Boxes", "3d_boxes" and "3dboxes" are one)
+QString plain_name(const QString&);
+/// Whether a plain name is `wanted` or its plural (-s, -es), or the other way round
+bool same_plain_name(const QString& plain, const QString& wanted);
+/// Whether a picture is a 3D box render, by its folder or file name
+/// (3dboxes/, box3d/, "3D Box"/, 3dbox.png, ...)
+bool is_3d_box(const QString& path);
+
 } // namespace pegasus_assets

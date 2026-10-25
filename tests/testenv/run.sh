@@ -153,9 +153,9 @@ INI
     shot 11-scrape-igdb
     stop 11-scrape-igdb
     mkdir -p "$R/scraped"
-    find "$CFG/media" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/scraped/files.txt"
-    find "$CFG/media" -type f 2>/dev/null | head -n 12 | while read -r f; do
-        cp "$f" "$R/scraped/$(echo "${f#$CFG/media/}" | tr '/' '_')"
+    find "$CFG/downloaded_media" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/scraped/files.txt"
+    find "$CFG/downloaded_media" -type f 2>/dev/null | head -n 12 | while read -r f; do
+        cp "$f" "$R/scraped/$(echo "${f#$CFG/downloaded_media/}" | tr '/' '_')"
     done
     cp "$CFG"/metadata/overrides/*.metadata.pegasus.txt "$R/scraped/" 2>/dev/null || true
     # the log, without the login

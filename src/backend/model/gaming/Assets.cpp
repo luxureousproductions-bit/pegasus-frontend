@@ -16,6 +16,7 @@
 
 
 #include "Assets.h"
+#include "PegasusAssets.h"
 #include <QStringBuilder>
 #include <QSet>
 #include <QFileInfo>
@@ -77,7 +78,16 @@ void Assets::remove_duplicate_names()
         QSet<QString> sizes;  // "<bytes>.<ext>": the same file copied elsewhere
         QStringList kept;
         for (const QString& url : qAsConst(list)) {
-            const QString name = url.mid(url.lastIndexOf(QLatin1Char('/')) + 1).toLower();
+            // a copy: the same name in a folder of the same kind (ES-DE and
+            // Skraper name every kind after the game: covers/Game.png and
+            // 3dboxes/Game.png are two pictures, never one)
+            const int slash = url.lastIndexOf(QLatin1Char('/'));
+            const int parent_slash = slash > 0 ? url.lastIndexOf(QLatin1Char('/'), slash - 1) : -1;
+            const QString folder = slash > 0 ? pegasus_assets::plain_name(url.mid(parent_slash + 1, slash - parent_slash - 1)) : QString();
+            const QString file = url.mid(slash + 1).toLower();
+            const bool is3d = pegasus_assets::is_3d_box(url);
+            const QString name = file.isEmpty() ? QString()
+                : (is3d ? QStringLiteral("3d|") : QStringLiteral("2d|")) % folder % QLatin1Char('|') % file;
             if (!name.isEmpty() && names.contains(name))
                 continue;
 
@@ -89,7 +99,8 @@ void Assets::remove_duplicate_names()
             if (!local.isEmpty()) {
                 const QFileInfo info(local);
                 if (info.exists()) {
-                    const QString size_key = QString::number(info.size()) % QLatin1Char('.') % info.suffix().toLower();
+                    const QString size_key = (is3d ? QStringLiteral("3d|") : QStringLiteral("2d|"))
+                        % QString::number(info.size()) % QLatin1Char('.') % info.suffix().toLower();
                     if (sizes.contains(size_key))
                         continue;
                     sizes.insert(size_key);
