@@ -25,6 +25,7 @@
 #include "model/gaming/GameFile.h"
 #include "model/gaming/GameFileListModel.h"
 #include "providers/SearchContext.h"
+#include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "utils/HashMap.h"
 

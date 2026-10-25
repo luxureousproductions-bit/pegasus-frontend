@@ -85,9 +85,10 @@ public:
     /// Pegasus X: one kind's files replaced (eg. after scraping a game), the
     /// app icons (image://) kept at the end
     void set_files(AssetType key, const QStringList& paths);
+    /// Pegasus X: one kind's files (Overrides.cpp lays files on top of them)
+    const QStringList& get(AssetType) const;
 
 private:
-    const QStringList& get(AssetType) const;
     const QString& getFirst(AssetType) const;
 
     HashMap<AssetType, QStringList, EnumHash> m_asset_lists;
