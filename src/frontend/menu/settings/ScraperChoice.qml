@@ -82,8 +82,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: "#0c0d0e"
-        opacity: 0.96
+        color: "#222"
         MouseArea { anchors.fill: parent }
     }
 
@@ -107,7 +106,7 @@ FocusScope {
             width: parent.width
             text: (root.choice.collection || "") + "   ·   "
                   + qsTr("%1 search: \"%2\"").arg(root.choice.source || "").arg(root.choice.searchName || "") + api.tr
-            color: "#9aa"
+            color: "#999"
             font.family: globalFonts.sans
             font.pixelSize: vpx(17)
             elide: Text.ElideRight
@@ -124,23 +123,27 @@ FocusScope {
         anchors.left: parent.left
         anchors.leftMargin: parent.width * 0.05
         width: parent.width * 0.4
-        color: "#16191b"
-        radius: vpx(8)
+        color: "transparent"
 
         ListView {
             id: results
             anchors.fill: parent
-            anchors.margins: vpx(6)
             clip: true
             focus: true
             model: root.candidates
             highlightMoveDuration: 0
-            delegate: Rectangle {
+            delegate: Item {
                 readonly property bool isOn: ListView.isCurrentItem
                 width: ListView.view.width
-                height: vpx(58)
-                radius: vpx(6)
-                color: isOn ? "#2a5f5f" : "transparent"
+                height: vpx(62)
+                // highlighted as in Pegasus' settings: underlined
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    width: parent.width
+                    height: vpx(3)
+                    color: "#3aa"
+                    visible: parent.isOn
+                }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.left: parent.left
@@ -159,7 +162,7 @@ FocusScope {
                         width: parent.width
                         visible: text !== ""
                         text: modelData.info || ""
-                        color: parent.parent.isOn ? "#cdd" : "#889"
+                        color: "#999"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(15)
                         elide: Text.ElideRight
@@ -180,7 +183,7 @@ FocusScope {
             width: parent.width * 0.85
             visible: root.candidates.length === 0
             text: qsTr("Nothing found. Y: search another name · X: skip this game") + api.tr
-            color: "#e8b06a"
+            color: "#ddd"
             font.family: globalFonts.sans
             font.pixelSize: vpx(18)
             wrapMode: Text.WordWrap
@@ -204,10 +207,7 @@ FocusScope {
             anchors.left: parent.left
             width: parent.width * 0.42
             height: Math.min(parent.height * 0.62, width * 1.4)
-            color: "#151718"
-            radius: vpx(8)
-            border.color: "#2c3134"
-            border.width: vpx(2)
+            color: "#333"
             Image {
                 id: thumb
                 anchors.fill: parent
@@ -261,14 +261,14 @@ FocusScope {
                     spacing: vpx(8)
                     Text {
                         text: modelData[0]
-                        color: "#889"
+                        color: "#999"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(16)
                         width: vpx(100)
                     }
                     Text {
                         text: modelData[1] || ""
-                        color: "#cdd"
+                        color: "#c0c0c0"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(16)
                         width: vpx(260)
@@ -351,8 +351,7 @@ FocusScope {
             height: searchColumn.height + vpx(40)
             anchors.horizontalCenter: parent.horizontalCenter
             y: vpx(30)
-            color: "#444"
-            radius: vpx(8)
+            color: "#555"
             Column {
                 id: searchColumn
                 anchors.top: parent.top
@@ -372,8 +371,6 @@ FocusScope {
                     width: parent.width
                     height: vpx(52)
                     color: "#333"
-                    border.color: "#3aa"
-                    border.width: vpx(2)
                     TextInput {
                         id: searchInput
                         anchors.fill: parent

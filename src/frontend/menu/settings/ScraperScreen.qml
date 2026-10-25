@@ -506,8 +506,7 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: "#0c0d0e"
-        opacity: 0.94
+        color: "#222"
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.RightButton
@@ -847,50 +846,59 @@ FocusScope {
                 onClicked: list.focus = true
             }
         }
-        Column {
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.5, vpx(560))
-            Rectangle {
-                width: parent.width
-                height: pickerTitle.height
-                color: "#444"
-                Text {
-                    id: pickerTitle
-                    width: parent.width
-                    text: picker.row ? picker.row.text : ""
-                    color: "#eee"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(19)
-                    horizontalAlignment: Text.AlignHCenter
-                    padding: font.pixelSize
+        // as Pegasus' own option lists: a light box on the right
+        Rectangle {
+            id: pickerBox
+            width: Math.max(vpx(320), pickerWidest.width + vpx(80))
+            height: Math.min(pickerList.count * vpx(48) + vpx(16), parent.height * 0.84)
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.right: parent.right
+            anchors.rightMargin: parent.height * 0.04
+            color: "#eee"
+            MouseArea { anchors.fill: parent }
+            Text {
+                id: pickerWidest
+                visible: false
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(20)
+                text: {
+                    var w = "";
+                    var c = picker.row ? picker.row.choices : [];
+                    for (var i = 0; i < c.length; i++) {
+                        if (c[i].t.length > w.length)
+                            w = c[i].t;
+                    }
+                    return w + "   ✓";
                 }
             }
-            Rectangle {
-                width: parent.width
-                height: Math.min(pickerList.count * vpx(48), root.height * 0.6)
-                color: "#333"
-                ListView {
-                    id: pickerList
-                    anchors.fill: parent
-                    clip: true
-                    focus: true
-                    keyNavigationWraps: true
-                    model: picker.row ? picker.row.choices : []
-                    delegate: Rectangle {
-                        width: ListView.view.width
-                        height: vpx(48)
-                        color: ListView.isCurrentItem ? "#585858" : "transparent"
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.t + (picker.row && root.s[picker.row.key] === modelData.v ? "   ✓" : "")
-                            color: "#eee"
-                            font.family: globalFonts.sans
-                            font.pixelSize: vpx(18)
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: picker.done(index)
-                        }
+            ListView {
+                id: pickerList
+                anchors.fill: parent
+                anchors.topMargin: vpx(8)
+                anchors.bottomMargin: vpx(8)
+                clip: true
+                focus: true
+                keyNavigationWraps: true
+                highlightMoveDuration: 150
+                model: picker.row ? picker.row.choices : []
+                delegate: Rectangle {
+                    width: ListView.view.width
+                    height: vpx(48)
+                    color: ListView.isCurrentItem || pickMouse.containsMouse ? "#dedede" : "#eee"
+                    Text {
+                        anchors.right: parent.right
+                        anchors.rightMargin: vpx(24)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.t + (picker.row && root.s[picker.row.key] === modelData.v ? "   ✓" : "")
+                        color: "#444"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(20)
+                    }
+                    MouseArea {
+                        id: pickMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        onClicked: picker.done(index)
                     }
                 }
             }
@@ -900,117 +908,52 @@ FocusScope {
 
     // -- How to get a login --------------------------------------------------------
 
-    FocusScope {
+    PegasusDialog {
         id: helpDialog
 
         property var help: ({})
-        anchors.fill: parent
-        enabled: focus
-        visible: focus
-        z: 5
+        title: help.title || ""
+        buttons: [ qsTr("Ok") + api.tr ]
 
         function openFor(key) {
             help = root.helpTexts[key] || ({});
-            helpFlick.contentY = 0;
             focus = true;
         }
+        onPicked: list.focus = true
+        onCancelled: list.focus = true
 
-        Keys.onPressed: {
-            if (event.isAutoRepeat)
-                return;
-            if (api.keys.isCancel(event) || api.keys.isAccept(event)) {
-                event.accepted = true;
-                list.focus = true;
-            }
-        }
-        Keys.onUpPressed: helpFlick.contentY = Math.max(0, helpFlick.contentY - vpx(60))
-        Keys.onDownPressed: helpFlick.contentY = Math.max(0, Math.min(helpFlick.contentHeight - helpFlick.height, helpFlick.contentY + vpx(60)))
-
-        Rectangle {
-            anchors.fill: parent
-            color: "#000"
-            opacity: 0.6
-            MouseArea {
-                anchors.fill: parent
-                acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: list.focus = true
-            }
-        }
-        Rectangle {
-            anchors.centerIn: parent
-            width: Math.min(parent.width * 0.7, vpx(820))
-            height: Math.min(parent.height * 0.85, helpColumn.height + vpx(40))
-            color: "#2b2e30"
-            radius: vpx(8)
-            border.color: "#3aa"
-            border.width: vpx(2)
-            Flickable {
-                id: helpFlick
-                anchors.fill: parent
-                anchors.margins: vpx(20)
-                contentHeight: helpColumn.height
-                clip: true
-                Column {
-                    id: helpColumn
-                    width: parent.width
-                    spacing: vpx(14)
-                    Text {
-                        width: parent.width
-                        text: helpDialog.help.title || ""
-                        color: "#eee"
-                        font.family: globalFonts.sans
-                        font.pixelSize: vpx(24)
-                        font.bold: true
-                        wrapMode: Text.WordWrap
-                    }
-                    Repeater {
-                        model: helpDialog.help.steps || []
-                        delegate: Row {
-                            spacing: vpx(12)
-                            width: helpColumn.width
-                            Rectangle {
-                                width: vpx(30)
-                                height: width
-                                radius: width / 2
-                                color: "#2a5f5f"
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: index + 1
-                                    color: "#eee"
-                                    font.family: globalFonts.sans
-                                    font.pixelSize: vpx(16)
-                                    font.bold: true
-                                }
-                            }
-                            Text {
-                                width: parent.width - vpx(42)
-                                text: modelData
-                                color: "#ddd"
-                                font.family: globalFonts.sans
-                                font.pixelSize: vpx(18)
-                                wrapMode: Text.WordWrap
-                                lineHeight: 1.15
-                            }
-                        }
-                    }
-                    Text {
-                        width: parent.width
-                        text: qsTr("Website: %1").arg(helpDialog.help.site || "") + api.tr
-                        color: "#5cc"
-                        font.family: globalFonts.sans
-                        font.pixelSize: vpx(17)
-                        wrapMode: Text.WrapAnywhere
-                    }
-                    Text {
-                        width: parent.width
-                        text: qsTr("A / B close · ▴ ▾ scroll") + api.tr
-                        color: "#999"
-                        font.family: globalFonts.sans
-                        font.pixelSize: vpx(15)
-                        horizontalAlignment: Text.AlignHCenter
-                    }
+        Repeater {
+            model: helpDialog.help.steps || []
+            delegate: Row {
+                spacing: vpx(12)
+                width: parent.width
+                Text {
+                    width: vpx(28)
+                    text: (index + 1) + "."
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(18)
+                    font.bold: true
+                }
+                Text {
+                    width: parent.width - vpx(40)
+                    text: modelData
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(17)
+                    wrapMode: Text.WordWrap
+                    lineHeight: 1.1
                 }
             }
+        }
+        Text {
+            width: parent.width
+            text: qsTr("Website: %1").arg(helpDialog.help.site || "") + api.tr
+            color: "#ddd"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(16)
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WrapAnywhere
         }
     }
 
@@ -1060,8 +1003,7 @@ FocusScope {
             height: textColumn.height + vpx(40)
             anchors.horizontalCenter: parent.horizontalCenter
             y: vpx(30)
-            color: "#444"
-            radius: vpx(8)
+            color: "#555"
             Column {
                 id: textColumn
                 anchors.top: parent.top
@@ -1081,8 +1023,6 @@ FocusScope {
                     width: parent.width
                     height: vpx(52)
                     color: "#333"
-                    border.color: "#3aa"
-                    border.width: vpx(2)
                     TextInput {
                         id: textInput
                         anchors.fill: parent

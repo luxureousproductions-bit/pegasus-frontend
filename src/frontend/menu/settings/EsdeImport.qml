@@ -292,7 +292,6 @@ FocusScope {
         anchors.centerIn: parent
 
         color: "#444"
-        radius: vpx(8)
 
         MouseArea {
             anchors.fill: parent
@@ -387,7 +386,7 @@ FocusScope {
                     width: ListView.view.width
                     height: isSection ? vpx(18) * 2 : vpx(18) * 2.6
                     color: isSection ? "transparent" : highlighted ? "#3aa"
-                         : modelData.kind === "import" ? "#2a5f5f"
+                         : modelData.kind === "import" ? "#555"
                          : modelData.kind === "folder" ? "#3a3a3a" : "transparent"
 
                     // check box
@@ -396,7 +395,6 @@ FocusScope {
                         visible: modelData.kind === "all" || modelData.kind === "androidgames" || parent.isSystem
                         width: vpx(20)
                         height: width
-                        radius: vpx(3)
                         color: parent.checked ? (parent.highlighted ? "#111" : "#3cc") : "transparent"
                         border.color: parent.highlighted ? "#111" : "#aaa"
                         border.width: vpx(2)
@@ -527,7 +525,6 @@ FocusScope {
     // while importing: a progress bar over the list
     Rectangle {
         anchors.fill: main
-        radius: main.radius
         color: "#cc222222"
         visible: root.running
 
@@ -553,13 +550,11 @@ FocusScope {
             Rectangle {
                 width: parent.width
                 height: vpx(14)
-                radius: height / 2
                 color: "#333"
 
                 Rectangle {
                     width: Math.max(height, parent.width * root.progress)
                     height: parent.height
-                    radius: height / 2
                     color: "#3aa"
                     Behavior on width { NumberAnimation { duration: 200 } }
                 }

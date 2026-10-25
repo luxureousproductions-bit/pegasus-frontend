@@ -282,7 +282,6 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        radius: vpx(8)
         color: "#222"
         border.color: "#555"
         border.width: vpx(1)
@@ -307,8 +306,7 @@ FocusScope {
                         readonly property bool sel: root.selSide(true, modelData.slot)
                         width: root.sideW
                         height: root.keyH * modelData.h + root.keyGap * (modelData.h - 1)
-                        radius: vpx(6)
-                        color: sel ? root.keyFillSel : ((modelData.k === "CMD_SHIFT" && root.shifted) ? "#2a5f5f" : root.keyFillCmd)
+                        color: sel ? root.keyFillSel : ((modelData.k === "CMD_SHIFT" && root.shifted) ? "#555" : root.keyFillCmd)
                         Column {
                             anchors.centerIn: parent
                             spacing: vpx(4)
@@ -350,7 +348,6 @@ FocusScope {
                                 readonly property bool sel: root.selCentre(parent.rowIndex, index)
                                 width: root.keyW
                                 height: root.keyH
-                                radius: vpx(4)
                                 color: sel ? root.keyFillSel : root.keyFill
                                 Text {
                                     anchors.centerIn: parent
@@ -377,7 +374,6 @@ FocusScope {
                         readonly property bool sel: root.selSpace()
                         width: root.multiLine ? root.keyW * 8 + root.keyGap * 7 : root.gridW
                         height: root.keyH
-                        radius: vpx(4)
                         color: sel ? root.keyFillSel : root.keyFillCmd
                         Row {
                             anchors.centerIn: parent
@@ -406,7 +402,6 @@ FocusScope {
                         visible: root.multiLine
                         width: root.keyW * 2 + root.keyGap
                         height: root.keyH
-                        radius: vpx(4)
                         color: sel ? root.keyFillSel : root.keyFillCmd
                         Text {
                             anchors.centerIn: parent
@@ -432,8 +427,7 @@ FocusScope {
                         readonly property bool sel: root.selSide(false, modelData.slot)
                         width: root.sideW
                         height: root.keyH * modelData.h + root.keyGap * (modelData.h - 1)
-                        radius: vpx(6)
-                        color: sel ? root.keyFillSel : (modelData.k === "CMD_DONE" ? "#2a5f5f" : root.keyFillCmd)
+                        color: sel ? root.keyFillSel : (modelData.k === "CMD_DONE" ? "#555" : root.keyFillCmd)
                         Column {
                             anchors.centerIn: parent
                             spacing: vpx(4)
@@ -474,7 +468,6 @@ FocusScope {
                     readonly property bool sel: root.selClip(index)
                     width: (root.gridW - root.keyGap) / 2
                     height: root.keyH * 0.85
-                    radius: vpx(4)
                     color: sel ? root.keyFillSel : root.keyFillCmd
                     Text {
                         anchors.centerIn: parent

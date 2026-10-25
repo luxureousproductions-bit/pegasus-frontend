@@ -495,7 +495,6 @@ FocusScope {
             height: titleText.height + actionList.contentHeight + vpx(16)
             x: parent.width - width - vpx(24)
             color: "#2b2b2b"
-            radius: vpx(6)
 
             MouseArea { anchors.fill: parent }
 

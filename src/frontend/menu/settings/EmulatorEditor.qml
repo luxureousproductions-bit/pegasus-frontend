@@ -383,7 +383,6 @@ FocusScope {
             id: spinner
             width: vpx(48)
             height: width
-            radius: width / 2
             color: "transparent"
             border.color: "#3aa"
             border.width: vpx(4)
@@ -392,7 +391,6 @@ FocusScope {
             Rectangle {
                 width: vpx(12)
                 height: width
-                radius: width / 2
                 color: "#eee"
                 x: parent.width / 2 - width / 2
                 y: -height / 2 + parent.border.width / 2
@@ -1000,7 +998,6 @@ FocusScope {
             Behavior on x { PropertyAnimation { duration: 200; easing.type: Easing.OutCubic } }
 
             color: "#2b2b2b"
-            radius: vpx(8)
             border.color: "#444"
             border.width: vpx(1)
 
@@ -1010,8 +1007,8 @@ FocusScope {
 
             Item {
                 anchors.fill: parent
-                anchors.topMargin: parent.radius
-                anchors.bottomMargin: parent.radius
+                anchors.topMargin: vpx(8)
+                anchors.bottomMargin: vpx(8)
                 clip: true
 
                 ListView {
@@ -1170,7 +1167,6 @@ FocusScope {
             height: dialogColumn.height + vpx(48)
             anchors.centerIn: parent
             color: "#444"
-            radius: vpx(8)
 
             MouseArea {
                 anchors.fill: parent
@@ -1245,7 +1241,6 @@ FocusScope {
                         readonly property bool highlighted: ListView.view.activeFocus && ListView.isCurrentItem
                         width: chipText.implicitWidth + vpx(20)
                         height: ListView.view.height
-                        radius: vpx(4)
                         color: highlighted ? "#3aa" : "#333"
                         border.color: "#3aa"
                         border.width: highlighted ? 0 : vpx(1)
@@ -1311,8 +1306,7 @@ FocusScope {
                         readonly property bool highlighted: ListView.view.activeFocus && ListView.isCurrentItem
                         width: actionText.implicitWidth + vpx(40)
                         height: ListView.view.height
-                        radius: vpx(6)
-                        color: highlighted ? "#3aa" : (modelData.name === "save" ? "#2a5f5f" : "#333")
+                        color: highlighted ? "#3aa" : (modelData.name === "save" ? "#555" : "#333")
 
                         Text {
                             id: actionText

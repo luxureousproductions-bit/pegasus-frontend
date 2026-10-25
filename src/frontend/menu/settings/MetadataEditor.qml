@@ -1502,8 +1502,7 @@ FocusScope {
                 anchors.centerIn: parent
                 width: Math.min(parent.width * 0.5, vpx(360))
                 height: vpx(48)
-                radius: vpx(6)
-                color: parent.highlighted ? "#3aa" : (root.dirty ? "#2a5f5f" : "#333")
+                color: parent.highlighted ? "#3aa" : (root.dirty ? "#555" : "#333")
                 Text {
                     anchors.centerIn: parent
                     text: modelData.text
@@ -1692,9 +1691,8 @@ FocusScope {
             anchors.right: parent.right
             anchors.bottom: caption.top
             anchors.bottomMargin: vpx(8)
-            radius: vpx(10)
-            color: "#151718"
-            border.color: artPreview.shown.edited ? "#e8b06a" : "#2c3134"
+            color: "#333"
+            border.color: artPreview.shown.edited ? "#e8b06a" : "#444"
             border.width: vpx(2)
 
             Image {
@@ -1719,7 +1717,6 @@ FocusScope {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: vpx(84)
                     height: width
-                    radius: width / 2
                     color: "transparent"
                     border.color: artPreview.file === "" ? "#444" : "#3aa"
                     border.width: vpx(3)
@@ -1751,7 +1748,6 @@ FocusScope {
                 anchors.margins: vpx(10)
                 width: kindText.implicitWidth + vpx(20)
                 height: vpx(30)
-                radius: vpx(15)
                 color: "#cc1d2a30"
                 Text {
                     id: kindText
@@ -1769,7 +1765,6 @@ FocusScope {
                 anchors.margins: vpx(10)
                 width: newText.implicitWidth + vpx(20)
                 height: vpx(30)
-                radius: vpx(15)
                 color: "#e8b06a"
                 Text {
                     id: newText
@@ -1825,9 +1820,8 @@ FocusScope {
                 readonly property bool vid: /\.(mp4|webm|mkv|avi|mov|pdf|cbz|cbr)$/i.test(modelData.file)
                 width: vpx(88)
                 height: strip.height
-                radius: vpx(6)
                 color: "#1e2224"
-                border.color: isOn ? "#3aa" : "#2c3134"
+                border.color: isOn ? "#3aa" : "#444"
                 border.width: isOn ? vpx(3) : vpx(1)
                 opacity: isOn ? 1 : 0.75
                 Image {
@@ -2345,7 +2339,6 @@ FocusScope {
                         readonly property bool highlighted: suggestBar.activeFocus && index === suggestBar.current
                         width: Math.min(suggestText.implicitWidth + vpx(24), vpx(220))
                         height: suggestBar.height
-                        radius: vpx(6)
                         color: highlighted ? "#3aa" : "#333"
                         border.color: "#3aa"
                         border.width: highlighted ? 0 : vpx(1)
@@ -2374,7 +2367,6 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             y: vpx(14)
             color: "#444"
-            radius: vpx(8)
 
             MouseArea { anchors.fill: parent }
 
@@ -2538,8 +2530,7 @@ FocusScope {
                         readonly property bool highlighted: ListView.view.activeFocus && ListView.isCurrentItem
                         width: actionText.implicitWidth + vpx(40)
                         height: ListView.view.height
-                        radius: vpx(6)
-                        color: highlighted ? "#3aa" : (modelData.name === "done" ? "#2a5f5f" : "#333")
+                        color: highlighted ? "#3aa" : (modelData.name === "done" ? "#555" : "#333")
                         Text {
                             id: actionText
                             text: modelData.text
@@ -2688,7 +2679,6 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             y: vpx(30)
             color: "#444"
-            radius: vpx(8)
             Column {
                 id: nameColumn
                 anchors.top: parent.top
