@@ -74,6 +74,7 @@
 
 
 namespace {
+QString pegasusx_settings_path();
 
 void rewrite_gamedircfg(const std::function<void(QTextStream&)>& callback)
 {
