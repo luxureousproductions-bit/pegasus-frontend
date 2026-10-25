@@ -86,7 +86,7 @@ FocusScope {
             section: "general"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Get themes...")
+            label: QT_TR_NOOP("Theme downloader...")
             desc: QT_TR_NOOP("Browse the Pegasus theme gallery with pictures, install and update themes, or add one from a GitHub link.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openThemeDownloader

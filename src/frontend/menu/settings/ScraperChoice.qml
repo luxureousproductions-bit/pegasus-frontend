@@ -222,7 +222,9 @@ FocusScope {
             Text {
                 anchors.centerIn: parent
                 visible: thumb.status !== Image.Ready
-                text: thumb.status === Image.Loading ? qsTr("Loading...") + api.tr : qsTr("No picture") + api.tr
+                text: thumb.status === Image.Loading ? qsTr("Loading...") + api.tr
+                    : root.picked.thumbError !== undefined ? qsTr("The picture didn't download (%1)").arg(root.picked.thumbError || qsTr("no connection")) + api.tr
+                    : qsTr("No picture") + api.tr
                 color: "#666"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(16)

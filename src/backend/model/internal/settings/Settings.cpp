@@ -1107,9 +1107,7 @@ QVariantMap scraper_defaults()
         { QStringLiteral("getLogos"), true },
         { QStringLiteral("getMiximages"), true },
         { QStringLiteral("getManuals"), true },
-        // miximages: made here as ES-DE makes them ("generate"), or
-        // ScreenScraper's ready-made ones (mixrbv1 / mixrbv2); ES-DE's options
-        { QStringLiteral("miximageStyle"), QStringLiteral("generate") },
+        // miximages, made on the device: their options
         { QStringLiteral("mixOverwrite"), true },
         { QStringLiteral("mixResolution"), QStringLiteral("1280x960") },
         { QStringLiteral("mixFormat"), QStringLiteral("png") },

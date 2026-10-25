@@ -215,7 +215,7 @@ FocusScope {
 
     ScreenHeader {
         id: header
-        text: qsTr("Settings > Get themes") + api.tr
+        text: qsTr("Settings > Theme downloader") + api.tr
         z: 2
     }
     Text {

@@ -119,6 +119,12 @@ private:
     bool m_last_ok = true;
     QString m_stop_reason;
     QVariantMap m_last_changes;  ///< what the last game saved (shown at once for one game)
+    QVariantMap m_preview;       ///< the last game as the Scraper page shows it (picture, details)
+    int m_picture_failures = 0;  ///< pictures of this game that didn't download
+    int m_picture_error = 0;     ///< ... and the last answer
+    QVariantMap previewOf(const Job& job) const;
+    /// the matches' pictures downloaded here first (shown from the device)
+    void prefetchThumbs(const QVariantList& candidates, std::function<void(const QVariantList&)> done);
 
     // interactive mode
     bool m_waiting = false;

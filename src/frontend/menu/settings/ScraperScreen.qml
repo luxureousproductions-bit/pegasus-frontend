@@ -19,7 +19,7 @@ import "common"
 import QtQuick 2.6
 
 
-// Pegasus X: Settings > Library > Scraper. Laid out like ES-DE's scraper
+// Pegasus X: Settings > Library > Scraper. Laid out like a classic scraper
 // menu (where from, which games, which systems, accounts, content...), in
 // Pegasus' style. Every change is saved right away.
 FocusScope {
@@ -124,11 +124,6 @@ FocusScope {
         { "v": "nl", "t": "Nederlands" }, { "v": "sv", "t": "Svenska" }, { "v": "pl", "t": "Polski" },
         { "v": "ru", "t": "Русский" }, { "v": "ja", "t": "日本語" }, { "v": "ko", "t": "한국어" },
         { "v": "zh", "t": "中文" },
-    ]
-    readonly property var miximageChoices: [
-        { "v": "generate", "t": qsTr("Made by Pegasus X (as ES-DE)") + api.tr },
-        { "v": "mixrbv2", "t": qsTr("ScreenScraper's, style 2") + api.tr },
-        { "v": "mixrbv1", "t": qsTr("ScreenScraper's, style 1") + api.tr },
     ]
     readonly property var sizeChoices: [
         { "v": "small", "t": qsTr("Small") + api.tr },
@@ -343,13 +338,11 @@ FocusScope {
             return out;
         }
         if (page === "miximage") {
-            out.push({ "kind": "mixpreview", "text": "" });
-            out.push({ "kind": "choice", "key": "miximageStyle", "text": qsTr("Miximages") + api.tr, "choices": miximageChoices });
             out.push({ "kind": "toggle", "key": "getMiximages", "text": qsTr("Generate miximages when scraping") + api.tr });
             out.push({ "kind": "toggle", "key": "mixOverwrite", "text": qsTr("Overwrite miximages (scraper/offline generator)") + api.tr });
             out.push({ "kind": "offline", "text": qsTr("Offline generator") + api.tr,
                        "value": qsTr("%1 systems").arg((s.systems || []).length) + api.tr });
-            out.push({ "kind": "section", "text": qsTr("Made by Pegasus X") + api.tr });
+            out.push({ "kind": "section", "text": qsTr("Layout") + api.tr });
             out.push({ "kind": "choice", "key": "mixResolution", "text": qsTr("Miximage resolution") + api.tr, "choices": [
                 { "v": "1280x960", "t": "1280×960" }, { "v": "1920x1440", "t": "1920×1440" }, { "v": "640x480", "t": "640×480" } ] });
             out.push({ "kind": "choice", "key": "mixFormat", "text": qsTr("Miximage file format") + api.tr, "choices": [
@@ -382,6 +375,9 @@ FocusScope {
                 "value": run.running && run.current ? run.current : "" });
             out.push({ "kind": "info", "text": qsTr("Saved · not found · failed") + api.tr,
                        "value": (run.saved || 0) + " · " + (run.notFound || 0) + " · " + (run.failed || 0) });
+            // the last game: its picture and what was found
+            if (run.preview && run.preview.title)
+                out.push({ "kind": "preview", "text": "", "preview": run.preview, "result": run.result || "", "ok": run.ok });
             out.push({ "kind": "section", "text": qsTr("Last games") + api.tr });
             for (i = 0; i < results.length; i++)
                 out.push({ "kind": "info", "text": results[i].title, "value": results[i].result, "ok": results[i].ok });
@@ -403,7 +399,7 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "autoAcceptSingle", "text": qsTr("Auto-accept a single match") + api.tr });
             out.push({ "kind": "section", "text": qsTr("Pictures") + api.tr });
             out.push({ "kind": "choice", "key": "imageMaxSize", "text": qsTr("Biggest picture size") + api.tr, "choices": [
-                { "v": "2560", "t": qsTr("2560×1440 (as ES-DE)") + api.tr },
+                { "v": "2560", "t": qsTr("2560×1440") + api.tr },
                 { "v": "1920", "t": "1920×1080" },
                 { "v": "1280", "t": "1280×720" },
                 { "v": "640", "t": qsTr("640×480 (smallest files)") + api.tr },
@@ -543,7 +539,7 @@ FocusScope {
 
         function selectable(i) {
             return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info"
-                && root.rows[i].kind !== "mixpreview";
+                && root.rows[i].kind !== "preview";
         }
         Keys.onUpPressed: {
             var i = currentIndex - 1;
@@ -573,41 +569,112 @@ FocusScope {
             readonly property bool isInfo: modelData.kind === "info"
             readonly property bool isStart: modelData.kind === "start" || modelData.kind === "stop" || modelData.kind === "done"
             readonly property bool isProgress: modelData.kind === "progress"
-            readonly property bool isMix: modelData.kind === "mixpreview"
+            readonly property bool isMix: modelData.kind === "preview"
             readonly property bool steps: modelData.kind === "choice" || modelData.kind === "number"
             readonly property bool highlighted: !isSection && !isInfo && !isMix
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
 
             width: ListView.view.width
-            height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isMix ? vpx(200)
+            height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isMix ? vpx(300)
                   : isInfo ? (modelData.value ? vpx(42) : rowLabel.implicitHeight + vpx(16)) : vpx(22) * 2.4
 
-            // the two miximage styles as example pictures (only to look at)
-            Row {
+            // the game just scraped: its picture and what was found
+            Item {
                 visible: parent.isMix
-                anchors.centerIn: parent
-                spacing: vpx(30)
-                Repeater {
-                    model: [ { "src": "qrc:/frontend/assets/miximage-pegasusx.png", "t": qsTr("Made by Pegasus X") + api.tr },
-                             { "src": "qrc:/frontend/assets/miximage-style2.png", "t": qsTr("ScreenScraper style 2") + api.tr },
-                             { "src": "qrc:/frontend/assets/miximage-style1.png", "t": qsTr("ScreenScraper style 1") + api.tr } ]
-                    delegate: Column {
-                        spacing: vpx(6)
-                        Image {
-                            width: vpx(210)
-                            height: vpx(158)
-                            source: modelData.src
-                            sourceSize.width: vpx(256)
-                            fillMode: Image.PreserveAspectFit
-                            asynchronous: true
+                anchors.fill: parent
+                anchors.leftMargin: vpx(30)
+                anchors.rightMargin: vpx(30)
+                anchors.topMargin: vpx(10)
+                anchors.bottomMargin: vpx(10)
+                readonly property var p: modelData.preview || ({})
+
+                Rectangle {
+                    id: previewBox
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    width: height * 0.8
+                    color: "#333"
+                    Image {
+                        id: previewImage
+                        anchors.fill: parent
+                        anchors.margins: vpx(6)
+                        source: parent.parent.p.picture || ""
+                        sourceSize.width: vpx(320)
+                        fillMode: Image.PreserveAspectFit
+                        asynchronous: true
+                        cache: false
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        visible: previewImage.status !== Image.Ready
+                        text: qsTr("No picture") + api.tr
+                        color: "#777"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(16)
+                    }
+                }
+                Column {
+                    anchors.left: previewBox.right
+                    anchors.leftMargin: vpx(20)
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    spacing: vpx(4)
+                    clip: true
+                    Text {
+                        width: parent.width
+                        text: parent.parent.p.title || ""
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(22)
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        width: parent.width
+                        text: modelData.result
+                        color: modelData.ok ? "#9d9" : "#e8b06a"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(15)
+                        elide: Text.ElideRight
+                    }
+                    Repeater {
+                        model: [
+                            [qsTr("Released") + api.tr, parent.parent.p.release],
+                            [qsTr("Developer") + api.tr, parent.parent.p.developer],
+                            [qsTr("Publisher") + api.tr, parent.parent.p.publisher],
+                            [qsTr("Genre") + api.tr, parent.parent.p.genre],
+                            [qsTr("Players") + api.tr, parent.parent.p.players],
+                            [qsTr("Rating") + api.tr, parent.parent.p.rating],
+                        ]
+                        delegate: Row {
+                            visible: !!modelData[1]
+                            spacing: vpx(10)
+                            Text {
+                                width: vpx(110)
+                                text: modelData[0]
+                                color: "#999"
+                                font.family: globalFonts.sans
+                                font.pixelSize: vpx(16)
+                            }
+                            Text {
+                                text: modelData[1] || ""
+                                color: "#c0c0c0"
+                                font.family: globalFonts.sans
+                                font.pixelSize: vpx(16)
+                            }
                         }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: modelData.t
-                            color: "#999"
-                            font.family: globalFonts.sans
-                            font.pixelSize: vpx(16)
-                        }
+                    }
+                    Text {
+                        width: parent.width
+                        text: parent.parent.p.description || ""
+                        color: "#aaa"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(15)
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 4
+                        elide: Text.ElideRight
                     }
                 }
             }
@@ -622,11 +689,9 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: vpx(12)
                 height: vpx(8)
-                radius: vpx(4)
                 color: "#333"
                 Rectangle {
                     height: parent.height
-                    radius: parent.radius
                     color: "#3aa"
                     width: parent.width * ((root.run.total || 0) > 0 ? (root.run.done || 0) / root.run.total : 0)
                     Behavior on width { NumberAnimation { duration: 250 } }
@@ -649,15 +714,13 @@ FocusScope {
                 anchors.centerIn: parent
                 width: Math.min(parent.width * 0.5, vpx(380))
                 height: vpx(50)
-                radius: vpx(6)
-                color: parent.highlighted ? "#3aa" : modelData.kind === "stop" ? "#5f2a2a" : "#2a5f5f"
+                color: parent.highlighted ? (modelData.kind === "stop" ? "#f43" : "#3c4") : "#666"
                 Text {
                     anchors.centerIn: parent
                     text: modelData.text
-                    color: parent.parent.highlighted ? "#111" : "#eee"
+                    color: "#eee"
                     font.family: globalFonts.sans
                     font.pixelSize: vpx(21)
-                    font.bold: true
                 }
             }
             Rectangle {
@@ -733,7 +796,7 @@ FocusScope {
     }
 
 
-    // -- A choice from a list (like ES-DE's popups) -----------------------------
+    // -- A choice from a list --------------------------------------------------
 
     FocusScope {
         id: picker

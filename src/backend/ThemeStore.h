@@ -30,7 +30,7 @@ class QNetworkReply;
 class QFile;
 
 
-// Pegasus X: themes downloaded in the app (Settings > Get themes). The list is
+// Pegasus X: themes downloaded in the app (Settings > Theme downloader). The list is
 // the Pegasus theme gallery's (github.com/mmatyas/pegasus-theme-gallery-db,
 // repos.txt) plus the GitHub links you add; for each theme its theme.cfg
 // (name, author, version, summary) and the pictures of its README are read as

@@ -18,6 +18,7 @@
 #include "Scraper.h"
 
 #include "Log.h"
+#include "Paths.h"
 #include "Miximage.h"
 #ifdef WITH_COMPAT_ESDE
 #include "providers/esde/EsdeProvider.h"
@@ -48,6 +49,8 @@
 
 namespace {
 const QString LOG_TAG = QStringLiteral("Scraper");
+// some image servers turn away requests that don't say who's asking
+const QByteArray USER_AGENT = QByteArrayLiteral("PegasusX/1.0 (Pegasus frontend)");
 
 // ES-DE system -> ScreenScraper system id, from ES-DE's own tables
 // (es-app/src/scrapers/ScreenScraper.cpp and PlatformId.cpp, MIT license)
@@ -525,6 +528,7 @@ QVariantMap Scraper::state() const
         { QStringLiteral("failed"), m_failed },
         { QStringLiteral("stopReason"), m_stop_reason },
         { QStringLiteral("changes"), m_last_changes },
+        { QStringLiteral("preview"), m_preview },
     };
 }
 
@@ -547,6 +551,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_last_title.clear();
     m_last_result.clear();
     m_last_changes.clear();
+    m_preview.clear();
     m_stop_reason.clear();
     m_stop = false;
     m_running = true;
@@ -733,7 +738,6 @@ void Scraper::sgdbSearch(const QString& name)
 
 void Scraper::offerChoice(const QVariantList& candidates)
 {
-    const Job& job = m_jobs[m_index];
     // one match and Auto-accept on: no need to ask (scraping one game always asks)
     if (candidates.size() == 1 && m_settings.value(QStringLiteral("autoAcceptSingle")).toBool()
             && m_jobs.size() > 1) {
@@ -741,18 +745,74 @@ void Scraper::offerChoice(const QVariantList& candidates)
         choose(0);
         return;
     }
-    m_choice = QVariantMap {
-        { QStringLiteral("title"), job.title },
-        { QStringLiteral("collection"), job.collection },
-        { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
-        { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
-                                    : m_choice_source == QLatin1String("igdb") ? QStringLiteral("IGDB")
-                                    : QStringLiteral("SteamGridDB") },
-        { QStringLiteral("candidates"), candidates },
-    };
+    // the pictures first (downloaded here, so they show even where the
+    // picker couldn't load them itself), then the pick
+    m_choice.clear();
     m_waiting = true;
-    report();
-    emit choiceNeeded(m_choice);
+    prefetchThumbs(candidates, [this](const QVariantList& with_pictures){
+        if (!m_waiting || m_index >= m_jobs.size())
+            return;  // stopped meanwhile
+        const Job& job = m_jobs[m_index];
+        m_choice = QVariantMap {
+            { QStringLiteral("title"), job.title },
+            { QStringLiteral("collection"), job.collection },
+            { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
+            { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
+                                        : m_choice_source == QLatin1String("igdb") ? QStringLiteral("IGDB")
+                                        : QStringLiteral("SteamGridDB") },
+            { QStringLiteral("candidates"), with_pictures },
+        };
+        report();
+        emit choiceNeeded(m_choice);
+    });
+}
+
+void Scraper::prefetchThumbs(const QVariantList& candidates, std::function<void(const QVariantList&)> done)
+{
+    auto* const list = new QVariantList(candidates);
+    auto* const pending = new int(0);
+    const QString dir = paths::writableCacheDir() + QStringLiteral("/scraper-pictures");
+    QDir().mkpath(dir);
+    for (int i = 0; i < list->size(); i++) {
+        const QString url = (*list)[i].toMap().value(QStringLiteral("thumb")).toString();
+        if (url.startsWith(QLatin1String("http")))
+            (*pending)++;
+    }
+    if (*pending == 0) {
+        delete pending;
+        const QVariantList out = *list;
+        delete list;
+        done(out);
+        return;
+    }
+    for (int i = 0; i < list->size(); i++) {
+        const QString url = (*list)[i].toMap().value(QStringLiteral("thumb")).toString();
+        if (!url.startsWith(QLatin1String("http")))
+            continue;
+        get(QUrl(url), {}, 0, [this, i, url, dir, list, pending, done](int status, const QByteArray& body){
+            QVariantMap c = (*list)[i].toMap();
+            if (status == 200 && !QImage::fromData(body).isNull()) {
+                const QString name = QString::fromLatin1(QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
+                const QString path = dir + QLatin1Char('/') + name + QStringLiteral(".img");
+                QFile file(path);
+                if (file.open(QIODevice::WriteOnly) && file.write(body) == body.size()) {
+                    file.close();
+                    c.insert(QStringLiteral("thumb"), QUrl::fromLocalFile(path).toString());
+                }
+            }
+            else if (status != 200) {
+                c.insert(QStringLiteral("thumbError"), status);
+                Log::warning(LOG_TAG, LOGMSG("Picture `%1`: %2").arg(url).arg(status));
+            }
+            (*list)[i] = c;
+            if (--(*pending) == 0) {
+                delete pending;
+                const QVariantList out = *list;
+                delete list;
+                done(out);
+            }
+        });
+    }
 }
 
 void Scraper::choose(int index)
@@ -851,6 +911,8 @@ void Scraper::next()
     m_igdb_done = false;
     m_mix_done = false;
     m_mix_error.clear();
+    m_picture_failures = 0;
+    m_picture_error = 0;
     report();
 
     // the offline generator: only the miximage, from the art the game has
@@ -905,6 +967,7 @@ void Scraper::get(const QUrl& url, const QByteArray& auth, int tries_left,
     QNetworkRequest request(url);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(120000);
+    request.setRawHeader("User-Agent", USER_AGENT);
     if (!auth.isEmpty())
         request.setRawHeader("Authorization", auth);
     QNetworkReply* const reply = m_net->get(request);
@@ -1044,7 +1107,6 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
 
     // the art: ScreenScraper's media types -> Pegasus' slots (the folders are ES-DE's names)
     struct Kind { const char* types; const char* setting; const char* slot; const char* folder; const char* box; };
-    const QString mix = m_settings.value(QStringLiteral("miximageStyle")).toString();
     const std::vector<Kind> kinds {
         { "box-2D", "getCovers", "assets.box_front", "covers", "2d" },
         { "box-3D", "getBox3d", "assets.box_front", "3dboxes", "3d" },
@@ -1056,18 +1118,13 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
         { "wheel-hd,wheel", "getLogos", "assets.logo", "marquees", "" },
         { "video-normalized,video", "getVideos", "assets.video", "videos", "" },
         { "manuel", "getManuals", "x-manual", "manuals", "" },
-        { "", "getMiximages", "assets.steam", "miximages", "" },
     };
     const QJsonArray medias = game.value(QStringLiteral("medias")).toArray();
     for (const Kind& kind : kinds) {
         const QString setting = QLatin1String(kind.setting);
         if (!wants(setting))
             continue;
-        // miximages made here: ScreenScraper's aren't downloaded
-        if (!kind.types[0] && (mix.isEmpty() || mix == QLatin1String("generate")))
-            continue;
-        const QStringList types = kind.types[0] ? QString::fromLatin1(kind.types).split(QLatin1Char(','))
-                                                : QStringList { mix.isEmpty() ? QStringLiteral("mixrbv2") : mix };
+        const QStringList types = QString::fromLatin1(kind.types).split(QLatin1Char(','));
         for (const QString& type : types) {
             QJsonArray of_type;
             for (const QJsonValue& m : medias) {
@@ -1114,6 +1171,7 @@ void Scraper::igdbToken(std::function<void(int)> done)
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
     request.setTransferTimeout(60000);
+    request.setRawHeader("User-Agent", USER_AGENT);
     QNetworkReply* const reply = m_net->post(request, QByteArray());
     connect(reply, &QNetworkReply::finished, this, [this, reply, done]{
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
@@ -1147,6 +1205,7 @@ void Scraper::igdbPost(const QByteArray& query, std::function<void(int, const QB
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("text/plain"));
     request.setRawHeader("Client-ID", m_settings.value(QStringLiteral("igdbClientId")).toString().trimmed().toUtf8());
     request.setRawHeader("Authorization", "Bearer " + m_igdb_token.toUtf8());
+    request.setRawHeader("User-Agent", USER_AGENT);
     request.setTransferTimeout(60000);
     QNetworkReply* const reply = m_net->post(request, query);
     connect(reply, &QNetworkReply::finished, this, [this, reply, query, done, tries_left, retried]{
@@ -1497,6 +1556,9 @@ void Scraper::downloadNext()
     const Job& job = m_jobs[m_index];
     get(media.url, {}, 1, [this, media, job](int status, const QByteArray& body){
         if (status != 200 || body.isEmpty()) {
+            m_picture_failures++;
+            m_picture_error = status;
+            Log::warning(LOG_TAG, LOGMSG("Download `%1`: %2").arg(media.url.toString()).arg(status));
             downloadNext();
             return;
         }
@@ -1636,10 +1698,7 @@ bool Scraper::offline() const
 
 bool Scraper::wantsMiximage() const
 {
-    if (offline())
-        return true;
-    const QString style = m_settings.value(QStringLiteral("miximageStyle")).toString();
-    return wants(QStringLiteral("getMiximages")) && (style.isEmpty() || style == QLatin1String("generate"));
+    return offline() || wants(QStringLiteral("getMiximages"));
 }
 
 // the game's miximage from its screenshot, logo, box and disc (the ones just
@@ -1739,10 +1798,58 @@ void Scraper::save()
     finishGame(what.join(QStringLiteral(", ")), true);
 }
 
-void Scraper::finishGame(const QString& result, bool ok)
+// the game as the Scraper page shows it: its picture (the new one, else the
+// one it had) and the details found
+QVariantMap Scraper::previewOf(const Job& job) const
 {
-    if (m_index < m_jobs.size())
+    const auto files_of = [this, &job](const QString& key) {
+        return m_changes.contains(key) ? m_changes.value(key).toStringList() : job.slot_files.value(key).toStringList();
+    };
+    QString picture;
+    for (const char* key : { "assets.box_front", "assets.screenshot", "assets.steam", "assets.logo" }) {
+        for (const QString& f : files_of(QLatin1String(key))) {
+            if (f.startsWith(QLatin1String("image://")) || f.startsWith(QLatin1String("file:"))) {
+                picture = f;
+                break;
+            }
+            if (!f.contains(QLatin1String("://")) && QFileInfo(f).isFile()) {
+                picture = QUrl::fromLocalFile(f).toString();
+                break;
+            }
+        }
+        if (!picture.isEmpty())
+            break;
+    }
+    const auto text = [this](const char* key) {
+        const QVariant v = m_changes.value(QLatin1String(key));
+        return v.type() == QVariant::StringList ? v.toStringList().join(QStringLiteral(", ")) : v.toString();
+    };
+    return QVariantMap {
+        { QStringLiteral("title"), m_changes.value(QStringLiteral("title"), job.title).toString() },
+        { QStringLiteral("collection"), job.collection },
+        { QStringLiteral("picture"), picture },
+        { QStringLiteral("description"), text("description") },
+        { QStringLiteral("developer"), text("developer") },
+        { QStringLiteral("publisher"), text("publisher") },
+        { QStringLiteral("genre"), text("genre") },
+        { QStringLiteral("release"), text("release") },
+        { QStringLiteral("players"), text("players") },
+        { QStringLiteral("rating"), text("rating") },
+    };
+}
+
+void Scraper::finishGame(const QString& given_result, bool ok)
+{
+    QString result = given_result;
+    if (m_picture_failures > 0) {
+        const QString failed = tr("%n picture(s) didn't download (%1)", "", m_picture_failures)
+            .arg(m_picture_error == 0 ? tr("no connection") : tr("error %1").arg(m_picture_error));
+        result = result.isEmpty() ? failed : result + QStringLiteral(" · ") + failed;
+    }
+    if (m_index < m_jobs.size()) {
         m_last_title = m_jobs[m_index].title;
+        m_preview = previewOf(m_jobs[m_index]);
+    }
     m_last_result = result;
     m_last_ok = ok;
     m_index++;
