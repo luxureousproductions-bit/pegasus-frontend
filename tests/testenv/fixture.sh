@@ -19,9 +19,10 @@ mkdir -p "$S/ES-DE/settings" "$S/ES-DE/gamelists/snes" "$S/ROMs/snes" "$S/ROMs/g
          "$T/home/.config/pegasus-frontend"
 
 # a picture with a label (ImageMagick)
-pic() {  # file size color label
+pic() {  # file size color label (the label left out if ImageMagick can't draw text)
     mkdir -p "$(dirname "$1")"
-    convert -size "$2" "xc:$3" -fill white -gravity center -pointsize 34 -annotate 0 "$4" "$1"
+    convert -size "$2" "xc:$3" -fill white -gravity center -pointsize 34 -annotate 0 "$4" "$1" 2>/dev/null \
+        || convert -size "$2" "xc:$3" "$1"
 }
 rom() { head -c 2048 /dev/urandom > "$1"; }
 

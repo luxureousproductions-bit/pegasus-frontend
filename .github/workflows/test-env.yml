@@ -46,7 +46,11 @@ jobs:
             echo "::error::${line}"
           done
       - name: Fixture
-        run: bash tests/testenv/fixture.sh "$RUNNER_TEMP/px"
+        run: |
+          bash -x tests/testenv/fixture.sh "$RUNNER_TEMP/px" > fixture.log 2>&1 || {
+            tail -n 15 fixture.log | while IFS= read -r line; do echo "::error::${line}"; done
+            exit 1
+          }
       - name: Run
         run: |
           xvfb-run -a -s "-screen 0 1280x720x24" bash tests/testenv/run.sh build/src/app/pegasus-fe "$RUNNER_TEMP/px" results
