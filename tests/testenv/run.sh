@@ -164,26 +164,37 @@ INI
 fi
 
 # -- summary --------------------------------------------------------------------------------------
+# the metadata files as they are at the end (overrides are written along the way)
+find "$CFG/metadata" -type f 2>/dev/null | while read -r f; do
+    cp "$f" "$R/files/$(echo "${f#$CFG/}" | tr '/ ' '__')"
+done
 {
     echo "# Test environment results"
     echo
     echo "## Imports (first start)"
     grep -h "Test:" "$R/logs/01-first-start.log" | sed 's/^/    /'
     echo
+    strip_ansi() { cat "$@" | sed 's/\x1b\[[0-9;]*m//g'; }
     echo "## Library as read (last start)"
-    grep -hE "Found .* (games|collections)|provided|games and|Wrote" "$R/logs/10-theme.log" | sed 's/^/    /' | head -n 40
+    strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40
     echo
     echo "## Warnings and errors"
-    grep -hiE "warning|error|qrc:|\.qml:[0-9]+" "$R"/logs/*.log "$R"/logs/*.stdout | sort | uniq -c | sort -rn | head -n 60 | sed 's/^/    /'
+    strip_ansi "$R"/logs/*.stdout | grep -iE "\[w\]|\[e\]|warning|error|qrc:|\.qml:[0-9]+" | grep -v "Test:" | sort | uniq -c | sort -rn | head -n 60 | sed 's/^/    /'
     echo
     echo "## Game directories"
     sed 's/^/    /' "$R/files/game_dirs.txt" 2>/dev/null
     echo
     echo "## Screen open times"
-    grep -h "\[timing\]" "$R"/logs/*.log | sed 's/.*\[timing\] /    /' | sort | uniq
+    strip_ansi "$R"/logs/*.stdout | grep -h "\[timing\]" | sed 's/.*\[timing\] /    /' | sort | uniq
     echo
     echo "## Metadata written by Pegasus X"
     find "$CFG/metadata" -type f 2>/dev/null | sed "s|$CFG/|    |"
+    for f in "$CFG"/metadata/overrides/*.metadata.pegasus.txt; do
+        [ -f "$f" ] || continue
+        echo
+        echo "### $(basename "$f")"
+        sed 's/^/    /' "$f" | head -n 60
+    done
     if [ -d "$R/scraped" ]; then
         echo
         echo "## Scraper (IGDB test login)"

@@ -1259,6 +1259,7 @@ QString local_path(const QString& value)
 /// `collection_launch`
 void migrate_in_folder_edits(const QString& old_path, const QString& collection_name);
 QStringList aliases_of(const QString& key);
+QString edits_file_path(const QString& collection_name);
 
 HashMap<QString, QString> previous_launches(const QString& file_path, QString& collection_launch)
 {
@@ -2331,8 +2332,11 @@ struct MetaFile {
     /// Writes the file back; the first change by Pegasus X keeps a copy of
     /// the original as <file>.bak
     QString save() const {
+        // (not for Pegasus X's own files: imports and overrides)
         const QString backup = path % QStringLiteral(".bak");
-        if (!QFileInfo::exists(backup) && QFileInfo(path).fileName() != IMPORT_FILE_NAME)
+        const bool own = QFileInfo(path).fileName() == IMPORT_FILE_NAME
+            || QDir::cleanPath(path).startsWith(paths::writableConfigDir() % QStringLiteral("/metadata/"));
+        if (!own && !QFileInfo::exists(backup))
             QFile::copy(path, backup);
 
         // in one go: the library scan may be reading it
