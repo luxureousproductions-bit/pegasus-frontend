@@ -8,6 +8,8 @@ BIN="$(readlink -f "$1")"
 T="$(readlink -f "$2")"
 R="$(mkdir -p "$3" && readlink -f "$3")"
 export HOME="$T/home"
+# GitHub's machines set their own XDG folders: the fixture's are used
+export XDG_CONFIG_HOME="$HOME/.config" XDG_CACHE_HOME="$HOME/.cache" XDG_DATA_HOME="$HOME/.local/share"
 export PEGASUSX_TEST_STORAGE="$T/storage"
 export QT_QPA_PLATFORM=xcb
 export QT_QUICK_BACKEND=software
@@ -87,13 +89,13 @@ keys Return Escape
 keys Down Down Down Return
 shot 04-scraper-miximage
 keys Down Down Return
-sleep 10
+sleep 2
 shot 04-scraper-offline-running
 keys Escape
 sleep 1
 stop 04-scraper
 mkdir -p "$R/miximages"
-find "$CFG" -path "*miximages*" -type f | head -n 10 | while read -r f; do cp "$f" "$R/miximages/"; done
+find "$CFG" "$HOME" -path "*miximages*" -type f | head -n 10 | while read -r f; do cp "$f" "$R/miximages/"; done
 
 start 05-scraper-accounts "menu/settings/ScraperScreen.qml" 6
 keys Down Down Down Return

@@ -1405,12 +1405,25 @@ QString game_entry(const model::Game& game, const QStringList& files, const QDir
     }
     if (!own && !game.sortBy().isEmpty() && game.sortBy() != game.title())
         stream << "sort-by: " << game.sortBy() << '\n';
-    if (!game.developerListConst().isEmpty() && !(own && !own->developerListConst().isEmpty()))
-        stream << "developer: " << game.developerListConst().join(QStringLiteral(", ")) << '\n';
-    if (!game.publisherListConst().isEmpty() && !(own && !own->publisherListConst().isEmpty()))
-        stream << "publisher: " << game.publisherListConst().join(QStringLiteral(", ")) << '\n';
-    if (!game.genreListConst().isEmpty() && !(own && !own->genreListConst().isEmpty()))
-        stream << "genre: " << game.genreListConst().join(QStringLiteral(", ")) << '\n';
+    // a list's values, empty ones left out (a gamelist's empty <developer/>
+    // would make a "developer:" line Pegasus rejects)
+    const auto joined = [](const QStringList& list) {
+        QStringList out;
+        for (const QString& value : list) {
+            if (!value.trimmed().isEmpty())
+                out.append(value.trimmed());
+        }
+        return out.join(QStringLiteral(", "));
+    };
+    const QString developers = joined(game.developerListConst());
+    const QString publishers = joined(game.publisherListConst());
+    const QString genres = joined(game.genreListConst());
+    if (!developers.isEmpty() && !(own && !joined(own->developerListConst()).isEmpty()))
+        stream << "developer: " << developers << '\n';
+    if (!publishers.isEmpty() && !(own && !joined(own->publisherListConst()).isEmpty()))
+        stream << "publisher: " << publishers << '\n';
+    if (!genres.isEmpty() && !(own && !joined(own->genreListConst()).isEmpty()))
+        stream << "genre: " << genres << '\n';
     if (game.playerCount() > 1 && !(own && own->playerCount() > 1))
         stream << "players: " << game.playerCount() << '\n';
     if (game.releaseDate().isValid() && !(own && own->releaseDate().isValid()))

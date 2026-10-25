@@ -632,7 +632,7 @@ FocusScope {
                     }
                     Text {
                         width: parent.width
-                        text: modelData.result
+                        text: modelData.result || ""
                         color: modelData.ok ? "#9d9" : "#e8b06a"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(15)
