@@ -26,6 +26,7 @@
 
 #include "PegasusAssets.h"
 #include <QBuffer>
+#include <algorithm>
 #include <QImageReader>
 #include <QImage>
 #include <QColor>
@@ -415,14 +416,22 @@ QString search_name_of(const QString& path, const QString& title)
     return name.trimmed().isEmpty() ? title : name.trimmed();
 }
 
-QString md5_of(const QString& path, qint64 max_bytes)
+// the file's MD5, read in 1 MiB parts so Stop can end it (`cancel`)
+QString md5_of(const QString& path, qint64 max_bytes, const std::atomic<bool>* cancel)
 {
     QFile file(path);
     if (max_bytes <= 0 || file.size() > max_bytes || !file.open(QIODevice::ReadOnly))
         return {};
     QCryptographicHash hash(QCryptographicHash::Md5);
-    if (!hash.addData(&file))
-        return {};
+    QByteArray part;
+    while (!file.atEnd()) {
+        if (cancel && cancel->load())
+            return {};
+        part = file.read(1 << 20);
+        if (part.isEmpty())
+            return {};
+        hash.addData(part);
+    }
     return QString::fromLatin1(hash.result().toHex());
 }
 
@@ -615,6 +624,8 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_preview.clear();
     m_stop_reason.clear();
     m_stop = false;
+    m_cancel_hash = false;
+    m_transport_streak = 0;
     m_running = true;
     m_run++;  // answers still on their way from the last run are ignored
     note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, IGDB login: %7, SteamGridDB key: %8)")
@@ -625,6 +636,16 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
         .arg(m_dev_id.isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes"))
         .arg(igdbReady() ? QStringLiteral("yes") : QStringLiteral("missing"))
         .arg(m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes")));
+    // which system each collection is looked up as
+    QMap<QString, QString> systems;
+    for (const Job& job : m_jobs)
+        systems.insert(job.collection, job.system);
+    for (auto it = systems.cbegin(); it != systems.cend(); ++it) {
+        const bool known = screenscraper_systems().contains(it.value());
+        note(LOGMSG("Collection `%1`: system `%2`%3").arg(it.key(),
+            it.value().isEmpty() ? QStringLiteral("?") : it.value(),
+            known ? QString() : QStringLiteral(" (not a ScreenScraper system: IGDB/SteamGridDB only)")));
+    }
     report();
     next();
 }
@@ -634,6 +655,11 @@ void Scraper::stop()
     if (!m_running)
         return;
     m_stop = true;
+    // what's on its way ends now (a download, a hash), not when it's done
+    m_cancel_hash = true;
+    const QSet<QNetworkReply*> replies = m_replies;
+    for (QNetworkReply* const reply : replies)
+        reply->abort();
     // waiting for a pick: nothing else will move it on
     if (m_waiting) {
         m_waiting = false;
@@ -664,7 +690,15 @@ void Scraper::search(const QString& name)
         sgdbSearch(name);
     else {
         m_not_found++;
-        finishGame(tr("ScreenScraper isn't in this build yet"), false);
+        QString why;
+        if (source == QLatin1String("screenscraper") && m_dev_id.isEmpty())
+            why = tr("ScreenScraper isn't in this build yet");
+        else if (source == QLatin1String("screenscraper"))
+            why = tr("ScreenScraper doesn't know the system `%1`").arg(job.system);
+        else
+            why = tr("no source is set up (add an IGDB login or a SteamGridDB key)");
+        note(LOGMSG("%1: %2").arg(name, why));
+        finishGame(why, false);
     }
 }
 
@@ -784,7 +818,7 @@ void Scraper::sgdbSearch(const QString& name)
         auto* const pending = new int(with_thumbs);
         const int run = m_run;
         for (int i = 0; i < with_thumbs; i++) {
-            const QUrl grid(QStringLiteral("https://www.steamgriddb.com/api/v2/grids/game/%1?dimensions=600x900").arg(m_sgdb_ids[static_cast<size_t>(i)]));
+            const QUrl grid(QStringLiteral("https://www.steamgriddb.com/api/v2/grids/game/%1?dimensions=600x900&types=static&nsfw=false&humor=false&epilepsy=false").arg(m_sgdb_ids[static_cast<size_t>(i)]));
             get(grid, auth, 0, [this, i, pending, candidates, run](int st, const QByteArray& b){
                 const QJsonArray images = QJsonDocument::fromJson(b).object().value(QStringLiteral("data")).toArray();
                 if (st == 200 && !images.isEmpty()) {
@@ -817,78 +851,108 @@ void Scraper::offerChoice(const QVariantList& candidates)
         choose(0);
         return;
     }
-    // the pictures first (downloaded here, so they show even where the
-    // picker couldn't load them itself), then the pick
-    m_choice.clear();
+    // the picker at once; the pictures follow one at a time (downloaded here,
+    // so they show even where the picker couldn't load them itself), the
+    // highlighted one first: a burst of requests is what ScreenScraper's
+    // one-thread accounts refuse
     m_waiting = true;
-    const int run = m_run;
-    prefetchThumbs(candidates, [this, run](const QVariantList& with_pictures){
-        if (run != m_run || !m_waiting || m_index >= m_jobs.size())
-            return;  // stopped meanwhile
-        const Job& job = m_jobs[m_index];
-        m_choice = QVariantMap {
-            { QStringLiteral("title"), job.title },
-            { QStringLiteral("collection"), job.collection },
-            { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
-            { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
-                                        : m_choice_source == QLatin1String("igdb") ? QStringLiteral("IGDB")
-                                        : QStringLiteral("SteamGridDB") },
-            { QStringLiteral("candidates"), with_pictures },
-        };
-        report();
-        emit choiceNeeded(m_choice);
-    });
+    const Job& job = m_jobs[m_index];
+    QVariantList list = candidates;
+    m_thumb_queue.clear();
+    for (int i = 0; i < list.size(); i++) {
+        QVariantMap c = list[i].toMap();
+        const QString url = c.value(QStringLiteral("thumb")).toString();
+        if (url.startsWith(QLatin1String("http"))) {
+            c.insert(QStringLiteral("remoteThumb"), url);
+            c.insert(QStringLiteral("thumb"), QString());
+            m_thumb_queue.push_back(i);
+        }
+        list[i] = c;
+    }
+    m_choice = QVariantMap {
+        { QStringLiteral("title"), job.title },
+        { QStringLiteral("collection"), job.collection },
+        { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
+        { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
+                                    : m_choice_source == QLatin1String("igdb") ? QStringLiteral("IGDB")
+                                    : QStringLiteral("SteamGridDB") },
+        { QStringLiteral("candidates"), list },
+    };
+    note(LOGMSG("%1: %2 matches for \"%3\"").arg(m_choice.value(QStringLiteral("source")).toString())
+         .arg(list.size()).arg(m_choice.value(QStringLiteral("searchName")).toString()));
+    report();
+    emit choiceNeeded(m_choice);
+    m_thumb_busy = false;
+    nextThumb();
 }
 
-void Scraper::prefetchThumbs(const QVariantList& candidates, std::function<void(const QVariantList&)> done)
+void Scraper::thumbFirst(int index)
 {
-    auto* const list = new QVariantList(candidates);
-    auto* const pending = new int(0);
-    const QString dir = paths::writableCacheDir() + QStringLiteral("/scraper-pictures");
-    QDir().mkpath(dir);
-    for (int i = 0; i < list->size(); i++) {
-        const QString url = (*list)[i].toMap().value(QStringLiteral("thumb")).toString();
-        if (url.startsWith(QLatin1String("http")))
-            (*pending)++;
-    }
-    if (*pending == 0) {
-        delete pending;
-        const QVariantList out = *list;
-        delete list;
-        done(out);
+    const auto it = std::find(m_thumb_queue.begin(), m_thumb_queue.end(), index);
+    if (it == m_thumb_queue.end() || it == m_thumb_queue.begin())
+        return;
+    m_thumb_queue.erase(it);
+    m_thumb_queue.insert(m_thumb_queue.begin(), index);
+}
+
+void Scraper::nextThumb()
+{
+    if (m_thumb_busy || m_thumb_queue.empty() || !m_waiting)
+        return;
+    const int index = m_thumb_queue.front();
+    m_thumb_queue.erase(m_thumb_queue.begin());
+    QVariantList list = m_choice.value(QStringLiteral("candidates")).toList();
+    if (index < 0 || index >= list.size()) {
+        nextThumb();
         return;
     }
-    for (int i = 0; i < list->size(); i++) {
-        const QString url = (*list)[i].toMap().value(QStringLiteral("thumb")).toString();
-        if (!url.startsWith(QLatin1String("http")))
-            continue;
-        get(QUrl(url), {}, 0, [this, i, url, dir, list, pending, done](int status, const QByteArray& body){
-            QVariantMap c = (*list)[i].toMap();
-            QBuffer buffer;
-            buffer.setData(body);
-            buffer.open(QIODevice::ReadOnly);
-            if (status == 200 && QImageReader(&buffer).canRead()) {
-                const QString name = QString::fromLatin1(QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
-                const QString path = dir + QLatin1Char('/') + name + QStringLiteral(".img");
-                QFile file(path);
-                if (file.open(QIODevice::WriteOnly) && file.write(body) == body.size()) {
-                    file.close();
-                    c.insert(QStringLiteral("thumb"), QUrl::fromLocalFile(path).toString());
-                }
-            }
-            else if (status != 200) {
-                c.insert(QStringLiteral("thumbError"), status);
-                Log::warning(LOG_TAG, LOGMSG("Picture `%1`: %2").arg(safe_url(QUrl(url))).arg(status));
-            }
-            (*list)[i] = c;
-            if (--(*pending) == 0) {
-                delete pending;
-                const QVariantList out = *list;
-                delete list;
-                done(out);
-            }
-        });
+    const QString url = list[index].toMap().value(QStringLiteral("remoteThumb")).toString();
+    const QString dir = paths::writableCacheDir() + QStringLiteral("/scraper-pictures");
+    QDir().mkpath(dir);
+    const QString name = QString::fromLatin1(QCryptographicHash::hash(url.toUtf8(), QCryptographicHash::Md5).toHex());
+    const QString path = dir + QLatin1Char('/') + name + QStringLiteral(".img");
+    const auto deliver = [this, index, path](int error) {
+        QVariantList now = m_choice.value(QStringLiteral("candidates")).toList();
+        if (index < now.size()) {
+            QVariantMap c = now[index].toMap();
+            if (error == 0)
+                c.insert(QStringLiteral("thumb"), QUrl::fromLocalFile(path).toString());
+            else
+                c.insert(QStringLiteral("thumbError"), error);
+            now[index] = c;
+            m_choice.insert(QStringLiteral("candidates"), now);
+        }
+        emit thumbReady(index, error == 0 ? QUrl::fromLocalFile(path).toString() : QString(), error);
+    };
+    // fetched before (an earlier search of the same game)
+    if (QFileInfo(path).size() > 0) {
+        deliver(0);
+        nextThumb();
+        return;
     }
+    m_thumb_busy = true;
+    const int run = m_run;
+    get(QUrl(url), {}, 0, [this, run, url, path, deliver](int status, const QByteArray& body){
+        m_thumb_busy = false;
+        if (run != m_run || !m_waiting)
+            return;  // picked, skipped or stopped meanwhile
+        QBuffer buffer;
+        buffer.setData(body);
+        buffer.open(QIODevice::ReadOnly);
+        int error = status == 200 ? 0 : (status == 0 ? -2 : status);
+        if (error == 0 && QImageReader(&buffer).canRead()) {
+            QFile file(path);
+            if (!(file.open(QIODevice::WriteOnly) && file.write(body) == body.size()))
+                error = -3;
+        }
+        else if (error == 0) {
+            error = -4;  // not a picture
+        }
+        if (error != 0)
+            Log::warning(LOG_TAG, LOGMSG("Picture `%1`: %2").arg(safe_url(QUrl(url))).arg(status));
+        deliver(error);
+        nextThumb();
+    });
 }
 
 void Scraper::choose(int index)
@@ -1020,8 +1084,11 @@ void Scraper::next()
     }
 
     // a checksum first, if the file is small enough (off the main thread)
+    // (not of an archive: ScreenScraper knows the ROM inside, not the .zip)
+    static const QStringList archives { QStringLiteral("zip"), QStringLiteral("7z"), QStringLiteral("rar") };
     const bool use_hash = m_settings.value(QStringLiteral("useHashes")).toBool()
-        && !job.path.startsWith(QLatin1String("android:")) && QFileInfo(job.path).isFile();
+        && !job.path.startsWith(QLatin1String("android:")) && QFileInfo(job.path).isFile()
+        && !archives.contains(QFileInfo(job.path).suffix().toLower());
     if (!use_hash) {
         screenScraper(QString());
         return;
@@ -1034,7 +1101,29 @@ void Scraper::next()
         watcher->deleteLater();
         screenScraper(md5);
     });
-    watcher->setFuture(QtConcurrent::run([path, max_bytes]{ return md5_of(path, max_bytes); }));
+    const std::atomic<bool>* cancel = &m_cancel_hash;
+    watcher->setFuture(QtConcurrent::run([path, max_bytes, cancel]{ return md5_of(path, max_bytes, cancel); }));
+}
+
+// several requests in a row without an answer (no connection, servers
+// down): the run stops with the reason, instead of going through every
+// game as "not found"
+void Scraper::countTransport(int status)
+{
+    if (m_stop || !m_running)
+        return;
+    if (status == 0 || status >= 500) {
+        m_transport_streak++;
+        if (m_transport_streak >= 3) {
+            note(LOGMSG("%1 requests in a row got no answer: stopping").arg(m_transport_streak));
+            m_stop_reason = status == 0
+                ? tr("No connection: scraping stopped. Start it again to go on from where it was.")
+                : tr("The scraping service isn't answering (error %1): scraping stopped.").arg(status);
+            m_stop = true;
+        }
+        return;
+    }
+    m_transport_streak = 0;
 }
 
 void Scraper::get(const QUrl& url, const QByteArray& auth, int tries_left,
@@ -1047,11 +1136,15 @@ void Scraper::get(const QUrl& url, const QByteArray& auth, int tries_left,
     if (!auth.isEmpty())
         request.setRawHeader("Authorization", auth);
     QNetworkReply* const reply = m_net->get(request);
+    m_replies.insert(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, url, auth, tries_left, done]{
+        m_replies.remove(reply);
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray body = reply->readAll();
         reply->deleteLater();
         const bool retry = (status == 0 || status == 429 || status >= 500) && status != 430;
+        if (!retry || tries_left <= 0 || m_stop)
+            countTransport(status);
         if (retry && tries_left > 0 && !m_stop) {
             const int delay = qMax(1, m_settings.value(QStringLiteral("retryDelay")).toInt()) * 1000;
             QTimer::singleShot(delay, this, [this, url, auth, tries_left, done]{
@@ -1087,11 +1180,28 @@ void Scraper::screenScraper(const QString& md5)
     }
     QUrl url(QStringLiteral("https://api.screenscraper.fr/api2/jeuInfos.php"));
     url.setQuery(query);
+    note(LOGMSG("ScreenScraper: looking up \"%1\" (system `%2`, id %3%4)")
+         .arg(by_title ? job.title : job.search_name, job.system)
+         .arg(screenscraper_systems().value(job.system))
+         .arg(md5.isEmpty() ? QString() : QStringLiteral(", by its MD5")));
 
     get(url, {}, m_settings.value(QStringLiteral("retries")).toInt(), [this](int status, const QByteArray& body){
         if (m_stop) {
             next();
             return;
+        }
+        {
+            const QJsonObject found = QJsonDocument::fromJson(body).object()
+                .value(QStringLiteral("response")).toObject().value(QStringLiteral("jeu")).toObject();
+            QString name;
+            for (const QJsonValue& n : found.value(QStringLiteral("noms")).toArray()) {
+                name = n.toObject().value(QStringLiteral("text")).toString();
+                if (!name.isEmpty())
+                    break;
+            }
+            note(LOGMSG("ScreenScraper: answered %1%2").arg(status)
+                 .arg(!name.isEmpty() ? QStringLiteral(", \"%1\" (id %2)").arg(name, found.value(QStringLiteral("id")).toString())
+                      : status == 200 || status == 404 ? QStringLiteral(", no match") : QString()));
         }
         if (status == 430 || status == 431) {
             m_stop_reason = tr("Your ScreenScraper games for today are used up. Try again tomorrow.");
@@ -1120,8 +1230,13 @@ void Scraper::screenScraper(const QString& md5)
                 fillMore();
                 return;
             }
-            m_not_found++;
-            finishGame(status == 404 || status == 200 ? tr("not found") : tr("ScreenScraper error %1").arg(status), false);
+            // no answer at all is a failure, not "not found"
+            if (status == 404 || status == 200)
+                m_not_found++;
+            else
+                m_failed++;
+            finishGame(status == 404 || status == 200 ? tr("not found")
+                       : status == 0 ? tr("ScreenScraper: no connection") : tr("ScreenScraper error %1").arg(status), false);
             return;
         }
         parseScreenScraper(game);
@@ -1287,7 +1402,9 @@ void Scraper::igdbPost(const QByteArray& query, std::function<void(int, const QB
     request.setRawHeader("User-Agent", USER_AGENT);
     request.setTransferTimeout(60000);
     QNetworkReply* const reply = m_net->post(request, query);
+    m_replies.insert(reply);
     connect(reply, &QNetworkReply::finished, this, [this, reply, query, done, tries_left, retried]{
+        m_replies.remove(reply);
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QByteArray body = reply->readAll();
         reply->deleteLater();
@@ -1304,6 +1421,7 @@ void Scraper::igdbPost(const QByteArray& query, std::function<void(int, const QB
             });
             return;
         }
+        countTransport(status);
         done(status == 401 ? -1 : status, body);
     });
 }
@@ -1608,11 +1726,15 @@ void Scraper::steamGridDb(int known_id)
         auto* const pending = new int(static_cast<int>(todo->size()));
         for (const Want& w : *todo) {
             QString path = QStringLiteral("https://www.steamgriddb.com/api/v2/%1/game/%2").arg(QLatin1String(w.path), id);
-            if (QLatin1String(w.path) == QLatin1String("grids"))
-                path += QStringLiteral("?dimensions=600x900");
+            // still pictures only, nothing NSFW, joke or flashing
+            path += QLatin1String(w.path) == QLatin1String("grids")
+                ? QStringLiteral("?dimensions=600x900&types=static&nsfw=false&humor=false&epilepsy=false")
+                : QStringLiteral("?types=static&nsfw=false&humor=false&epilepsy=false");
             const Want want = w;
-            get(QUrl(path), auth, 1, [this, want, pending, todo](int st, const QByteArray& b){
+            get(QUrl(path), auth, 1, [this, want, pending, todo, id](int st, const QByteArray& b){
                 const QJsonArray images = QJsonDocument::fromJson(b).object().value(QStringLiteral("data")).toArray();
+                note(LOGMSG("SteamGridDB: %1 of game %2: answered %3, %4 pictures")
+                    .arg(QLatin1String(want.path), id).arg(st).arg(images.size()));
                 if (st == 200 && !images.isEmpty()) {
                     Media media;
                     media.setting = QLatin1String(want.setting);
@@ -1697,10 +1819,37 @@ void Scraper::downloadNext()
             downloadNext();
             return;
         }
-        note(LOGMSG("Downloaded %1 (%2 KB) -> %3").arg(media.folder).arg(body.size() / 1024).arg(safe_url(media.url)));
         QString ext = media.ext.toLower();
         if (ext.isEmpty())
             ext = QStringLiteral("png");
+        // what came back must be what was asked for: a server's error page
+        // answered with 200 is not a picture (saved, it would fill the slot
+        // with a file no theme can show)
+        const bool is_video = media.folder == QLatin1String("videos");
+        const bool is_manual = media.folder == QLatin1String("manuals");
+        bool valid = true;
+        if (is_manual) {
+            valid = body.startsWith("%PDF");
+        }
+        else if (is_video) {
+            const QByteArray head = body.left(64).trimmed().toLower();
+            valid = !head.startsWith("<") && !head.startsWith("{");
+        }
+        else {
+            QBuffer buffer;
+            buffer.setData(body);
+            buffer.open(QIODevice::ReadOnly);
+            valid = QImageReader(&buffer).canRead();
+        }
+        if (!valid) {
+            m_picture_failures++;
+            m_picture_error = -4;
+            note(LOGMSG("Not a %1 (%2 bytes, starts \"%3\"): %4").arg(is_video ? QStringLiteral("video") : is_manual ? QStringLiteral("PDF") : QStringLiteral("picture"))
+                 .arg(body.size()).arg(QString::fromLatin1(body.left(24).simplified())).arg(safe_url(media.url)));
+            downloadNext();
+            return;
+        }
+        note(LOGMSG("Downloaded %1 (%2 KB) -> %3").arg(media.folder).arg(body.size() / 1024).arg(safe_url(media.url)));
 
         // pictures: the size and trimming of the Scraper settings, worked out
         // off the main thread
@@ -1743,9 +1892,21 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     // next scrape and the same whatever the title becomes. Android apps (no
     // file, an android: entry) use the title.
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
-    const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(job.media_folder.isEmpty() ? job.collection : job.media_folder)
+    // the system's folder (as ES-DE: downloaded_media/snes/...), else the
+    // collection's short name, else its name
+    const QString system_folder = !job.system.isEmpty() ? job.system
+                                : !job.media_folder.isEmpty() ? job.media_folder : job.collection;
+    const QString dir = m_data_dir % QLatin1Char('/') % safe_file_name(system_folder)
                       % QLatin1Char('/') % media.folder;
-    QDir().mkpath(dir);
+    if (!QDir().mkpath(dir)) {
+        // the art folder can't be made (SD card missing, no permission):
+        // nothing else will work either, so the run stops with the reason
+        note(LOGMSG("Couldn't make `%1`").arg(dir));
+        m_stop_reason = tr("Couldn't write to the art folder %1 (is the SD card there?)").arg(m_data_dir);
+        m_stop = true;
+        downloadNext();
+        return;
+    }
     // the art folder is no place for the gallery app
     QFile nomedia(m_data_dir % QStringLiteral("/.nomedia"));
     if (!nomedia.exists() && nomedia.open(QIODevice::WriteOnly))
@@ -1760,6 +1921,7 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     QSaveFile file(file_path);
     if (!file.open(QIODevice::WriteOnly) || file.write(body) != body.size() || !file.commit()) {
         m_picture_failures++;
+        m_picture_error = -3;  // couldn't write
         note(LOGMSG("Couldn't write `%1`: %2").arg(file_path, file.errorString()));
         downloadNext();
         return;
@@ -1787,13 +1949,18 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     // twice, without the copies just removed; the others stay unless you overwrite
     QStringList list = m_changes.contains(media.slot) ? m_changes.value(media.slot).toStringList()
                                                        : job.slot_files.value(media.slot).toStringList();
-    if (m_settings.value(QStringLiteral("overwrite")).toBool() && !m_changes.contains(media.slot)) {
-        // replaced: the old files of that kind go
+    if (m_settings.value(QStringLiteral("overwrite")).toBool()) {
+        // replaced: the old files of this kind go, every time a file is
+        // stored (the front box holds two kinds: the 2D one stored first
+        // must not keep an old 3D box ahead of the new one)
         QStringList kept;
         for (const QString& f : list) {
             const bool is3d = pegasus_assets::is_3d_box(f);
-            if (media.kind == QLatin1String("2d") && is3d) kept.append(f);
-            if (media.kind == QLatin1String("3d") && !is3d) kept.append(f);
+            const bool same_kind = media.kind == QLatin1String("3d") ? is3d
+                                 : media.kind == QLatin1String("2d") ? !is3d
+                                 : true;
+            if (!same_kind)
+                kept.append(f);
         }
         list = kept;
     }
@@ -1823,13 +1990,14 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
     // a file of this name removed in Library before: scraped again, it's back
     if (media.slot.startsWith(QLatin1String("assets."))) {
         const QString kind = media.slot.mid(7);
-        const QString name = QFileInfo(file_path).fileName().toLower();
+        // (that file only, by its whole path: hiding works by path too)
+        const QString wanted = QDir::cleanPath(file_path).toLower();
         QStringList hidden = m_changes.contains(QStringLiteral("x-pegasusx-hidden-art"))
             ? m_changes.value(QStringLiteral("x-pegasusx-hidden-art")).toStringList() : job.hidden_art;
         const int before = hidden.size();
-        hidden.erase(std::remove_if(hidden.begin(), hidden.end(), [&kind, &name](const QString& h) {
+        hidden.erase(std::remove_if(hidden.begin(), hidden.end(), [&kind, &wanted](const QString& h) {
             const int bar = h.indexOf(QLatin1Char('|'));
-            return bar > 0 && h.left(bar) == kind && QFileInfo(h.mid(bar + 1)).fileName().toLower() == name;
+            return bar > 0 && h.left(bar) == kind && QDir::cleanPath(h.mid(bar + 1)).toLower() == wanted;
         }), hidden.end());
         if (hidden.size() != before)
             m_changes.insert(QStringLiteral("x-pegasusx-hidden-art"), hidden);
@@ -1893,6 +2061,8 @@ void Scraper::makeMiximage()
         watcher->deleteLater();
         if (m_stop || result.data.isEmpty()) {
             m_mix_error = result.error;
+            if (!result.error.isEmpty())
+                note(LOGMSG("Miximage: %1").arg(result.error));
             save();
             return;
         }
@@ -1942,6 +2112,10 @@ void Scraper::save()
         if (!what.contains(folder))
             what.append(folder);
     }
+    // a miximage that couldn't be made is said, not dropped
+    const bool mix_wanted = m_settings.value(QStringLiteral("getMiximages")).toBool();
+    if (mix_wanted && !m_mix_error.isEmpty() && !m_got.contains(QStringLiteral("miximages")))
+        what.append(tr("miximage: %1").arg(m_mix_error));
     finishGame(what.join(QStringLiteral(", ")), true);
 }
 
@@ -1990,7 +2164,10 @@ void Scraper::finishGame(const QString& given_result, bool ok)
     QString result = given_result;
     if (m_picture_failures > 0) {
         const QString failed = tr("%n picture(s) didn't download (%1)", "", m_picture_failures)
-            .arg(m_picture_error == 0 ? tr("no connection") : tr("error %1").arg(m_picture_error));
+            .arg(m_picture_error == 0 ? tr("no connection")
+                 : m_picture_error == -3 ? tr("couldn't write to the art folder")
+                 : m_picture_error == -4 ? tr("not a picture")
+                 : tr("error %1").arg(m_picture_error));
         result = result.isEmpty() ? failed : result + QStringLiteral(" · ") + failed;
     }
     if (m_index < m_jobs.size()) {

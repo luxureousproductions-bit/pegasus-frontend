@@ -241,11 +241,20 @@ Result make(const Sources& sources, const Options& o)
     const Qt::TransformationMode shot_mode = o.smooth ? Qt::SmoothTransformation : Qt::FastTransformation;
 
     // -- the screenshot -----------------------------------------------------------
+    // (a mostly black screenshot would crop down to a sliver: then it stays whole)
+    const QImage uncropped = shot;
     if (o.remove_letterboxes)
         shot = crop_letterboxes(shot);
     if (o.remove_pillarboxes)
         shot = crop_pillarboxes(shot);
-    const float aspect = static_cast<float>(shot.width()) / static_cast<float>(shot.height());
+    if (shot.width() < uncropped.width() / 4 || shot.height() < uncropped.height() / 4)
+        shot = uncropped;
+    float aspect = static_cast<float>(shot.width()) / static_cast<float>(qMax(1, shot.height()));
+    if (aspect > 5.f || aspect < 0.2f) {
+        Result bad;
+        bad.error = QStringLiteral("the screenshot's shape is unusable (%1 x %2)").arg(shot.width()).arg(shot.height());
+        return bad;
+    }
     const QString fit = aspect >= 1.f ? o.horizontal_fit : o.vertical_fit;
     // only screenshots far from the miximage's 1.325 are fitted or cropped
     const float mix_aspect = 1.325f;

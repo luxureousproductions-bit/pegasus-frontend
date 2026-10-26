@@ -25,6 +25,9 @@
 #include <QUrl>
 #include <functional>
 #include <vector>
+#include <atomic>
+#include <QPointer>
+#include <QSet>
 
 class QJsonObject;
 class QNetworkAccessManager;
@@ -92,10 +95,14 @@ public:
     // interactive mode: the matches found for the game, waiting for a pick
     QVariantMap pendingChoice() const { return m_waiting ? m_choice : QVariantMap(); }
     void choose(int index);
+    /// the picker highlighted a match: its picture is fetched next
+    void thumbFirst(int index);
     void refine(const QString& search_name);
     void skip();
 
 signals:
+    /// a match's picture arrived (url: a local file) or didn't (error)
+    void thumbReady(int index, QString url, int error);
     /// { running, done, total, current, title, result, ok, saved, notFound, failed }
     void progress(QVariantMap state);
     void finished(QVariantMap state);
@@ -116,7 +123,11 @@ private:
     int m_saved = 0;
     int m_not_found = 0;
     int m_failed = 0;
-    int m_run = 0;  // which start() the in-flight answers belong to
+    int m_run = 0;
+    QSet<QNetworkReply*> m_replies;   ///< requests on their way (Stop aborts them)
+    std::atomic<bool> m_cancel_hash { false };
+    int m_transport_streak = 0;  ///< requests in a row with no answer
+    void countTransport(int status);  // which start() the in-flight answers belong to
     QString m_current;
     QString m_last_title;
     QString m_last_result;
@@ -130,7 +141,9 @@ private:
     int m_picture_error = 0;     ///< ... and the last answer
     QVariantMap previewOf(const Job& job) const;
     /// the matches' pictures downloaded here first (shown from the device)
-    void prefetchThumbs(const QVariantList& candidates, std::function<void(const QVariantList&)> done);
+    void nextThumb();
+    std::vector<int> m_thumb_queue;  ///< matches whose picture is still to fetch
+    bool m_thumb_busy = false;
 
     // interactive mode
     bool m_waiting = false;

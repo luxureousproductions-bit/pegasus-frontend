@@ -31,12 +31,34 @@ FocusScope {
     readonly property var candidates: choice.candidates || []
     readonly property var picked: (results.currentIndex >= 0 && results.currentIndex < candidates.length)
                                   ? candidates[results.currentIndex] : ({})
+    // the pictures arrive one at a time after the picker shows: index -> { url, error }
+    property var thumbs: ({})
+    readonly property var pickedThumb: thumbs[results.currentIndex] || ({})
+
+    Connections {
+        target: Internal.settings
+        function onScraperThumb(index, url, error) {
+            var next = Object.assign({}, root.thumbs);
+            next[index] = { "url": url, "error": error };
+            root.thumbs = next;
+        }
+    }
 
     anchors.fill: parent
     enabled: focus
     visible: focus
 
     function openFor(c) {
+        // pictures that came already (a choice waiting since before Library opened)
+        var had = {};
+        var list = c.candidates || [];
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].thumb)
+                had[i] = { "url": list[i].thumb, "error": 0 };
+            else if (list[i].thumbError !== undefined)
+                had[i] = { "url": "", "error": list[i].thumbError };
+        }
+        thumbs = had;
         choice = c;
         results.currentIndex = 0;
         results.positionViewAtBeginning();
@@ -132,6 +154,8 @@ FocusScope {
             focus: true
             model: root.candidates
             highlightMoveDuration: 0
+            // the highlighted match's picture is fetched next
+            onCurrentIndexChanged: if (root.visible) Internal.settings.scraperThumbFirst(currentIndex)
             delegate: Item {
                 readonly property bool isOn: ListView.isCurrentItem
                 width: ListView.view.width
@@ -212,7 +236,7 @@ FocusScope {
                 id: thumb
                 anchors.fill: parent
                 anchors.margins: vpx(8)
-                source: root.picked.thumb || ""
+                source: root.pickedThumb.url || root.picked.thumb || ""
                 sourceSize.width: vpx(400)
                 fillMode: Image.PreserveAspectFit
                 asynchronous: true
@@ -222,9 +246,19 @@ FocusScope {
             Text {
                 anchors.centerIn: parent
                 visible: thumb.status !== Image.Ready
-                text: thumb.status === Image.Loading ? qsTr("Loading...") + api.tr
-                    : root.picked.thumbError !== undefined ? qsTr("The picture didn't download (%1)").arg(root.picked.thumbError || qsTr("no connection")) + api.tr
-                    : qsTr("No picture") + api.tr
+                text: {
+                    if (thumb.status === Image.Loading)
+                        return qsTr("Loading...") + api.tr;
+                    var err = root.pickedThumb.error;
+                    if (err !== undefined && err !== 0)
+                        return (err === -2 ? qsTr("The picture didn't download (no connection)")
+                              : err === -4 ? qsTr("The picture didn't download (not a picture)")
+                              : qsTr("The picture didn't download (%1)").arg(err)) + api.tr;
+                    // still on its way
+                    if (root.picked.remoteThumb && !root.pickedThumb.url)
+                        return qsTr("Loading...") + api.tr;
+                    return qsTr("No picture") + api.tr;
+                }
                 color: "#666"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(16)

@@ -1999,6 +1999,7 @@ QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap
         m_scraper = new scraper::Scraper(this);
         connect(m_scraper, &scraper::Scraper::progress, this, &Settings::scraperProgress);
         connect(m_scraper, &scraper::Scraper::choiceNeeded, this, &Settings::scraperNeedsChoice);
+        connect(m_scraper, &scraper::Scraper::thumbReady, this, &Settings::scraperThumb);
         connect(m_scraper, &scraper::Scraper::finished, this, [this](QVariantMap state){
             // one game: the game shows what was saved right away (Library's
             // page reads it again), without reading the library again
@@ -2035,6 +2036,12 @@ void Settings::scraperRefine(const QString& search_name)
 {
     if (m_scraper)
         m_scraper->refine(search_name);
+}
+
+void Settings::scraperThumbFirst(int index)
+{
+    if (m_scraper)
+        m_scraper->thumbFirst(index);
 }
 
 void Settings::scraperSkip()

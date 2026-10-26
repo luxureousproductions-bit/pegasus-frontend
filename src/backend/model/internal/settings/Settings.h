@@ -263,6 +263,8 @@ public:
     Q_INVOKABLE void scraperChoose(int index);
     Q_INVOKABLE void scraperRefine(const QString& search_name);
     Q_INVOKABLE void scraperSkip();
+    /// the picker highlighted a match: its picture is fetched next
+    Q_INVOKABLE void scraperThumbFirst(int index);
     /// The choice waiting for a pick (see scraperNeedsChoice), or empty
     Q_INVOKABLE QVariantMap scraperPendingChoice() const;
     /// Scrapes one game (Library's game page) with the Scraper settings;
@@ -331,6 +333,8 @@ signals:
     void scraperProgress(QVariantMap state);
     /// { title, collection, searchName, source, candidates: [...] }
     void scraperNeedsChoice(QVariantMap choice);
+    /// a match's picture arrived (url: a local file) or didn't (error)
+    void scraperThumb(int index, QString url, int error);
     void reloadAllRequested();
     void scraperFinished(QVariantMap state);
     void fullscreenChanged();
