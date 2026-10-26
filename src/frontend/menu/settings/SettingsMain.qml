@@ -33,8 +33,6 @@ FocusScope {
     signal openThemeDownloader
     signal openUpdater
     signal openRootFolder
-    signal openEmulatorSettings
-    signal openLibrarySettings
     signal openMetadataEditor
     signal openAndroidSafSettings
     signal openProviderSettings

@@ -43,6 +43,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSaveFile>
 #include <QSet>
 #include <QSettings>
 #include <QStringBuilder>
@@ -554,12 +555,12 @@ bool set_kind(const QString& key, const QString& kind)
         kinds.remove(key);
     else
         kinds.insert(key, kind);
-    QFile file(kinds_path());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QSaveFile file(kinds_path());
+    if (!file.open(QIODevice::WriteOnly)
+            || file.write(QJsonDocument(QJsonObject::fromVariantMap(kinds)).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
         Log::warning(LOG_TAG, LOGMSG("Could not write `%1`").arg(kinds_path()));
         return false;
     }
-    file.write(QJsonDocument(QJsonObject::fromVariantMap(kinds)).toJson(QJsonDocument::Indented));
     return true;
 }
 
@@ -606,12 +607,12 @@ bool save_hidden(const HiddenList& list)
         { QStringLiteral("games"), games },
     };
 
-    QFile file(hidden_path());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+    QSaveFile file(hidden_path());
+    if (!file.open(QIODevice::WriteOnly)
+            || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0 || !file.commit()) {
         Log::warning(LOG_TAG, LOGMSG("Could not write `%1`").arg(hidden_path()));
         return false;
     }
-    file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
     return true;
 }
 

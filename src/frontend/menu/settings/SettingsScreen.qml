@@ -64,8 +64,6 @@ FocusScope {
         onOpenThemeDownloader: root.openScreen("ThemeDownloader.qml")
         onOpenUpdater: root.openModal("UpdateDialog.qml")
         onOpenRootFolder: root.openModal("RootFolderSetup.qml")
-        onOpenEmulatorSettings: root.openScreen("EmulatorEditor.qml")
-        onOpenLibrarySettings: root.openScreen("LibraryEditor.qml")
         onOpenMetadataEditor: root.openScreen("MetadataEditor.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")

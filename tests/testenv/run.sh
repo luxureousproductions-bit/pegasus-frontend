@@ -196,6 +196,15 @@ done
     grep -h "Test:" "$R/logs/01-first-start.log" | sed 's/^/    /'
     echo
     strip_ansi() { cat "$@" | sed 's/\x1b\[[0-9;]*m//g'; }
+    echo "## Your own file wins over an import"
+    if grep -q "^Chrono Trigger (my own file)$" "$R/art-per-game.txt" 2>/dev/null; then
+        echo "    OK: Chrono Trigger has the title from your own file"
+    else
+        echo "    FAILED: Chrono Trigger's title isn't the one from your own file:"
+        grep "^Chrono" "$R/art-per-game.txt" 2>/dev/null | sed 's/^/        /'
+    fi
+    strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game" | head -n 5 | sed 's/^/    /'
+    echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40
     echo

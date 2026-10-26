@@ -31,20 +31,6 @@
 namespace providers {
 namespace esde {
 
-/// Pegasus X: reads an existing ES-DE (Android) setup directly. Systems and
-/// emulators come from ES-DE's own bundled configuration (plus the user's
-/// custom_systems overrides), metadata from ES-DE/gamelists and media from
-/// ES-DE/downloaded_media. Launch commands are translated to 'am start'.
-/// Disabled by default; turn it on in Settings > Data sources.
-class EsdeProvider : public Provider {
-    Q_OBJECT
-
-public:
-    explicit EsdeProvider(QObject* parent = nullptr);
-
-    Provider& run(SearchContext&) final;
-    QStringList cacheInputFiles() const final;
-};
 
 
 // -- ES-DE import (Settings > ES-DE import) --------------------------------------

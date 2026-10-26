@@ -99,6 +99,27 @@ void rewrite_gamedircfg(const std::function<void(QTextStream&)>& callback)
     Log::info(LOGMSG("Game directory list saved"));
 }
 
+// Pegasus X: older builds listed <Pegasus X folder>/metadata/imports as a game
+// folder; they're read by themselves now (always, and after your own files)
+void drop_imports_game_dirs()
+{
+    QStringList kept;
+    bool dropped = false;
+    AppSettings::parse_gamedirs([&](const QString& line){
+        if (QDir::cleanPath(line).endsWith(QLatin1String("/metadata/imports")))
+            dropped = true;
+        else
+            kept.append(line);
+    });
+    if (!dropped)
+        return;
+    rewrite_gamedircfg([&kept](QTextStream& stream){
+        for (const QString& line : kept)
+            stream << line << '\n';
+    });
+    Log::info(LOGMSG("The ES-DE imports are no longer listed as a game folder (they're read by themselves)"));
+}
+
 void change_mouse_support(bool enabled)
 {
     if (enabled)
@@ -494,6 +515,8 @@ void Settings::postInit()
     // scraped art kept in <Pegasus X folder>/media by older builds: in
     // downloaded_media now (ES-DE's name), the paths to it with it
     move_media_folder();
+    // the ES-DE imports are read by themselves now: no longer a game folder
+    drop_imports_game_dirs();
 #ifdef WITH_COMPAT_ESDE
     // before the library is read: no game in a collection that isn't its own
     providers::esde::split_legacy_edits_file();
@@ -528,11 +551,6 @@ void Settings::postInit()
                 .arg(result.systems).arg(result.games).arg(result.error));
             written += result.folders;
         }
-        QSet<QString> known;
-        AppSettings::parse_gamedirs([&known](const QString& line){ known.insert(::pretty_path(line)); });
-        const QString imports = providers::esde::imports_game_dir();
-        if (!written.isEmpty() && !known.contains(::pretty_path(QFileInfo(imports))))
-            addGameDir(imports);
     }
 #endif
 
@@ -840,13 +858,6 @@ void Settings::requestAndroidGames(const QString& action, const QString& collect
         QMetaObject::invokeMethod(this, [this, action, collection_name, count]{
 #ifdef WITH_COMPAT_ESDE
             // the added games are in Pegasus X's imports folder, a game directory
-            if (action == QLatin1String("add") && count > 0) {
-                QSet<QString> known;
-                AppSettings::parse_gamedirs([&known](const QString& line){ known.insert(::pretty_path(line)); });
-                const QString imports = providers::esde::imports_game_dir();
-                if (!known.contains(::pretty_path(QFileInfo(imports))))
-                    addGameDir(imports);
-            }
 #endif
             emit androidGamesDone(action, collection_name, count);
         }, Qt::QueuedConnection);
@@ -1133,13 +1144,6 @@ void Settings::importRomFolder(const QString& folder)
         // back on the main thread: each system folder is a game directory, so
         // Pegasus reads its list
         QMetaObject::invokeMethod(this, [this, result]{
-            QSet<QString> known;
-            AppSettings::parse_gamedirs([&known](const QString& line){
-                known.insert(::pretty_path(line));
-            });
-            const QString imports = providers::esde::imports_game_dir();
-            if (!result.written_files.isEmpty() && !known.contains(::pretty_path(QFileInfo(imports))))
-                addGameDir(imports);
             emit romFolderImportFinished(QVariantMap {
                 { QStringLiteral("systems"), result.systems },
                 { QStringLiteral("games"), result.games },
@@ -1175,13 +1179,6 @@ void Settings::startEsdeImport(const QStringList& system_names)
         // back on the main thread: the folders written to have to be game
         // directories, or Pegasus won't read the new metadata files
         QMetaObject::invokeMethod(this, [this, result]{
-            QSet<QString> known;
-            AppSettings::parse_gamedirs([&known](const QString& line){
-                known.insert(::pretty_path(line));
-            });
-            const QString imports = providers::esde::imports_game_dir();
-            if (!result.written_files.isEmpty() && !known.contains(::pretty_path(QFileInfo(imports))))
-                addGameDir(imports);
 
             m_esde_import_running = false;
             emit esdeImportRunningChanged();

@@ -9,7 +9,8 @@
 #   MyGames/psx .............. a ROM folder with a gamelist.xml of its own and
 #                              a two-disc game (.cue/.bin + .m3u)
 #   Pegasus/gamecube ......... a folder with a Pegasus metadata file
-#   home/.config/pegasus-frontend/game_dirs.txt (Pegasus/gamecube)
+#   storage/ROMs/metadata.pegasus.txt  your own file for a game ES-DE has too
+#   home/.config/pegasus-frontend/game_dirs.txt (Pegasus/gamecube, storage/ROMs)
 set -euo pipefail
 T="$1"
 S="$T/storage"
@@ -114,5 +115,18 @@ file: Metroid Prime (USA).iso
 description: Written in a Pegasus metadata file.
 TXT
 
-echo "$T/Pegasus/gamecube" > "$T/home/.config/pegasus-frontend/game_dirs.txt"
+# -- your own file and an import both list a game --------------------------------------------
+# (Chrono Trigger is in ES-DE's gamelist too): your own file has to win. Its
+# path sorts after the Pegasus X folder's imports, which used to make the
+# import win
+cat > "$S/ROMs/metadata.pegasus.txt" <<'TXT'
+collection: My SNES picks
+files: snes/Chrono Trigger (USA).sfc
+
+game: Chrono Trigger (my own file)
+file: snes/Chrono Trigger (USA).sfc
+description: Written in my own metadata file: it wins over the ES-DE import.
+TXT
+
+printf '%s\n%s\n' "$T/Pegasus/gamecube" "$S/ROMs" > "$T/home/.config/pegasus-frontend/game_dirs.txt"
 echo "Fixture ready in $T"

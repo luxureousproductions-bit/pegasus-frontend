@@ -24,6 +24,7 @@
 #include "model/gaming/GameFile.h"
 #include "platform/AndroidHelpers.h"
 #include "Scraper.h"
+#include <QCryptographicHash>
 #include <QSaveFile>
 #include "providers/SearchContext.h"
 #include "providers/es2/Es2Metadata.h"
@@ -883,214 +884,6 @@ std::vector<std::vector<QFileInfo>> find_game_groups(const QString& system_dir, 
 namespace providers {
 namespace esde {
 
-EsdeProvider::EsdeProvider(QObject* parent)
-    : Provider(QLatin1String("esde"), QStringLiteral("ES-DE"), PROVIDER_FLAG_CACHEABLE, parent)
-{
-    init_esde_resources();
-
-    // Off until turned on in the settings, so it doesn't duplicate an existing setup
-    setEnabled(false);
-}
-
-QStringList EsdeProvider::cacheInputFiles() const
-{
-    // Rescan when ES-DE's settings, custom systems or any gamelist change (eg.
-    // after scraping), as those decide what this data source finds
-    QStringList out;
-    const QString esde_dir = find_esde_dir(*this);
-    if (esde_dir.isEmpty())
-        return out;
-
-    out << esde_dir % QStringLiteral("/settings/es_settings.xml")
-        << esde_dir % QStringLiteral("/custom_systems/es_systems.xml")
-        << esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml");
-
-    const QDir gamelists_dir(esde_dir % QStringLiteral("/gamelists"));
-    for (const QString& system : gamelists_dir.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
-        out << gamelists_dir.filePath(system % QStringLiteral("/gamelist.xml"));
-    return out;
-}
-
-Provider& EsdeProvider::run(SearchContext& sctx)
-{
-    const QString esde_dir = find_esde_dir(*this);
-    if (esde_dir.isEmpty()) {
-        Log::info(display_name(), LOGMSG("No ES-DE folder found"));
-        return *this;
-    }
-    Log::info(display_name(), LOGMSG("Using the ES-DE folder `%1`").arg(esde_dir));
-
-    Context ctx;
-    ctx.log_tag = display_name();
-    ctx.primary_storage = ::android::primary_storage_path();
-    for (const QString& package : ::android::installed_packages())
-        ctx.installed_packages.insert(package);
-
-    const HashMap<QString, QString> settings = read_esde_settings(esde_dir);
-    const auto setting = [&settings](const char* key) {
-        const auto it = settings.find(QLatin1String(key));
-        return it != settings.cend() ? it->second : QString();
-    };
-
-    const QStringList rom_roots = find_rom_roots(*this, settings, ctx.primary_storage);
-    if (rom_roots.isEmpty())
-        Log::warning(display_name(), LOGMSG("No ROMs folder found, only systems with an absolute path will work"));
-    for (const QString& root : rom_roots)
-        Log::info(display_name(), LOGMSG("ROMs folder: `%1`").arg(root));
-
-    QString media_root = setting("MediaDirectory");
-    if (media_root.isEmpty())
-        media_root = esde_dir % QStringLiteral("/downloaded_media");
-    const bool show_hidden = setting("ShowHiddenGames") != QLatin1String("false");
-
-    // System and emulator definitions: the user's custom files first, then ES-DE's own
-    HashMap<QString, EsdeSystem> systems;
-    std::vector<QString> system_order;
-    bool load_exclusive = false;
-    load_systems(display_name(), esde_dir % QStringLiteral("/custom_systems/es_systems.xml"), systems, system_order, load_exclusive);
-    if (!load_exclusive) {
-        bool unused = false;
-        load_systems(display_name(), esde_list_file(QStringLiteral("es_systems.xml")), systems, system_order, unused);
-    }
-    load_find_rules(display_name(), esde_dir % QStringLiteral("/custom_systems/es_find_rules.xml"), ctx.emulators);
-    load_find_rules(display_name(), esde_list_file(QStringLiteral("es_find_rules.xml")), ctx.emulators);
-    Log::info(display_name(), LOGMSG("%1 systems and %2 emulators defined")
-        .arg(QString::number(systems.size()), QString::number(ctx.emulators.size())));
-
-    const es2::Metadata metahelper(display_name(), { esde_dir });
-
-    size_t found_games_total = 0;
-    size_t found_assets = 0;
-    const float progress_step = system_order.empty() ? 1.f : 1.f / system_order.size();
-    float progress = 0.f;
-
-    for (const QString& system_name : system_order) {
-        const EsdeSystem& sys = systems.at(system_name);
-
-        progress += progress_step;
-        emit progressChanged(progress);
-
-        // %ROMPATH% systems can be in any of the ROMs folders (eg. internal and SD card)
-        std::vector<std::pair<QString, QString>> dirs;  // (system dir, rom root)
-        if (sys.path.contains(QLatin1String("%ROMPATH%"))) {
-            for (const QString& root : rom_roots) {
-                QString dir = sys.path;
-                dir.replace(QLatin1String("%ROMPATH%"), root);
-                dir = QDir::cleanPath(dir);
-                if (QFileInfo(dir).isDir())
-                    dirs.emplace_back(dir, root);
-            }
-        }
-        else if (QFileInfo(sys.path).isDir()) {
-            dirs.emplace_back(QDir::cleanPath(sys.path), rom_roots.isEmpty() ? QString() : rom_roots.first());
-        }
-        if (dirs.empty())
-            continue;
-
-        QStringList system_dirs;
-        for (const auto& entry : dirs)
-            system_dirs.append(entry.first);
-
-        const GamelistInfo gamelist = read_gamelist(esde_dir, sys.name, system_dirs);
-        const QStringList extensions = parse_extensions(sys.extensions);
-
-        model::Collection& collection = *sctx.get_or_create_collection(sys.fullname.isEmpty() ? sys.name : sys.fullname);
-        collection.setShortName(pegasus_short_name(sys.name));
-
-        size_t found_games = 0;
-        HashMap<QString, model::Game*> extless_path_to_game;
-        std::vector<model::Game*> multi_disc_games;
-
-        for (const auto& dir_entry : dirs) {
-            const QString& system_dir = dir_entry.first;
-            const QString& rom_root = dir_entry.second;
-
-            const QString default_cmd = pick_command(sys, gamelist.system_alt_label, ctx, rom_root);
-            if (default_cmd.isEmpty())
-                Log::warning(display_name(), LOGMSG("`%1`: none of its emulators can be launched from Pegasus").arg(sys.name));
-            if (collection.commonLaunchCmd().isEmpty())
-                collection.setCommonLaunchCmd(default_cmd);
-
-            const QSet<QString> skipped = show_hidden ? QSet<QString>() : gamelist.hidden_paths;
-            for (const std::vector<QFileInfo>& group : find_game_groups(system_dir, extensions, skipped)) {
-                const QFileInfo& first = group.front();
-                const QString path = ::clean_abs_path(first);
-
-                model::Game* game_ptr = sctx.game_by_filepath(path);
-                const bool is_new = !game_ptr;
-                if (is_new) {
-                    game_ptr = sctx.create_game_for(collection);
-                    sctx.game_add_filepath(*game_ptr, path);
-                }
-                sctx.game_add_to(*game_ptr, collection);
-
-                // the other discs of a multi-disc game
-                if (group.size() > 1) {
-                    for (size_t i = 1; i < group.size(); i++) {
-                        const QString disc_path = ::clean_abs_path(group[i]);
-                        if (!sctx.game_by_filepath(disc_path))  // unless another source already has it
-                            sctx.game_add_filepath(*game_ptr, disc_path);
-                    }
-                    if (is_new)
-                        game_ptr->setTitle(strip_disc_tag(first.completeBaseName()));
-                    multi_disc_games.push_back(game_ptr);
-                }
-
-                // a game-specific emulator picked in ES-DE, or this folder's default
-                const auto alt_it = gamelist.game_alt_labels.find(path);
-                if (alt_it != gamelist.game_alt_labels.cend() && (is_new || game_ptr->launchCmd().isEmpty())) {
-                    const QString cmd = pick_command(sys, alt_it->second, ctx, rom_root);
-                    if (!cmd.isEmpty())
-                        game_ptr->setLaunchCmd(cmd);
-                }
-                else if (is_new && default_cmd != collection.commonLaunchCmd()) {
-                    game_ptr->setLaunchCmd(default_cmd);
-                }
-
-                // media is matched by the file name of any disc, or of the playlist
-                for (const QFileInfo& finfo : group) {
-                    QString extless = ::clean_abs_path(finfo);
-                    if (!finfo.isDir())
-                        extless = ::clean_abs_dir(finfo) % QLatin1Char('/') % finfo.completeBaseName();
-                    extless_path_to_game.emplace(std::move(extless), game_ptr);
-                    if (group.size() > 1) {  // eg. covers/Game.png for "Game (Disc 1).chd"
-                        extless_path_to_game.emplace(
-                            ::clean_abs_dir(finfo) % QLatin1Char('/') % strip_disc_tag(finfo.completeBaseName()), game_ptr);
-                    }
-                }
-                found_games++;
-            }
-        }
-
-        if (found_games == 0)
-            continue;
-        found_games_total += found_games;
-        Log::info(display_name(), LOGMSG("System `%1` provided %2 games").arg(sys.name, QString::number(found_games)));
-
-        // metadata from ES-DE/gamelists/<system>/gamelist.xml
-        for (const QString& system_dir : system_dirs) {
-            const es2::SystemEntry sysentry {
-                sys.fullname, sys.name, system_dir, sys.extensions, sys.platform, QString(),
-            };
-            metahelper.find_metadata_for(sysentry, sctx);
-        }
-
-        // names from the gamelist may still carry the first disc's tag
-        for (model::Game* const game : multi_disc_games) {
-            const QString clean = strip_disc_tag(game->title());
-            if (clean != game->title() && !clean.isEmpty())
-                game->setTitle(clean);
-        }
-
-        // media from ES-DE/downloaded_media/<system>/<type>/
-        for (const QString& system_dir : system_dirs)
-            find_media(media_root % QLatin1Char('/') % sys.name, system_dir, extless_path_to_game, found_assets);
-    }
-
-    Log::info(display_name(), LOGMSG("%1 games and %2 media files found")
-        .arg(QString::number(found_games_total), QString::number(found_assets)));
-    return *this;
-}
 
 
 
@@ -1101,7 +894,7 @@ const QString IMPORT_FILE_NAME = QStringLiteral("esde-import.metadata.pegasus.tx
 // the import files' format: made again at start when older (2: every picture
 // of a kind, so 3D boxes are kept beside the covers)
 // 3: the ROM folder's own media folder read too
-const QString IMPORT_FORMAT_LINE = QStringLiteral("# pegasusx-import-format: 3");
+const QString IMPORT_FORMAT_LINE = QStringLiteral("# pegasusx-import-format: 4");
 
 // Pegasus X: imports are written into the Pegasus X folder, never into the
 // game folders: metadata/imports/<system>.metadata.pegasus.txt defines the
@@ -1122,25 +915,43 @@ QString safe_file_stem(const QString& name)
 }
 QString imports_dir() { return paths::writableConfigDir() % QStringLiteral("/metadata/imports"); }
 QString imports_fill_dir() { return paths::writableConfigDir() % QStringLiteral("/metadata/imports-fill"); }
-// one file per system folder (a system can have folders on several storages)
+// a folder the same however it's reached: /sdcard/... and
+// /storage/self/primary/... are /storage/emulated/0/...
+QString folder_key(const QString& folder)
+{
+    QString path = QDir::cleanPath(folder);
+    for (const char* alias : { "/sdcard", "/storage/self/primary", "/mnt/sdcard" }) {
+        const QString prefix = QLatin1String(alias);
+        if (path == prefix || path.startsWith(prefix % QLatin1Char('/'))) {
+            path = QStringLiteral("/storage/emulated/0") % path.mid(prefix.size());
+            break;
+        }
+    }
+    return path;
+}
+// one file per system folder (a system can have folders on several storages),
+// named by a SHA-1 of the folder: the same name on every start and Qt version
+// (it used to be qHash, which isn't)
 QString import_file_for(const QString& system, const QString& folder, bool fill)
 {
     const QString stem = QDir(folder).dirName().isEmpty() ? system : system % QLatin1Char('-')
-        % QString::number(qHash(QDir::cleanPath(folder)), 36);
+        % QString::fromLatin1(QCryptographicHash::hash(folder_key(folder).toUtf8(), QCryptographicHash::Sha1).toHex().left(12));
     return (fill ? imports_fill_dir() : imports_dir()) % QLatin1Char('/') % safe_file_stem(stem) % QStringLiteral(".metadata.pegasus.txt");
 }
 // the import files made from a game folder (by the "# folder:" line in them)
 QStringList import_files_of(const QString& folder)
 {
     QStringList out;
-    const QString wanted = QStringLiteral("# folder: ") % QDir::cleanPath(folder);
+    const QString prefix = QStringLiteral("# folder: ");
+    const QString wanted = folder_key(folder);
     for (const QString& dir : { imports_dir(), imports_fill_dir() }) {
         for (const QFileInfo& finfo : QDir(dir).entryInfoList({ QStringLiteral("*.metadata.pegasus.txt") }, QDir::Files)) {
             QFile file(finfo.absoluteFilePath());
             if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
                 continue;
             for (int i = 0; i < 4 && !file.atEnd(); i++) {
-                if (QString::fromUtf8(file.readLine()).trimmed() == wanted) {
+                const QString line = QString::fromUtf8(file.readLine()).trimmed();
+                if (line.startsWith(prefix) && folder_key(line.mid(prefix.size())) == wanted) {
                     out.append(finfo.absoluteFilePath());
                     break;
                 }
@@ -1739,8 +1550,24 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
             const QString old_path = folder % QLatin1Char('/') % IMPORT_FILE_NAME;  // where imports used to go
             // emulators picked since the last import are kept (also from a
             // file written into the game folder by an older Pegasus X)
+            // this system's files for the folder under other names (an older
+            // Pegasus X named them differently, or the folder was reached by
+            // another path): their emulators are kept, then they're removed
+            QStringList stale;
+            {
+                const QString own_prefix = safe_file_stem(sys.name) % QLatin1Char('-');
+                for (const QString& f : import_files_of(folder)) {
+                    const QString fname = QFileInfo(f).fileName();
+                    if (f != file_path && f != fill_path && f != old_path && fname.startsWith(own_prefix))
+                        stale.append(f);
+                }
+            }
             QString collection_launch;
             HashMap<QString, QString> old_launches = previous_launches(file_path, collection_launch);
+            for (const QString& f : stale) {
+                if (old_launches.empty() && collection_launch.isEmpty() && !f.startsWith(imports_fill_dir()))
+                    old_launches = previous_launches(f, collection_launch);
+            }
             if (old_launches.empty() && collection_launch.isEmpty())
                 old_launches = previous_launches(old_path, collection_launch);
 
@@ -1806,20 +1633,25 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
                     QFile::remove(path);
                     return true;
                 }
-                QFile file(path);
-                if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+                // all or nothing: a cut (full card, app closed) keeps the old file
+                QSaveFile file(path);
+                if (!file.open(QIODevice::WriteOnly | QIODevice::Text)
+                        || file.write(content.toUtf8()) < 0 || !file.commit()) {
                     Log::warning(log_tag, LOGMSG("Could not write `%1`").arg(path));
                     if (result.error.isEmpty())
                         result.error = QStringLiteral("Could not write to %1").arg(QFileInfo(path).absolutePath());
                     return false;
                 }
-                file.write(content.toUtf8());
                 Log::info(log_tag, LOGMSG("Wrote %1 games to `%2`").arg(QString::number(count), path));
                 return true;
             };
             if (!write(file_path, text, written_games))
                 continue;
             write(fill_path, fill_text, fill_games);
+            for (const QString& f : stale) {
+                if (QFile::remove(f))
+                    Log::info(log_tag, LOGMSG("Removed `%1` (made again as `%2`)").arg(f, QFileInfo(file_path).fileName()));
+            }
             // the file an older Pegasus X wrote into the game folder would
             // define the games a second time: what was edited in it goes to
             // the override file, then it's set aside

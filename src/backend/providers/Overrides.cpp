@@ -17,6 +17,7 @@
 
 #include "Overrides.h"
 
+#include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
 #include "model/gaming/Assets.h"
@@ -239,8 +240,16 @@ int apply_layer(const QString& dir, Mode mode, const QString& what,
         return 0;
     providers::SearchContext sctx(QStringList {});
     const providers::pegasus::Metadata reader(LOG_TAG);
-    for (const QString& file : files)
-        reader.apply_metafile(file, sctx);
+    {
+        // read as written: a picture that isn't where the file says (the art
+        // folder moved, the SD card is slow) is looked for again by
+        // existing_files() instead of being dropped by the reader first
+        const bool verify = AppSettings::general.verify_files;
+        AppSettings::general.verify_files = false;
+        for (const QString& file : files)
+            reader.apply_metafile(file, sctx);
+        AppSettings::general.verify_files = verify;
+    }
 
     // collections first (their launch command reaches their games), so a
     // game's own override still wins

@@ -26,6 +26,9 @@
 #include "utils/StdHelpers.h"
 
 #include <QDirIterator>
+#include <QSet>
+
+#include <algorithm>
 
 
 namespace {
@@ -56,21 +59,43 @@ std::vector<QString> find_metafiles_in(const QString& dir_path)
     return result;
 }
 
+// Pegasus X: an ES-DE import (made by Pegasus X)
+bool is_import_metafile(const QString& path)
+{
+    return path.contains(QLatin1String("/metadata/imports/"))
+        || path.contains(QLatin1String("/metadata/imports-fill/"))
+        || path.endsWith(QLatin1String("/esde-import.metadata.pegasus.txt"));
+}
+
+// Pegasus X: the files in a stable order, as the first file that lists a
+// game file owns it: the global metafiles, then each game folder's (in
+// game_dirs.txt order, each folder's sorted by name), then the ES-DE imports
+// last, so your own files always win over an import. (This used to be one
+// alphabetical list, which put `.../PegasusX/metadata/imports` first.)
 std::vector<QString> find_all_metafiles(const QStringList& gamedirs)
 {
-    const QString global_metafile_dir = paths::writableConfigDir() + QLatin1String("/metafiles");
-    std::vector<QString> result = find_metafiles_in(global_metafile_dir);
+    std::vector<QString> own;
+    std::vector<QString> imports;
+    QSet<QString> seen;
+    const auto add_dir = [&](const QString& dir_path) {
+        std::vector<QString> found = find_metafiles_in(dir_path);
+        std::sort(found.begin(), found.end());
+        for (QString& path : found) {
+            if (seen.contains(path))
+                continue;
+            seen.insert(path);
+            (is_import_metafile(path) ? imports : own).push_back(std::move(path));
+        }
+    };
 
-    result.reserve(result.size() + gamedirs.size());
-    for (const QString& dir_path : gamedirs) {
-        std::vector<QString> local_metafiles = find_metafiles_in(dir_path);
-        result.insert(result.end(),
-            std::make_move_iterator(local_metafiles.begin()),
-            std::make_move_iterator(local_metafiles.end()));
-    }
+    add_dir(paths::writableConfigDir() + QLatin1String("/metafiles"));
+    for (const QString& dir_path : gamedirs)
+        add_dir(dir_path);
+    // the ES-DE imports are always read (they used to be a game folder of their own)
+    add_dir(paths::writableConfigDir() + QLatin1String("/metadata/imports"));
 
-    VEC_REMOVE_DUPLICATES(result);
-    return result;
+    own.insert(own.end(), std::make_move_iterator(imports.begin()), std::make_move_iterator(imports.end()));
+    return own;
 }
 } // namespace
 

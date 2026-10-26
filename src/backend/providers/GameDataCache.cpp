@@ -305,6 +305,8 @@ QString GameDataCache::buildFingerprint(
     add_metadata_fingerprints(metadata_files, paths::writableConfigDir() + QStringLiteral("/metafiles"));
     for (const QString& dir : sctx.root_game_dirs())
         add_metadata_fingerprints(metadata_files, dir);
+    // Pegasus X: the ES-DE imports, read whatever the game folders are
+    add_metadata_fingerprints(metadata_files, paths::writableConfigDir() + QStringLiteral("/metadata/imports"));
     root[QStringLiteral("metadata_files")] = metadata_files;
 
     QJsonArray media_dirs;

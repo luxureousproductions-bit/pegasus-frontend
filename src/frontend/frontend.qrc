@@ -45,8 +45,6 @@
         <file>menu/mainmenu/SecondaryMenuItem.qml</file>
         <file>menu/settings/GameDirEditor.qml</file>
         <file>menu/settings/EsdeImport.qml</file>
-        <file>menu/settings/EmulatorEditor.qml</file>
-        <file>menu/settings/LibraryEditor.qml</file>
         <file>menu/settings/MetadataEditor.qml</file>
         <file>menu/settings/ScraperScreen.qml</file>
         <file>menu/settings/ScraperChoice.qml</file>
