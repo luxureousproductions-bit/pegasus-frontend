@@ -685,6 +685,38 @@ void find_media(const QString& wanted_media_dir, const QString& system_dir,
     }
 }
 
+/// Pegasus' own layout: media/<game>/<kind>.<ext> (boxFront.png, logo.png,
+/// video.mp4, manual.pdf), the folder named after the game's file or title
+void find_per_game_media(const QString& wanted_media_dir, const QString& system_dir,
+                         const HashMap<QString, model::Game*>& extless_path_to_game, size_t& found_assets)
+{
+    const QString media_dir = pathcase::resolve(wanted_media_dir);
+    if (media_dir.isEmpty() || !QFileInfo(media_dir).isDir())
+        return;
+    HashMap<QString, model::Game*> games_lower;
+    for (const auto& pair : extless_path_to_game)
+        games_lower.emplace(pair.first.toLower(), pair.second);
+    for (const QFileInfo& sub : QDir(media_dir).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+        const auto game_it = games_lower.find((QDir::cleanPath(system_dir) % QLatin1Char('/') % sub.fileName()).toLower());
+        if (game_it == games_lower.cend())
+            continue;
+        for (const QFileInfo& finfo : QDir(sub.absoluteFilePath()).entryInfoList(QDir::Files | QDir::Readable)) {
+            const QString ext = finfo.suffix().toLower();
+            if (ext == QLatin1String("pdf")) {
+                QVariantMap& extra = game_it->second->extraMapMut();
+                if (!extra.contains(QStringLiteral("manual")))
+                    extra.insert(QStringLiteral("manual"), QStringList { finfo.absoluteFilePath() });
+                continue;
+            }
+            const AssetType type = pegasus_assets::str_to_type(finfo.completeBaseName());
+            if (type == AssetType::UNKNOWN)
+                continue;
+            game_it->second->assetsMut().add_file(type, finfo.absoluteFilePath());
+            found_assets++;
+        }
+    }
+}
+
 /// The short name a system's collection gets. Themes pick system logos and
 /// art by short name, using the common names (snes, megadrive, segacd...),
 /// while ES-DE has its own names for regional and other variants. Those are
@@ -1068,7 +1100,8 @@ namespace {
 const QString IMPORT_FILE_NAME = QStringLiteral("esde-import.metadata.pegasus.txt");
 // the import files' format: made again at start when older (2: every picture
 // of a kind, so 3D boxes are kept beside the covers)
-const QString IMPORT_FORMAT_LINE = QStringLiteral("# pegasusx-import-format: 2");
+// 3: the ROM folder's own media folder read too
+const QString IMPORT_FORMAT_LINE = QStringLiteral("# pegasusx-import-format: 3");
 
 // Pegasus X: imports are written into the Pegasus X folder, never into the
 // game folders: metadata/imports/<system>.metadata.pegasus.txt defines the
@@ -1676,6 +1709,22 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
                 }
             }
             size_t found_assets = 0;
+            // art named after the game's title too (what scrapers do for games
+            // without a file name of their own)
+            for (const auto& entry : games) {
+                const QString title_key = QDir::cleanPath(folder) % QLatin1Char('/') % entry.first->title();
+                if (extless_path_to_game.find(title_key) == extless_path_to_game.cend())
+                    extless_path_to_game.emplace(title_key, entry.first);
+            }
+            // the ROM folder's own art first (media/<kind>/<game>, Skraper's
+            // skraper/, media/<game>/<kind>): the folder isn't a game directory
+            // (its list is in the Pegasus X folder), so Pegasus doesn't read it
+            for (const QString& sub : { QStringLiteral("media"), QStringLiteral(".media"), QStringLiteral("skraper") }) {
+                const QString own_media = folder % QLatin1Char('/') % sub;
+                find_media(own_media, folder, extless_path_to_game, found_assets);
+                find_per_game_media(own_media, folder, extless_path_to_game, found_assets);
+            }
+            // then ES-DE's
             find_media(setup.media_root % QLatin1Char('/') % sys.name, folder, extless_path_to_game, found_assets);
 
             // the file
@@ -2022,7 +2071,17 @@ int refresh_rom_folders()
             }
             old_format = old_format || !has_format;
         }
-        if (!listed.isValid() || (!old_format && dir_info.lastModified() <= listed))
+        // art added to the folder's media (media/, media/<kind>/) counts too
+        QDateTime changed = dir_info.lastModified();
+        for (const QString& sub : { QStringLiteral("media"), QStringLiteral(".media"), QStringLiteral("skraper") }) {
+            const QFileInfo media(dir % QLatin1Char('/') % sub);
+            if (!media.isDir())
+                continue;
+            changed = qMax(changed, media.lastModified());
+            for (const QFileInfo& kind : QDir(media.absoluteFilePath()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
+                changed = qMax(changed, kind.lastModified());
+        }
+        if (!listed.isValid() || (!old_format && changed <= listed))
             continue;
         if (!esde_dir.isEmpty() && QFileInfo(esde_dir).isDir()) {
             ImportSetup esde_setup = load_import_setup(esde_dir);

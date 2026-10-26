@@ -371,6 +371,23 @@ Window {
                     // Pegasus X: a newer build looked for, if that's turned on
                     if (Internal.settings.checkUpdatesOnStart)
                         updateCheck.start();
+                    // the test environment: the art each game has (PEGASUSX_TEST_DUMP)
+                    var dump = [];
+                    var kinds = ["boxFront", "boxBack", "boxSpine", "banner", "logo", "screenshot", "titlescreen",
+                                 "background", "cartridge", "steam", "video"];
+                    for (var dg = 0; dg < api.allGames.count; dg++) {
+                        var dgame = api.allGames.get(dg);
+                        var lines = [dgame.title];
+                        for (var dk = 0; dk < kinds.length; dk++) {
+                            var dl = dgame.assets[kinds[dk] + "List"] || [];
+                            for (var df = 0; df < dl.length; df++)
+                                lines.push("  " + kinds[dk] + ": " + String(dl[df]).replace("file:" + "//", ""));
+                        }
+                        if (dgame.extra && dgame.extra.box3d)
+                            lines.push("  extra.box3d: " + dgame.extra.box3d);
+                        dump.push(lines.join("\n"));
+                    }
+                    Internal.settings.testDump(dump.join("\n"));
                     // the test environment: one game scraped (PEGASUSX_TEST_SCRAPE=<title>)
                     var testTitle = Internal.settings.testScrapeTitle();
                     if (testTitle !== "") {

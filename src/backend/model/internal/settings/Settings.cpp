@@ -135,6 +135,16 @@ QString Settings::startupScreen() const
     return qApp ? qApp->property("pegasusxOpen").toString() : QString();
 }
 
+void Settings::testDump(const QString& text) const
+{
+    const QString path = qEnvironmentVariable("PEGASUSX_TEST_DUMP");
+    if (path.isEmpty())
+        return;
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        file.write(text.toUtf8());
+}
+
 QString Settings::testScrapeTitle() const
 {
     return qEnvironmentVariable("PEGASUSX_TEST_SCRAPE");

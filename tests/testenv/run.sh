@@ -137,7 +137,7 @@ keys Return; shot 09-esde-delete-ticked
 stop 09-esde-import
 
 # -- 7. the theme again (the library as read after the imports) --------------------------------
-start 10-theme "" 12
+start 10-theme "" 12 "PEGASUSX_TEST_DUMP=$R/art-per-game.txt"
 shot 10-theme
 keys Right
 sleep 1
@@ -186,6 +186,9 @@ done
     echo
     echo "## Warnings and errors"
     strip_ansi "$R"/logs/*.stdout | grep -iE "\[w\]|\[e\]|warning|error|qrc:|\.qml:[0-9]+" | grep -v "Test:" | sort | uniq -c | sort -rn | head -n 60 | sed 's/^/    /'
+    echo
+    echo "## Art each game has (last start)"
+    sed 's/^/    /' "$R/art-per-game.txt" 2>/dev/null | sed "s|$T/||" | head -n 120
     echo
     echo "## Game directories"
     sed 's/^/    /' "$R/files/game_dirs.txt" 2>/dev/null

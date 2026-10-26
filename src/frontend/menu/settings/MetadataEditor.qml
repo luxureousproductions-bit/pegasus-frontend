@@ -391,9 +391,7 @@ FocusScope {
         "art:fanart": "fanart", "art:box3d": "3dboxes", "art:box2d": "covers", "art:boxback": "backcovers",
         "art:physical": "physicalmedia", "art:miximage": "miximages", "art:logo": "marquees",
         "art:manual": "manuals", "cart:background": "system", "cart:logo": "system",
-        "art:spine": "spines", "art:boxfull": "fullboxes", "art:tile": "tiles", "art:banner": "banners",
-        "art:poster": "posters", "art:marquee": "screenmarquees", "art:bezel": "bezels", "art:panel": "panels",
-        "art:cabinetleft": "cabinetleft", "art:cabinetright": "cabinetright", "art:music": "music",
+        "art:spine": "spines", "art:banner": "banners",
     })
     function storeArt(key, path) {
         if (dataDir === "")
@@ -569,18 +567,9 @@ FocusScope {
         ["art:physical", qsTr("Physical Media") + api.tr, "cartridgeList", "assets.cartridge", ""],
         ["art:miximage", qsTr("Miximage") + api.tr, "steamList", "assets.steam", ""],
         ["art:logo", qsTr("Logo") + api.tr, "logoList", "assets.logo", ""],
-        // the other kinds Pegasus themes use
+        // two more kinds some Pegasus themes use
         ["art:spine", qsTr("Box Spine") + api.tr, "boxSpineList", "assets.box_spine", ""],
-        ["art:boxfull", qsTr("Full Box") + api.tr, "boxFullList", "assets.box_full", ""],
-        ["art:tile", qsTr("Tile") + api.tr, "tileList", "assets.tile", ""],
         ["art:banner", qsTr("Banner") + api.tr, "bannerList", "assets.banner", ""],
-        ["art:poster", qsTr("Poster") + api.tr, "posterList", "assets.poster", ""],
-        ["art:marquee", qsTr("Arcade Marquee") + api.tr, "marqueeList", "assets.marquee", ""],
-        ["art:bezel", qsTr("Bezel") + api.tr, "bezelList", "assets.bezel", ""],
-        ["art:panel", qsTr("Control Panel") + api.tr, "panelList", "assets.panel", ""],
-        ["art:cabinetleft", qsTr("Cabinet Left") + api.tr, "cabinetLeftList", "assets.cabinet_left", ""],
-        ["art:cabinetright", qsTr("Cabinet Right") + api.tr, "cabinetRightList", "assets.cabinet_right", ""],
-        ["art:music", qsTr("Music") + api.tr, "musicList", "assets.music", ""],
         ["art:manual", qsTr("Manual") + api.tr, "", "x-manual", ""],
     ]
     // as Pegasus X tells them apart: "3dboxes", "3D Boxes", "box-3d"...
@@ -631,8 +620,6 @@ FocusScope {
             return [".mp4", ".webm", ".mkv", ".avi", ".mov"];
         if (key === "art:manual")
             return [".pdf", ".cbz", ".cbr", ".jpg", ".png"];
-        if (key === "art:music")
-            return [".mp3", ".ogg", ".wav", ".flac", ".m4a"];
         return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".svg"];
     }
 
@@ -1893,16 +1880,7 @@ FocusScope {
         "art:logo": ["wheel", "marquees", "marquee", "logos", "logo"],
         "art:manual": ["manuals", "manual"],
         "art:spine": ["spines", "box2dside", "spine", "boxspine", "sides"],
-        "art:boxfull": ["fullboxes", "boxtexture", "boxfull", "fullbox"],
-        "art:tile": ["tiles", "tile", "icons"],
         "art:banner": ["banners", "banner"],
-        "art:poster": ["posters", "poster", "flyers", "flyer"],
-        "art:marquee": ["screenmarquees", "screenmarquee", "screenmarqueesmall"],
-        "art:bezel": ["bezels", "bezel", "borders"],
-        "art:panel": ["panels", "panel", "controlpanel"],
-        "art:cabinetleft": ["cabinetleft", "cabinet_left"],
-        "art:cabinetright": ["cabinetright", "cabinet_right"],
-        "art:music": ["music", "soundtracks", "soundtrack"],
     })
     // "./game.steam": the game's file, from the folder of its metadata file
     function fileShown() {

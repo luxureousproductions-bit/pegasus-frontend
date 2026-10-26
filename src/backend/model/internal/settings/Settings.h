@@ -116,6 +116,8 @@ public:
     Q_INVOKABLE QString startupScreen() const;
     /// the game the test environment scrapes at startup (PEGASUSX_TEST_SCRAPE), or empty
     Q_INVOKABLE QString testScrapeTitle() const;
+    /// the test environment: text written to PEGASUSX_TEST_DUMP (the art each game has)
+    Q_INVOKABLE void testDump(const QString& text) const;
 
     bool fullscreen() const { return AppSettings::general.fullscreen; }
     void setFullscreen(bool);

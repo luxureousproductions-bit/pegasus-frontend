@@ -68,6 +68,16 @@ rom "$S/ROMs/gba/Metroid Fusion (USA).gba"
 # -- a ROM folder without metadata ---------------------------------------------------
 rom "$T/MyGames/Nintendo 64/Mario Kart 64 (USA).z64"
 rom "$T/MyGames/Nintendo 64/Star Fox 64 (USA).z64"
+# its own art, ES-DE's folder names (some spelled differently), the same name for every kind
+N="$T/MyGames/Nintendo 64/media"
+pic "$N/covers/Mario Kart 64 (USA).png" 400x280 "#c33" "MK64 cover"
+pic "$N/3D Boxes/Mario Kart 64 (USA).png" 420x300 "#933" "MK64 3D box"
+pic "$N/screenshot/Mario Kart 64 (USA).png" 640x480 "#36c" "MK64 screenshot"
+pic "$N/wheel/Mario Kart 64 (USA).png" 600x200 "#fb0" "MK64 logo"
+pic "$N/fanart/Mario Kart 64 (USA).png" 1280x720 "#393" "MK64 fan art"
+# Pegasus' own layout: media/<game>/<kind>
+pic "$N/Star Fox 64 (USA)/boxFront.png" 400x280 "#339" "SF64 boxFront"
+pic "$N/Star Fox 64 (USA)/screenshot.png" 640x480 "#933" "SF64 screenshot"
 
 # -- a ROM folder with its own gamelist.xml and a two-disc game ----------------------------
 for d in 1 2; do
