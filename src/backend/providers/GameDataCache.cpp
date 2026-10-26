@@ -205,6 +205,23 @@ void add_media_fingerprints(QJsonArray& out, const QString& game_dir)
     }
 }
 
+// a game folder and the folders in it (ROMs/snes, ...): their times
+void add_folder_signature(QJsonArray& out, const QString& game_dir)
+{
+    const auto add_dir = [&out](const QFileInfo& fi) {
+        QJsonObject item;
+        item[QStringLiteral("dir")] = fi.absoluteFilePath();
+        item[QStringLiteral("mtime")] = QString::number(fi.lastModified().toMSecsSinceEpoch());
+        out.append(item);
+    };
+    const QFileInfo top(game_dir);
+    if (!top.isDir())
+        return;
+    add_dir(top);
+    for (const QFileInfo& child : QDir(game_dir).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name))
+        add_dir(child);
+}
+
 QJsonObject collection_to_json(const model::Collection& collection)
 {
     QJsonObject obj;
@@ -313,6 +330,13 @@ QString GameDataCache::buildFingerprint(
     for (const QString& dir : sctx.root_game_dirs())
         add_media_fingerprints(media_dirs, dir);
     root[QStringLiteral("media_dirs")] = media_dirs;
+
+    // Pegasus X: the game folders and their system folders: a game added or
+    // removed changes its folder's time, so the list is read again
+    QJsonArray game_folders;
+    for (const QString& dir : sctx.root_game_dirs())
+        add_folder_signature(game_folders, dir);
+    root[QStringLiteral("game_folders")] = game_folders;
 
     // files of other data sources, eg. ES-DE's gamelists
     QJsonArray provider_files;

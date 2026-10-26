@@ -203,7 +203,13 @@ done
         echo "    FAILED: Chrono Trigger's title isn't the one from your own file:"
         grep "^Chrono" "$R/art-per-game.txt" 2>/dev/null | sed 's/^/        /'
     fi
-    strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game" | head -n 5 | sed 's/^/    /'
+    # ...and the import's art for it is used on top (the "Use" setting: fill)
+    if awk '/^Chrono Trigger \(my own file\)$/{f=1;next} /^[^ ]/{f=0} f' "$R/art-per-game.txt" 2>/dev/null | grep -q "screenshots/Chrono Trigger"; then
+        echo "    OK: it has ES-DE's screenshot too (import data on top of your file)"
+    else
+        echo "    FAILED: ES-DE's screenshot isn't on your own file's Chrono Trigger"
+    fi
+    strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game|Imports onto your games" | head -n 5 | sed 's/^/    /'
     echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40

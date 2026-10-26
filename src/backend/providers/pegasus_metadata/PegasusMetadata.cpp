@@ -17,6 +17,8 @@
 
 #include "PegasusMetadata.h"
 
+#include "providers/Overrides.h"
+
 #include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
@@ -311,7 +313,11 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
                         continue;
                     }
                     if (game_ptr != nullptr && game_ptr != ps.cur_game) {
-                        print_warning(ps, entry, LOGMSG("This URI already belongs to a different game: `%1`").arg(line));
+                        // Pegasus X: an ES-DE import's game your own file has: used on top of it later
+                        if (providers::overrides::is_import_file(ps.path))
+                            providers::overrides::note_import_conflict(ps.path);
+                        else
+                            print_warning(ps, entry, LOGMSG("This URI already belongs to a different game: `%1`").arg(line));
                         continue;
                     }
 
@@ -334,7 +340,11 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
                         continue;
                     }
                     if (game_ptr != nullptr && game_ptr != ps.cur_game) {
-                        print_warning(ps, entry, LOGMSG("This file already belongs to a different game: `%1`").arg(line));
+                        // Pegasus X: an ES-DE import's game your own file has: used on top of it later
+                        if (providers::overrides::is_import_file(ps.path))
+                            providers::overrides::note_import_conflict(ps.path);
+                        else
+                            print_warning(ps, entry, LOGMSG("This file already belongs to a different game: `%1`").arg(line));
                         continue;
                     }
 

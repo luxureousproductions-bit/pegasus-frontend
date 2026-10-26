@@ -19,6 +19,7 @@
 
 #include "Log.h"
 #include "Paths.h"
+#include "providers/Overrides.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "providers/pegasus_metadata/PegasusFilter.h"
@@ -109,6 +110,7 @@ PegasusProvider::PegasusProvider(QObject* parent)
 
 Provider& PegasusProvider::run(SearchContext& sctx)
 {
+    providers::overrides::begin_import_scan();
     const std::vector<QString> metafile_paths = find_all_metafiles(sctx.root_game_dirs());
     if (metafile_paths.empty()) {
         Log::info(display_name(), LOGMSG("No metadata files found"));

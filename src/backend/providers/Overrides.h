@@ -44,5 +44,15 @@ void set_import_fill_mode(const QString& mode);
 
 void apply(const std::vector<model::Collection*>& collections, const std::vector<model::Game*>& games);
 
+/// An ES-DE import file listed a game file your own metadata file already
+/// has (your file wins): its data for that game is used on top of yours as
+/// the "Use" setting says, when the library is done
+void note_import_conflict(const QString& metafile_path);
+/// A full read of the metadata files starts (the list above is made again;
+/// a library read from the cache uses the one kept from the last full read)
+void begin_import_scan();
+/// Is this one of the ES-DE import files (metadata/imports)?
+bool is_import_file(const QString& metafile_path);
+
 } // namespace overrides
 } // namespace providers

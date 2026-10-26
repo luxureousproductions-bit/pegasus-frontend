@@ -175,7 +175,7 @@ FocusScope {
         },
         SettingsEntry {
             label: QT_TR_NOOP("Scan for games on launch")
-            desc: QT_TR_NOOP("Scan for games every time Pegasus starts. You can disable this to improve loading times, but you will need to manually reload the game list to pick up changes.")
+            desc: QT_TR_NOOP("Read every game folder each time Pegasus X starts. Off: the saved game list is used, and read again by itself when a game folder or metadata file changes (starts faster).")
             type: SettingsEntry.Type.Bool
             boolValue: Internal.settings.scanOnLaunch
             boolSetter: (val) => Internal.settings.scanOnLaunch = val

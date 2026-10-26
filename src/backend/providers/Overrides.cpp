@@ -35,6 +35,9 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QSet>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QSaveFile>
 #include <QSettings>
 #include <QUrl>
 #include <QStringBuilder>
@@ -263,13 +266,19 @@ void apply_collection(model::Collection& live, const model::Collection& over, Mo
     }
 }
 
-// one folder of files, onto the live games (by their files) and collections (by name)
-int apply_layer(const QString& dir, Mode mode, const QString& what,
+// ES-DE import files that had games your own files have (see note_import_conflict)
+QMutex s_conflicts_mutex;
+QSet<QString> s_import_conflicts;
+bool s_import_scanned = false;  // made again by this read (else: from the file below)
+
+QString conflicts_file() { return paths::writableCacheDir() + QStringLiteral("/import-conflicts.txt"); }
+
+// files, onto the live games (by their files) and collections (by name)
+int apply_files(const QStringList& files, Mode mode, const QString& what,
                 const HashMap<QString, model::Game*>& live_by_file,
                 const HashMap<QString, model::Collection*>& live_colls,
-                std::function<bool(const model::Game&)> wanted)
+                std::function<bool(const model::Game&)> wanted, bool with_collections = true)
 {
-    const QStringList files = metafiles_in(dir);
     if (files.isEmpty())
         return 0;
     providers::SearchContext sctx(QStringList {});
@@ -288,6 +297,8 @@ int apply_layer(const QString& dir, Mode mode, const QString& what,
     // collections first (their launch command reaches their games), so a
     // game's own override still wins
     for (const auto& pair : sctx.current_collection_games()) {
+        if (!with_collections)
+            break;
         const auto live_it = live_colls.find(pair.first->name());
         if (live_it != live_colls.cend())
             apply_collection(*live_it->second, *pair.first, mode);
@@ -317,11 +328,39 @@ int apply_layer(const QString& dir, Mode mode, const QString& what,
     Log::info(LOG_TAG, LOGMSG("%1: %2 files, %3 games").arg(what).arg(files.size()).arg(applied));
     return applied;
 }
+
+// one folder of files
+int apply_layer(const QString& dir, Mode mode, const QString& what,
+                const HashMap<QString, model::Game*>& live_by_file,
+                const HashMap<QString, model::Collection*>& live_colls,
+                std::function<bool(const model::Game&)> wanted)
+{
+    return apply_files(metafiles_in(dir), mode, what, live_by_file, live_colls, std::move(wanted));
+}
 } // namespace
 
 
 namespace providers {
 namespace overrides {
+
+bool is_import_file(const QString& metafile_path)
+{
+    const QString dir = QDir::cleanPath(paths::writableConfigDir() + QStringLiteral("/metadata/imports")) + QLatin1Char('/');
+    return QDir::cleanPath(metafile_path).startsWith(dir);
+}
+
+void begin_import_scan()
+{
+    QMutexLocker lock(&s_conflicts_mutex);
+    s_import_conflicts.clear();
+    s_import_scanned = true;
+}
+
+void note_import_conflict(const QString& metafile_path)
+{
+    QMutexLocker lock(&s_conflicts_mutex);
+    s_import_conflicts.insert(metafile_path);
+}
 
 QString import_fill_mode()
 {
@@ -341,7 +380,31 @@ void apply(const std::vector<model::Collection*>& collections, const std::vector
     const QString root = paths::writableConfigDir() + QStringLiteral("/metadata");
     const QString fill_dir = root + QStringLiteral("/imports-fill");
     const QString overrides_dir = root + QStringLiteral("/overrides");
-    if (metafiles_in(fill_dir).isEmpty() && metafiles_in(overrides_dir).isEmpty())
+    QStringList conflicts;
+    {
+        QMutexLocker lock(&s_conflicts_mutex);
+        if (s_import_scanned) {
+            // kept for the starts that use the cached library
+            s_import_scanned = false;
+            conflicts = s_import_conflicts.values();
+            conflicts.sort();
+            QSaveFile file(conflicts_file());
+            if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                file.write(conflicts.join(QLatin1Char('\n')).toUtf8());
+                file.commit();
+            }
+        }
+        else {
+            QFile file(conflicts_file());
+            if (file.open(QIODevice::ReadOnly | QIODevice::Text))
+                conflicts = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        }
+    }
+    for (int i = conflicts.size() - 1; i >= 0; i--) {
+        if (!QFileInfo::exists(conflicts.at(i)))
+            conflicts.removeAt(i);
+    }
+    if (conflicts.isEmpty() && metafiles_in(fill_dir).isEmpty() && metafiles_in(overrides_dir).isEmpty())
         return;
 
     QElapsedTimer timer;
@@ -363,12 +426,16 @@ void apply(const std::vector<model::Collection*>& collections, const std::vector
     const QString mode_name = import_fill_mode();
     const Mode mode = mode_name == QLatin1String("media") ? Mode::MediaOnly
                     : mode_name == QLatin1String("replace") ? Mode::Replace : Mode::Fill;
-    apply_layer(fill_dir, mode, QStringLiteral("Imports (") + mode_name + QLatin1Char(')'), by_file, colls,
-        [](const model::Game& live) {
-            // only games defined by your own files (the imports' own games have it all already)
-            const QStringList source = live.extraMap().value(QStringLiteral("pegasusx-source")).toStringList();
-            return !source.contains(QStringLiteral("esde"));
-        });
+    const auto yours = [](const model::Game& live) {
+        // only games defined by your own files (the imports' own games have it all already)
+        const QStringList source = live.extraMap().value(QStringLiteral("pegasusx-source")).toStringList();
+        return !source.contains(QStringLiteral("esde"));
+    };
+    apply_layer(fill_dir, mode, QStringLiteral("Imports (") + mode_name + QLatin1Char(')'), by_file, colls, yours);
+    // the imports' games your own files have too (your file won them): their
+    // data the same way, without the imports' collections
+    apply_files(conflicts, mode, QStringLiteral("Imports onto your games (") + mode_name + QLatin1Char(')'),
+                by_file, colls, yours, false);
     // 2. your edits and scraped data
     apply_layer(overrides_dir, Mode::Replace, QStringLiteral("Overrides"), by_file, colls,
         [](const model::Game&) { return true; });
