@@ -208,6 +208,13 @@ done
     echo "## Game directories"
     sed 's/^/    /' "$R/files/game_dirs.txt" 2>/dev/null
     echo
+    echo "## Library read, per start (cache used? times)"
+    for f in "$R"/logs/*.stdout; do
+        n="$(basename "$f" .stdout)"
+        line="$(strip_ansi "$f" | grep -E "Skipping full scan|Ignoring game index cache|cache restore took|post-processing took|games found$|Finished searching in [1-9]" | sed 's/^\[i\] //' | tr '\n' ';' | sed 's/;/ · /g')"
+        echo "    $n: $line"
+    done
+    echo
     echo "## Screen open times"
     strip_ansi "$R"/logs/*.stdout | grep -h "\[timing\]" | sed 's/.*\[timing\] /    /' | sort | uniq
     echo
