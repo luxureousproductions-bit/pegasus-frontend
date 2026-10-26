@@ -35,6 +35,7 @@ FocusScope {
     // Pegasus X: picking a folder instead of a file ("Use this folder"), and
     // asking the host for a name to make a new one in the current folder
     property bool pickFolders: false
+    property bool allowNewFolder: true   // "Create new folder..." beside "Use this folder"
     signal pickFolder(string dir_path)
     signal newFolderRequested(string parent_path)
     readonly property string currentFolder: folderModel.folder
@@ -103,9 +104,9 @@ FocusScope {
         return out;
     }
     // picking a folder: the buttons at the bottom
-    readonly property var folderButtons: pickFolders
-        ? [ { "t": qsTr("Use this folder") + api.tr, "act": "use" }, { "t": qsTr("Create new folder...") + api.tr, "act": "new" } ]
-        : []
+    readonly property var folderButtons: !pickFolders ? []
+        : allowNewFolder ? [ { "t": qsTr("Use this folder") + api.tr, "act": "use" }, { "t": qsTr("Create new folder...") + api.tr, "act": "new" } ]
+        : [ { "t": qsTr("Use this folder") + api.tr, "act": "use" } ]
     function jump(entry) {
         if (entry.act === "use") {
             root.remember();
@@ -454,7 +455,7 @@ FocusScope {
                     text: (root.onDrives
                         ? qsTr("A  Open     B  Close     LB  Last folder     Y  Quick jumps")
                         : qsTr("A  Open     B  Up     X  Close     LB  Last folder     RB  Drives     Y  Quick jumps"))
-                        + (root.pickFolders ? qsTr("     ▾  Use this folder / Create new") : "") + api.tr
+                        + (root.pickFolders ? (root.allowNewFolder ? qsTr("     ▾  Use this folder / Create new") : qsTr("     ▾  Use this folder")) : "") + api.tr
                     color: "#bbb"
                     font.family: globalFonts.sans
                     font.pixelSize: vpx(15)

@@ -34,6 +34,7 @@
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QSettings>
+#include <QUrl>
 #include <QStringBuilder>
 #include <functional>
 #include <unordered_set>
@@ -66,6 +67,58 @@ QStringList metafiles_in(const QString& dir)
 
 // how a layer's values go onto a game
 enum class Mode { MediaOnly, Fill, Replace };
+
+// where scraped and picked art is kept now (as Settings::dataDir)
+QString art_dir()
+{
+    const QSettings ini(paths::writableConfigDir() + QStringLiteral("/pegasusx.ini"), QSettings::IniFormat);
+    QString base = QDir::cleanPath(ini.value(QStringLiteral("data/dir")).toString());
+    if (base.isEmpty() || base == QLatin1String("."))
+        base = paths::writableConfigDir();
+    return QFileInfo(base).fileName().compare(QLatin1String("downloaded_media"), Qt::CaseInsensitive) == 0
+        ? base : base + QStringLiteral("/downloaded_media");
+}
+
+// A file a layer names that isn't there (moved with the art folder, or
+// deleted): found again by its last parts (<system>/<kind>/<file>) in the art
+// folder, else left out, so it never hides the art the game has elsewhere
+QString s_art;  // art_dir(), read once per library read (apply())
+
+QStringList existing_files(const QStringList& files, const QString& game_title, int& fixed, int& dropped)
+{
+    const QString& art = s_art;
+    QStringList out;
+    for (const QString& f : files) {
+        QString local = f;
+        if (local.startsWith(QLatin1String("file:")))
+            local = QUrl(f).toLocalFile();
+        if (local.isEmpty() || local.contains(QLatin1String("://")) || !local.startsWith(QLatin1Char('/'))
+                || QFileInfo::exists(local)) {
+            out.append(f);
+            continue;
+        }
+        const QStringList parts = local.split(QLatin1Char('/'), Qt::SkipEmptyParts);
+        QString found;
+        for (int keep = 3; keep >= 2 && found.isEmpty(); keep--) {
+            if (parts.size() < keep)
+                continue;
+            const QString candidate = art + QLatin1Char('/') + parts.mid(parts.size() - keep).join(QLatin1Char('/'));
+            if (QFileInfo::exists(candidate))
+                found = candidate;
+        }
+        if (!found.isEmpty()) {
+            out.append(found);
+            fixed++;
+            continue;
+        }
+        dropped++;
+        Log::warning(LOG_TAG, LOGMSG("`%1`: `%2` isn't there, left out").arg(game_title, local));
+    }
+    return out;
+}
+
+int s_fixed = 0;    // missing files found again in the art folder
+int s_dropped = 0;  // missing files left out
 
 void apply_game(model::Game& live, const model::Game& over, Mode mode)
 {
@@ -111,8 +164,9 @@ void apply_game(model::Game& live, const model::Game& over, Mode mode)
         live.setLaunchCmd(over.launchCmd());
 
     // art: replace: the layer's files instead of the live ones; else after them
+    // (only files that are there: a missing one keeps the game's own art)
     for (const AssetType type : all_asset_types()) {
-        const QStringList& files = over.assets().get(type);
+        const QStringList files = existing_files(over.assets().get(type), live.title(), s_fixed, s_dropped);
         if (files.isEmpty())
             continue;
         if (replace) {
@@ -249,6 +303,7 @@ void apply(const std::vector<model::Collection*>& collections, const std::vector
 
     QElapsedTimer timer;
     timer.start();
+    s_art = art_dir();
     HashMap<QString, model::Game*> by_file;
     for (model::Game* const game : games) {
         for (const model::GameFile* const file : game->filesModel()->entries()) {
@@ -274,6 +329,9 @@ void apply(const std::vector<model::Collection*>& collections, const std::vector
     // 2. your edits and scraped data
     apply_layer(overrides_dir, Mode::Replace, QStringLiteral("Overrides"), by_file, colls,
         [](const model::Game&) { return true; });
+    if (s_fixed > 0 || s_dropped > 0)
+        Log::info(LOG_TAG, LOGMSG("Art files that moved: %1 found again, %2 not there (left out)").arg(s_fixed).arg(s_dropped));
+    s_fixed = s_dropped = 0;
     Log::info(LOG_TAG, LOGMSG("Applied in %1 ms").arg(timer.elapsed()));
 }
 

@@ -39,6 +39,23 @@ FocusScope {
     opacity: focus ? 1.0 : 0.0
     Behavior on opacity { PropertyAnimation { duration: 150 } }
 
+    // a folder picked (by itself, or by its metadata file)
+    function addFolder(dir_path) {
+        Internal.settings.addGameDir(dir_path);
+        list.focus = true;
+        // Pegasus X: a ROM folder without metadata: its games listed
+        if (!Internal.settings.folderHasMetadata(dir_path)) {
+            var systems = Internal.settings.romFolderSystems(dir_path);
+            if (systems.length > 0) {
+                romDialog.openFor(dir_path, systems);
+            }
+            else {
+                romDialog.openFor(dir_path, []);
+                romDialog.result = qsTr("No games were found in %1 for a system Pegasus X knows. Name the folder (or the folders in it) after the system, like snes, psx or windows, as ES-DE does.").arg(dir_path) + api.tr;
+            }
+        }
+    }
+
     function closeMaybe() {
         if (mSettingsChanged)
             reloadDialog.focus = true;
@@ -218,6 +235,12 @@ FocusScope {
     FilePicker {
         id: filePicker
 
+        // Pegasus X: a folder with games can be picked as it is ("Use this
+        // folder"), not only by its metadata file
+        pickFolders: true
+        allowNewFolder: false
+        infoText: qsTr("Open the folder with your games and pick \"Use this folder\" at the bottom (or select its metadata.pegasus.txt). A folder without a metadata file gets its games listed for you.") + api.tr
+
         enabled: focus
 
         visible: opacity > 0.01
@@ -225,16 +248,8 @@ FocusScope {
         Behavior on opacity { PropertyAnimation { duration: 300 } }
 
         onCancel: list.focus = true
-        onPick: {
-            Internal.settings.addGameDir(dir_path);
-            list.focus = true;
-            // Pegasus X: a ROM folder without metadata: its games listed
-            if (!Internal.settings.folderHasMetadata(dir_path)) {
-                var systems = Internal.settings.romFolderSystems(dir_path);
-                if (systems.length > 0)
-                    romDialog.openFor(dir_path, systems);
-            }
-        }
+        onPick: root.addFolder(dir_path)
+        onPickFolder: root.addFolder(dir_path)
     }
 
 
