@@ -1385,7 +1385,13 @@ void Scraper::libretroArt()
                 }
             }
             if (found.isEmpty()) {
-                const QString region = region_of(names.first());
+                // the region of the first name that has one (Hasheous' names have none)
+                QString region;
+                for (const QString& name : names) {
+                    region = region_of(name);
+                    if (!region.isEmpty())
+                        break;
+                }
                 int best = 0;
                 for (const QString& file : list) {
                     const QString stem = file.left(file.size() - 4);
