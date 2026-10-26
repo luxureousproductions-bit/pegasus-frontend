@@ -528,6 +528,13 @@ QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& 
     return { out, out_ext };
 }
 
+// a URL as it's logged: ScreenScraper's media links carry the developer
+// and user passwords in their query, so the query never goes to the log
+QString safe_url(const QUrl& url)
+{
+    return url.toString(QUrl::RemoveQuery | QUrl::RemoveUserInfo);
+}
+
 QString safe_file_name(QString name)
 {
     static const QRegularExpression rx_bad(QStringLiteral("[\\\\/:*?\"<>|]"));
@@ -871,7 +878,7 @@ void Scraper::prefetchThumbs(const QVariantList& candidates, std::function<void(
             }
             else if (status != 200) {
                 c.insert(QStringLiteral("thumbError"), status);
-                Log::warning(LOG_TAG, LOGMSG("Picture `%1`: %2").arg(url).arg(status));
+                Log::warning(LOG_TAG, LOGMSG("Picture `%1`: %2").arg(safe_url(QUrl(url))).arg(status));
             }
             (*list)[i] = c;
             if (--(*pending) == 0) {
@@ -1686,11 +1693,11 @@ void Scraper::downloadNext()
         if (status != 200 || body.isEmpty()) {
             m_picture_failures++;
             m_picture_error = status;
-            note(LOGMSG("Download failed (%1): %2").arg(status).arg(media.url.toString()));
+            note(LOGMSG("Download failed (%1): %2").arg(status).arg(safe_url(media.url)));
             downloadNext();
             return;
         }
-        note(LOGMSG("Downloaded %1 (%2 KB) -> %3").arg(media.folder).arg(body.size() / 1024).arg(media.url.toString()));
+        note(LOGMSG("Downloaded %1 (%2 KB) -> %3").arg(media.folder).arg(body.size() / 1024).arg(safe_url(media.url)));
         QString ext = media.ext.toLower();
         if (ext.isEmpty())
             ext = QStringLiteral("png");
