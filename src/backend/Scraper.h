@@ -124,6 +124,11 @@ private:
     int m_not_found = 0;
     int m_failed = 0;
     int m_run = 0;
+    QVariantMap m_match;   ///< what the game was matched to (source, id, name)
+    QString m_md5;         ///< its file's MD5, when one was made
+    void setMatch(const QString& source, const QString& id, const QString& name);
+    void recordMatch(const Job& job);
+    static QString indexPath();
     QSet<QNetworkReply*> m_replies;   ///< requests on their way (Stop aborts them)
     std::atomic<bool> m_cancel_hash { false };
     int m_transport_streak = 0;  ///< requests in a row with no answer

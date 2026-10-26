@@ -1047,6 +1047,8 @@ void Scraper::next()
     m_current = job.title;
     m_changes.clear();
     m_media.clear();
+    m_match.clear();
+    m_md5.clear();
     m_got.clear();
     m_igdb_done = false;
     m_mix_done = false;
@@ -1105,6 +1107,61 @@ void Scraper::next()
     watcher->setFuture(QtConcurrent::run([path, max_bytes, cancel]{ return md5_of(path, max_bytes, cancel); }));
 }
 
+// the library index (v1): what each game was matched to, by its file: the
+// source, its id for the game, the name it has there, the file's MD5 when one
+// was made, and when. Read by later runs and by the Library page.
+QString Scraper::indexPath()
+{
+    return paths::writableConfigDir() + QStringLiteral("/metadata/library-index.json");
+}
+
+void Scraper::setMatch(const QString& source, const QString& id, const QString& name)
+{
+    if (id.isEmpty() || id == QLatin1String("0"))
+        return;
+    m_match = QVariantMap {
+        { QStringLiteral("source"), source },
+        { QStringLiteral("id"), id },
+        { QStringLiteral("name"), name },
+    };
+}
+
+void Scraper::recordMatch(const Job& job)
+{
+    if (job.path.isEmpty() || (m_match.isEmpty() && m_md5.isEmpty()))
+        return;
+    QJsonObject root;
+    {
+        QFile file(indexPath());
+        if (file.open(QIODevice::ReadOnly))
+            root = QJsonDocument::fromJson(file.readAll()).object();
+    }
+    root[QStringLiteral("version")] = 1;
+    QJsonObject games = root.value(QStringLiteral("games")).toObject();
+    QJsonObject entry = games.value(job.path).toObject();
+    entry[QStringLiteral("collection")] = job.collection;
+    if (!m_md5.isEmpty())
+        entry[QStringLiteral("md5")] = m_md5;
+    if (!m_match.isEmpty()) {
+        // one entry per source: an IGDB match doesn't drop the ScreenScraper one
+        QJsonObject ids = entry.value(QStringLiteral("ids")).toObject();
+        ids[m_match.value(QStringLiteral("source")).toString()] = QJsonObject {
+            { QStringLiteral("id"), m_match.value(QStringLiteral("id")).toString() },
+            { QStringLiteral("name"), m_match.value(QStringLiteral("name")).toString() },
+        };
+        entry[QStringLiteral("ids")] = ids;
+        entry[QStringLiteral("source")] = m_match.value(QStringLiteral("source")).toString();
+    }
+    entry[QStringLiteral("scraped")] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    games[job.path] = entry;
+    root[QStringLiteral("games")] = games;
+    QDir().mkpath(QFileInfo(indexPath()).absolutePath());
+    QSaveFile file(indexPath());
+    if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
+            || !file.commit())
+        note(LOGMSG("Couldn't write `%1`").arg(indexPath()));
+}
+
 // several requests in a row without an answer (no connection, servers
 // down): the run stops with the reason, instead of going through every
 // game as "not found"
@@ -1159,6 +1216,7 @@ void Scraper::get(const QUrl& url, const QByteArray& auth, int tries_left,
 void Scraper::screenScraper(const QString& md5)
 {
     const Job& job = m_jobs[m_index];
+    m_md5 = md5;
     QUrlQuery query;
     query.addQueryItem(QStringLiteral("devid"), m_dev_id);
     query.addQueryItem(QStringLiteral("devpassword"), m_dev_password);
@@ -1248,6 +1306,8 @@ void Scraper::screenScraper(const QString& md5)
 void Scraper::parseScreenScraper(const QJsonObject& game)
 {
     const Job& job = m_jobs[m_index];
+    setMatch(QStringLiteral("screenscraper"), game.value(QStringLiteral("id")).toVariant().toString(),
+             text_of(game.value(QStringLiteral("noms")).toArray().at(0).toObject()));
     const bool overwrite = m_settings.value(QStringLiteral("overwrite")).toBool();
     const QString region = m_settings.value(QStringLiteral("region")).toString();
     const QString language = m_settings.value(QStringLiteral("language")).toString();
@@ -1573,6 +1633,9 @@ void Scraper::igdbAuto(bool after_other)
 void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
 {
     const Job& job = m_jobs[m_index];
+    if (!after_other)
+        setMatch(QStringLiteral("igdb"), QString::number(game.value(QStringLiteral("id")).toInt()),
+                 game.value(QStringLiteral("name")).toString());
     note(LOGMSG("IGDB: using \"%1\"%2").arg(game.value(QStringLiteral("name")).toString())
          .arg(after_other ? QStringLiteral(" for what's still missing") : QString()));
     const bool overwrite = m_settings.value(QStringLiteral("overwrite")).toBool();
@@ -2091,7 +2154,7 @@ void Scraper::save()
     }
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
 #ifdef WITH_COMPAT_ESDE
-    const QString error = providers::esde::save_game_metadata(job.collection, job.path, title, m_changes);
+    const QString error = providers::esde::save_game_metadata(job.collection, job.path, title, m_changes, true);
 #else
     // metadata editing is Android only for now
     const QString error = tr("saving isn't supported on this platform yet");
@@ -2105,6 +2168,7 @@ void Scraper::save()
     }
     m_saved++;
     m_last_changes = m_changes;
+    recordMatch(job);
     QStringList what;
     if (m_changes.contains(QStringLiteral("description")) || m_changes.contains(QStringLiteral("developer")))
         what.append(tr("details"));

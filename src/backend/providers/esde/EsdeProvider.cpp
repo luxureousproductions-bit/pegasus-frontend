@@ -2239,21 +2239,27 @@ struct MetaFile {
         return -1;
     }
 
-    /// Adds Pegasus X's own marker of what was edited (ES-DE import files)
-    void mark_edited(size_t block_index, const QStringList& keys) {
+    /// Pegasus X's own markers of who wrote what: x-pegasusx-edited (you,
+    /// in the editor: wins, and a key listed without a value is a field you
+    /// cleared) and x-pegasusx-scraped (the scraper)
+    void mark(size_t block_index, const QString& marker, const QStringList& add, const QStringList& remove) {
         QStringList all;
-        if (const MetaEntry* e = blocks.at(block_index).entry(QStringLiteral("x-pegasusx-edited"))) {
+        if (const MetaEntry* e = blocks.at(block_index).entry(marker)) {
             for (const QString& value : e->values) {
                 for (const QString& k : value.split(QLatin1Char(','), QString::SkipEmptyParts))
                     all.append(k.trimmed());
             }
         }
-        for (const QString& k : keys) {
+        for (const QString& k : remove)
+            all.removeAll(k);
+        for (const QString& k : add) {
             if (!all.contains(k))
                 all.append(k);
         }
-        set_entry(block_index, { QStringLiteral("x-pegasusx-edited") }, QStringLiteral("x-pegasusx-edited"),
-                  { all.join(QStringLiteral(", ")) });
+        set_entry(block_index, { marker }, marker, { all.join(QStringLiteral(", ")) });
+    }
+    void mark_edited(size_t block_index, const QStringList& keys) {
+        mark(block_index, QStringLiteral("x-pegasusx-edited"), keys, {});
     }
 
     /// Adds a game block with a launch entry to the end of a collection's part of the file
@@ -3314,7 +3320,8 @@ QStringList value_lines(const QString& key, const QVariant& value, const QDir& b
     return text.split(QLatin1Char('\n'));
 }
 
-QString apply_changes(MetaFile& file, size_t block_index, const QVariantMap& changes, const QString& header_key)
+QString apply_changes(MetaFile& file, size_t block_index, const QVariantMap& changes, const QString& header_key,
+                      bool scraped = false)
 {
     QStringList edited;
     const QDir base(file.dir);
@@ -3330,9 +3337,22 @@ QString apply_changes(MetaFile& file, size_t block_index, const QVariantMap& cha
         file.set_entry(block_index, aliases_of(key), key, value_lines(key, it.value(), base));
         edited.append(key);
     }
-    // marked as yours, so importing from ES-DE again never overwrites it
-    if (!file.blocks.at(block_index).is_collection)
-        file.mark_edited(block_index, edited);
+    // marked as yours (or the scraper's): the last one to write a field owns it
+    if (!file.blocks.at(block_index).is_collection) {
+        QStringList scraped_keys;
+        for (const QString& k : edited) {
+            if (!k.startsWith(QLatin1String("x-pegasusx-")))
+                scraped_keys.append(k);
+        }
+        if (scraped) {
+            file.mark(block_index, QStringLiteral("x-pegasusx-scraped"), scraped_keys, {});
+            file.mark(block_index, QStringLiteral("x-pegasusx-edited"), {}, scraped_keys);
+        }
+        else {
+            file.mark(block_index, QStringLiteral("x-pegasusx-edited"), edited, {});
+            file.mark(block_index, QStringLiteral("x-pegasusx-scraped"), {}, edited);
+        }
+    }
     return file.save();
 }
 // title without region/version tags and punctuation, to match your entry
@@ -3476,7 +3496,7 @@ MetadataLocation metadata_location(const QString& collection_name, const QString
 
 
 QString save_game_metadata(const QString& collection_name, const QString& game_path,
-                           const QString& game_title, const QVariantMap& changes)
+                           const QString& game_title, const QVariantMap& changes, bool scraped)
 {
     split_legacy_edits_file();
     if (changes.isEmpty())
@@ -3491,7 +3511,7 @@ QString save_game_metadata(const QString& collection_name, const QString& game_p
     const int block_index = override_game_block(file, coll_index, wanted, game_title);
     if (block_index < 0)
         return QStringLiteral("Could not add `%1` to `%2`").arg(game_title, file.path);
-    const QString error = apply_changes(file, static_cast<size_t>(block_index), changes, QStringLiteral("title"));
+    const QString error = apply_changes(file, static_cast<size_t>(block_index), changes, QStringLiteral("title"), scraped);
     if (error.isEmpty())
         Log::info(QStringLiteral("Metadata"), LOGMSG("`%1` saved in `%2`").arg(game_title, file.path));
     return error;

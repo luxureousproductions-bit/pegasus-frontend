@@ -34,6 +34,7 @@
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
+#include <QSet>
 #include <QSettings>
 #include <QUrl>
 #include <QStringBuilder>
@@ -138,15 +139,47 @@ void apply_game(model::Game& live, const model::Game& over, Mode mode)
             current = value;
     };
 
+    // who wrote what: you (in the editor) or the scraper
+    const auto marker_keys = [&over](const char* marker) {
+        QSet<QString> out;
+        const QStringList values = over.extraMap().value(QLatin1String(marker)).toStringList()
+            .join(QLatin1Char(',')).split(QLatin1Char(','), Qt::SkipEmptyParts);
+        for (const QString& key : values)
+            out.insert(key.trimmed().toLower());
+        return out;
+    };
+    const QSet<QString> edited = marker_keys("pegasusx-edited");
+    const QSet<QString> scraped = marker_keys("pegasusx-scraped");
+
     // the title: an override block is headed by the title it was made under,
     // so only a block that says it changed the title replaces it
-    const QStringList edited = over.extraMap().value(QStringLiteral("pegasusx-edited")).toStringList()
-        .join(QLatin1Char(',')).split(QLatin1Char(','), Qt::SkipEmptyParts);
-    bool title_edited = false;
-    for (const QString& key : edited)
-        title_edited = title_edited || key.trimmed().compare(QLatin1String("title"), Qt::CaseInsensitive) == 0;
-    if (replace && title_edited && !over.title().isEmpty() && over.title() != live.title())
+    const bool title_changed = edited.contains(QStringLiteral("title")) || scraped.contains(QStringLiteral("title"));
+    if (replace && title_changed && !over.title().isEmpty() && over.title() != live.title())
         live.setTitle(over.title());
+
+    // a field you cleared in the editor (listed as edited, with no value):
+    // cleared here too, instead of the metadata file's value showing again
+    if (replace && details) {
+        const auto cleared = [&edited](const char* key) { return edited.contains(QLatin1String(key)); };
+        if (cleared("summary") && over.summary().isEmpty())
+            live.setSummary(QString());
+        if (cleared("description") && over.description().isEmpty())
+            live.setDescription(QString());
+        if (cleared("developer") && over.developerListConst().isEmpty())
+            live.developerList().clear();
+        if (cleared("publisher") && over.publisherListConst().isEmpty())
+            live.publisherList().clear();
+        if (cleared("genre") && over.genreListConst().isEmpty())
+            live.genreList().clear();
+        if (cleared("tag") && over.tagListConst().isEmpty())
+            live.tagList().clear();
+        if (cleared("players") && over.playerCount() <= 1)
+            live.setPlayerCount(1);
+        if (cleared("release") && !over.releaseDate().isValid())
+            live.setReleaseDate(QDate());
+        if (cleared("rating") && over.rating() <= 0.f)
+            live.setRating(0.f);
+    }
     if (details && !over.sortBy().isEmpty() && over.sortBy() != over.title() && (replace || live.sortBy().isEmpty() || live.sortBy() == live.title()))
         live.setSortBy(over.sortBy());
     take_text(over.summary(), live.summary(), [&live](QString v){ live.setSummary(std::move(v)); });
@@ -184,7 +217,8 @@ void apply_game(model::Game& live, const model::Game& over, Mode mode)
 
     // extras (manuals, removed art, ...): the manual is media, the rest details
     for (auto it = over.extraMap().cbegin(); it != over.extraMap().cend(); ++it) {
-        if (it.key() == QLatin1String("pegasusx-source") || it.key() == QLatin1String("pegasusx-edited"))
+        if (it.key() == QLatin1String("pegasusx-source") || it.key() == QLatin1String("pegasusx-edited")
+                || it.key() == QLatin1String("pegasusx-scraped"))
             continue;
         if (!details && it.key() != QLatin1String("manual"))
             continue;

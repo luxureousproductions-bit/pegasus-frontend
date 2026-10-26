@@ -191,8 +191,10 @@ MetadataLocation metadata_location(const QString& collection_name, const QString
 /// publisher, genre (lists), release, players, rating, summary, description,
 /// assets.<kind>, x-manual; an empty value removes the field. In an ES-DE
 /// import the change is marked, so importing again keeps it.
+/// (scraped: written by the scraper, so marked x-pegasusx-scraped instead of
+/// x-pegasusx-edited)
 QString save_game_metadata(const QString& collection_name, const QString& game_path,
-                           const QString& game_title, const QVariantMap& changes);
+                           const QString& game_title, const QVariantMap& changes, bool scraped = false);
 /// The same for a collection: name, shortname, summary, description, assets.<kind>
 QString save_collection_metadata(const QString& collection_name, const QVariantMap& changes);
 /// Pegasus X's old edits file (all collections in one, which put games in
