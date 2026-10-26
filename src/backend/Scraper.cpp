@@ -385,6 +385,131 @@ QString normalized(const QString& text)
     return out;
 }
 
+// a name without its (tags) and [tags], normalized: "Chrono Trigger (USA)" -> "chronotrigger"
+QString plain_key(const QString& name)
+{
+    static const QRegularExpression rx_tags(QStringLiteral("\\s*[\\(\\[][^\\)\\]]*[\\)\\]]"));
+    QString t = name;
+    t.remove(rx_tags);
+    return normalized(t);
+}
+
+// how sure a match is, 0..100: the same name is 100, else the share of
+// words in common (so "Mario Kart 64" vs "Mario Kart 8" stays low)
+int name_score(const QString& wanted, const QString& found)
+{
+    if (plain_key(wanted) == plain_key(found))
+        return 100;
+    const auto words = [](const QString& text) {
+        static const QRegularExpression rx_tags(QStringLiteral("\\s*[\\(\\[][^\\)\\]]*[\\)\\]]"));
+        QString t = text.toLower();
+        t.remove(rx_tags);
+        QSet<QString> out;
+        QString cur;
+        for (const QChar c : t + QLatin1Char(' ')) {
+            if (c.isLetterOrNumber()) {
+                cur += c;
+            }
+            else if (!cur.isEmpty()) {
+                if (cur != QLatin1String("the") && cur != QLatin1String("of") && cur != QLatin1String("a"))
+                    out.insert(cur);
+                cur.clear();
+            }
+        }
+        return out;
+    };
+    const QSet<QString> a = words(wanted);
+    const QSet<QString> b = words(found);
+    if (a.isEmpty() || b.isEmpty())
+        return 0;
+    const int common = QSet<QString>(a).intersect(b).size();
+    return static_cast<int>(90.0 * common / qMax(a.size(), b.size()));
+}
+
+// libretro's thumbnail folder of a system (ES-DE's names), empty if none
+QString libretro_system(const QString& system)
+{
+    static const QHash<QString, QString> map {
+        { "snes", "Nintendo - Super Nintendo Entertainment System" },
+        { "snesna", "Nintendo - Super Nintendo Entertainment System" },
+        { "sfc", "Nintendo - Super Nintendo Entertainment System" },
+        { "nes", "Nintendo - Nintendo Entertainment System" },
+        { "famicom", "Nintendo - Nintendo Entertainment System" },
+        { "fds", "Nintendo - Family Computer Disk System" },
+        { "n64", "Nintendo - Nintendo 64" },
+        { "gb", "Nintendo - Game Boy" },
+        { "gbc", "Nintendo - Game Boy Color" },
+        { "gba", "Nintendo - Game Boy Advance" },
+        { "nds", "Nintendo - Nintendo DS" },
+        { "n3ds", "Nintendo - Nintendo 3DS" },
+        { "gc", "Nintendo - GameCube" },
+        { "wii", "Nintendo - Wii" },
+        { "virtualboy", "Nintendo - Virtual Boy" },
+        { "pokemini", "Nintendo - Pokemon Mini" },
+        { "satellaview", "Nintendo - Satellaview" },
+        { "sufami", "Nintendo - Sufami Turbo" },
+        { "megadrive", "Sega - Mega Drive - Genesis" },
+        { "genesis", "Sega - Mega Drive - Genesis" },
+        { "mastersystem", "Sega - Master System - Mark III" },
+        { "gamegear", "Sega - Game Gear" },
+        { "segacd", "Sega - Mega-CD - Sega CD" },
+        { "megacd", "Sega - Mega-CD - Sega CD" },
+        { "sega32x", "Sega - 32X" },
+        { "saturn", "Sega - Saturn" },
+        { "dreamcast", "Sega - Dreamcast" },
+        { "sg-1000", "Sega - SG-1000" },
+        { "psx", "Sony - PlayStation" },
+        { "ps2", "Sony - PlayStation 2" },
+        { "psp", "Sony - PlayStation Portable" },
+        { "psvita", "Sony - PlayStation Vita" },
+        { "pcengine", "NEC - PC Engine - TurboGrafx 16" },
+        { "tg16", "NEC - PC Engine - TurboGrafx 16" },
+        { "pcenginecd", "NEC - PC Engine CD - TurboGrafx-CD" },
+        { "tg-cd", "NEC - PC Engine CD - TurboGrafx-CD" },
+        { "supergrafx", "NEC - PC Engine SuperGrafx" },
+        { "pcfx", "NEC - PC-FX" },
+        { "atari2600", "Atari - 2600" },
+        { "atari5200", "Atari - 5200" },
+        { "atari7800", "Atari - 7800" },
+        { "atarilynx", "Atari - Lynx" },
+        { "atarijaguar", "Atari - Jaguar" },
+        { "atarist", "Atari - ST" },
+        { "ngp", "SNK - Neo Geo Pocket" },
+        { "ngpc", "SNK - Neo Geo Pocket Color" },
+        { "neogeocd", "SNK - Neo Geo CD" },
+        { "wonderswan", "Bandai - WonderSwan" },
+        { "wonderswancolor", "Bandai - WonderSwan Color" },
+        { "colecovision", "Coleco - ColecoVision" },
+        { "intellivision", "Mattel - Intellivision" },
+        { "vectrex", "GCE - Vectrex" },
+        { "msx", "Microsoft - MSX" },
+        { "msx2", "Microsoft - MSX2" },
+        { "3do", "The 3DO Company - 3DO" },
+        { "c64", "Commodore - 64" },
+        { "amiga", "Commodore - Amiga" },
+        { "dos", "DOS" },
+        { "scummvm", "ScummVM" },
+    };
+    return map.value(system);
+}
+
+// libretro's file name for a game name: & * / : ` < > ? \ | are _
+QString libretro_file_name(const QString& name)
+{
+    QString out = name;
+    for (const QChar c : QStringLiteral("&*/:`<>?\\|"))
+        out.replace(c, QLatin1Char('_'));
+    return out;
+}
+
+// the region of a ROM name, as No-Intro writes it: "(USA)", "(Europe)", ...
+QString region_of(const QString& name)
+{
+    static const QRegularExpression rx(QStringLiteral("\\((USA|Europe|Japan|World|[A-Z][a-z]+(?:, [A-Z][a-z]+)*)\\)"));
+    const auto m = rx.match(name);
+    return m.hasMatch() ? m.captured(1) : QString();
+}
+
 // the best entry of a list for the region / language: yours, then world,
 // USA, ScreenScraper's own, Europe, Japan, then whatever is first
 QJsonObject pick(const QJsonArray& list, const QString& attribute, const QString& wanted)
@@ -626,6 +751,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_stop = false;
     m_cancel_hash = false;
     m_transport_streak = 0;
+    m_libretro_lists.clear();
     m_running = true;
     m_run++;  // answers still on their way from the last run are ignored
     note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, IGDB login: %7, SteamGridDB key: %8)")
@@ -698,6 +824,12 @@ void Scraper::search(const QString& name)
         else
             why = tr("no source is set up (add an IGDB login or a SteamGridDB key)");
         note(LOGMSG("%1: %2").arg(name, why));
+        if (!libretro_system(job.system).isEmpty() && m_settings.value(QStringLiteral("useLibretro"), true).toBool()) {
+            // still: the free pictures (libretro's thumbnails), by checksum or name
+            m_not_found--;
+            identify([this]{ fillMore(); });
+            return;
+        }
         finishGame(why, false);
     }
 }
@@ -1049,6 +1181,10 @@ void Scraper::next()
     m_media.clear();
     m_match.clear();
     m_md5.clear();
+    m_hash_name.clear();
+    m_known_igdb_id = 0;
+    m_identified = false;
+    m_libretro_done = false;
     m_got.clear();
     m_igdb_done = false;
     m_mix_done = false;
@@ -1072,39 +1208,239 @@ void Scraper::next()
     const QString source = m_settings.value(QStringLiteral("source")).toString();
     const bool ss_ok = source == QLatin1String("screenscraper") && !m_dev_id.isEmpty()
         && screenscraper_systems().contains(job.system);
-    if (source == QLatin1String("igdb") && igdbReady()) {
-        igdbAuto(false);
-        return;
-    }
     if (!ss_ok) {
-        // ScreenScraper can't: IGDB has details too, SteamGridDB only art
-        if (source != QLatin1String("steamgriddb") && igdbReady())
-            igdbAuto(false);
-        else
-            steamGridDb();
+        // who the game is by its checksum first (keyless), then IGDB (details
+        // and art), then the art sources
+        identify([this, source]{
+            if (source != QLatin1String("steamgriddb") && igdbReady())
+                igdbAuto(false);
+            else
+                fillMore();
+        });
         return;
     }
 
-    // a checksum first, if the file is small enough (off the main thread)
-    // (not of an archive: ScreenScraper knows the ROM inside, not the .zip)
+    hashThen([this](const QString& md5){ screenScraper(md5); });
+}
+
+// the file's MD5, if it may be made (Use checksums, a file small enough, not
+// an archive: the sources know the ROM inside, not the .zip), off the main
+// thread; empty otherwise
+void Scraper::hashThen(std::function<void(const QString&)> then)
+{
+    const Job& job = m_jobs[m_index];
     static const QStringList archives { QStringLiteral("zip"), QStringLiteral("7z"), QStringLiteral("rar") };
     const bool use_hash = m_settings.value(QStringLiteral("useHashes")).toBool()
         && !job.path.startsWith(QLatin1String("android:")) && QFileInfo(job.path).isFile()
         && !archives.contains(QFileInfo(job.path).suffix().toLower());
     if (!use_hash) {
-        screenScraper(QString());
+        then(QString());
         return;
     }
     const qint64 max_bytes = static_cast<qint64>(m_settings.value(QStringLiteral("hashMaxMiB")).toInt()) * 1024 * 1024;
     const QString path = job.path;
+    const int run = m_run;
+    const size_t index = m_index;
     auto* const watcher = new QFutureWatcher<QString>(this);
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher]{
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, then, run, index]{
         const QString md5 = watcher->result();
         watcher->deleteLater();
-        screenScraper(md5);
+        if (run != m_run || index != m_index)
+            return;
+        then(md5);
     });
     const std::atomic<bool>* cancel = &m_cancel_hash;
     watcher->setFuture(QtConcurrent::run([path, max_bytes, cancel]{ return md5_of(path, max_bytes, cancel); }));
+}
+
+// Hasheous (no key): the game's name and IGDB id by its checksum, so IGDB
+// and the thumbnails are looked up exactly instead of by a guessed name
+void Scraper::identify(std::function<void()> then)
+{
+    if (m_identified || !m_settings.value(QStringLiteral("useHasheous"), true).toBool()) {
+        then();
+        return;
+    }
+    m_identified = true;
+    hashThen([this, then](QString md5){
+#ifdef PEGASUSX_TESTENV
+        // the test environment's ROMs are made up: a real game's checksum
+        if (!qEnvironmentVariable("PEGASUSX_TEST_MD5").isEmpty())
+            md5 = qEnvironmentVariable("PEGASUSX_TEST_MD5");
+#endif
+        if (md5.isEmpty() || m_stop) {
+            then();
+            return;
+        }
+        m_md5 = md5;
+        const int run = m_run;
+        const size_t index = m_index;
+        const QUrl url(QStringLiteral("https://hasheous.org/api/v1/Lookup/ByHash/md5/") + md5);
+        get(url, {}, 1, [this, then, run, index](int status, const QByteArray& body){
+            if (run != m_run || index != m_index)
+                return;
+            const QJsonDocument doc = QJsonDocument::fromJson(body);
+            const QJsonObject game = doc.isArray() ? doc.array().at(0).toObject() : doc.object();
+            if (status == 200 && !game.isEmpty()) {
+                m_hash_name = game.value(QStringLiteral("name")).toString().trimmed();
+                QStringList sources;
+                for (const QJsonValue& v : game.value(QStringLiteral("metadata")).toArray()) {
+                    const QJsonObject meta = v.toObject();
+                    const QString source = meta.value(QStringLiteral("source")).toString();
+                    sources.append(source);
+                    if (source.compare(QLatin1String("IGDB"), Qt::CaseInsensitive) != 0)
+                        continue;
+                    const QJsonValue id = meta.contains(QStringLiteral("immutableId"))
+                        ? meta.value(QStringLiteral("immutableId")) : meta.value(QStringLiteral("id"));
+                    const int igdb = id.isString() ? id.toString().toInt() : id.toInt();
+                    if (igdb > 0)
+                        m_known_igdb_id = igdb;
+                }
+                note(LOGMSG("Hasheous: \"%1\" (IGDB %2; sources: %3; fields: %4)")
+                     .arg(m_hash_name).arg(m_known_igdb_id)
+                     .arg(sources.isEmpty() ? QStringLiteral("none") : sources.join(QStringLiteral(", ")))
+                     .arg(game.keys().join(QLatin1Char(','))));
+                if (!m_hash_name.isEmpty())
+                    setMatch(QStringLiteral("hasheous"), game.value(QStringLiteral("id")).toVariant().toString(), m_hash_name);
+            }
+            else {
+                note(LOGMSG("Hasheous: answered %1, %2").arg(status)
+                     .arg(status == 404 ? QStringLiteral("checksum not known") : QStringLiteral("no match")));
+            }
+            then();
+        });
+    });
+}
+
+// libretro's thumbnails (no key): the box, screenshot and title screen by the
+// game's No-Intro name (by its checksum, else its file name), from the
+// system's list of names (read once a run)
+void Scraper::libretroArt()
+{
+    m_libretro_done = true;
+    const Job& job = m_jobs[m_index];
+    const QString system = libretro_system(job.system);
+    struct Want { const char* folder_on_server; const char* setting; const char* slot; const char* folder; const char* box; };
+    static const std::vector<Want> wants_all {
+        { "Named_Boxarts", "getCovers", "assets.box_front", "covers", "2d" },
+        { "Named_Snaps", "getScreenshots", "assets.screenshot", "screenshots", "" },
+        { "Named_Titles", "getTitlescreens", "assets.titlescreen", "titlescreens", "" },
+    };
+    auto* const todo = new std::vector<Want>();
+    for (const Want& w : wants_all) {
+        Media probe;
+        probe.slot = QLatin1String(w.slot);
+        probe.kind = QLatin1String(w.box);
+        bool already = false;
+        for (const Media& m : m_media)
+            already = already || (m.slot == probe.slot && m.kind == probe.kind);
+        if (wants(QLatin1String(w.setting)) && !already && slotFree(job, probe))
+            todo->push_back(w);
+    }
+    if (system.isEmpty() || todo->empty()) {
+        delete todo;
+        fillMore();
+        return;
+    }
+    // the names to look for: by checksum, the file's own name, the title
+    const QString file_part = job.path.contains(QLatin1String("://"))
+        ? QUrl::fromPercentEncoding(job.path.toUtf8()).section(QLatin1Char('/'), -1) : job.path;
+    QStringList names;
+    if (!m_hash_name.isEmpty())
+        names.append(m_hash_name);
+    if (!job.path.startsWith(QLatin1String("android:")))
+        names.append(QFileInfo(file_part).completeBaseName());
+    names.append(m_changes.value(QStringLiteral("title"), job.title).toString());
+    names.removeDuplicates();
+
+    const int run = m_run;
+    const size_t index = m_index;
+    auto* const pending = new int(static_cast<int>(todo->size()));
+    const auto one_done = [this, pending, todo, run, index]{
+        if (--(*pending) > 0)
+            return;
+        delete pending;
+        delete todo;
+        if (run != m_run || index != m_index)
+            return;
+        fillMore();
+    };
+    const QString base = QStringLiteral("https://thumbnails.libretro.com/") + system;
+    for (const Want& w : *todo) {
+        const Want want = w;
+        const QString key = system + QLatin1Char('/') + QLatin1String(want.folder_on_server);
+        const auto pick = [this, want, names, base, one_done, run, index](const QStringList& list){
+            if (run != m_run || index != m_index) {
+                one_done();
+                return;
+            }
+            // the exact name first, else the same name in another region
+            // (the ROM's region preferred), else the closest one if it's sure
+            QString found;
+            for (const QString& name : names) {
+                const QString file = libretro_file_name(name) + QStringLiteral(".png");
+                if (list.contains(file)) {
+                    found = file;
+                    break;
+                }
+            }
+            if (found.isEmpty()) {
+                const QString region = region_of(names.first());
+                int best = 0;
+                for (const QString& file : list) {
+                    const QString stem = file.left(file.size() - 4);
+                    int score = 0;
+                    for (const QString& name : names)
+                        score = qMax(score, name_score(name, stem));
+                    if (score < 85)
+                        continue;
+                    if (!region.isEmpty() && region_of(stem) == region)
+                        score += 5;
+                    if (stem.contains(QLatin1String("(Beta")) || stem.contains(QLatin1String("(Proto")))
+                        score -= 10;
+                    if (score > best) {
+                        best = score;
+                        found = file;
+                    }
+                }
+            }
+            note(LOGMSG("libretro: %1: %2").arg(QLatin1String(want.folder_on_server),
+                found.isEmpty() ? QStringLiteral("no match among %1 names").arg(list.size()) : found));
+            if (!found.isEmpty()) {
+                Media media;
+                media.setting = QLatin1String(want.setting);
+                media.slot = QLatin1String(want.slot);
+                media.folder = QLatin1String(want.folder);
+                media.kind = QLatin1String(want.box);
+                media.url = QUrl(base + QLatin1Char('/') + QLatin1String(want.folder_on_server) + QLatin1Char('/')
+                                 + QString::fromLatin1(QUrl::toPercentEncoding(found)));
+                media.ext = QStringLiteral("png");
+                m_media.push_back(media);
+            }
+            one_done();
+        };
+        const auto cached = m_libretro_lists.constFind(key);
+        if (cached != m_libretro_lists.constEnd()) {
+            pick(cached.value());
+            continue;
+        }
+        const QUrl list_url(base + QLatin1Char('/') + QLatin1String(want.folder_on_server) + QLatin1Char('/'));
+        get(list_url, {}, 1, [this, key, pick](int status, const QByteArray& body){
+            // the server's folder page: <a href="Name%20(USA).png">
+            QStringList list;
+            if (status == 200) {
+                static const QRegularExpression rx_href(QStringLiteral("href=\"([^\"?/]+\\.png)\""));
+                auto it = rx_href.globalMatch(QString::fromUtf8(body));
+                while (it.hasNext())
+                    list.append(QUrl::fromPercentEncoding(it.next().captured(1).toUtf8()));
+            }
+            else {
+                note(LOGMSG("libretro: the list of `%1` answered %2").arg(key).arg(status));
+            }
+            m_libretro_lists.insert(key, list);
+            pick(list);
+        });
+    }
 }
 
 // the library index (v1): what each game was matched to, by its file: the
@@ -1512,19 +1848,39 @@ void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonA
     QString clean = name;
     clean.remove(QLatin1Char('"'));
     clean.remove(QLatin1Char('\\'));
-    const auto query_for = [clean](int on_platform) {
-        QString q = QStringLiteral("search \"%1\"; fields name,summary,storyline,first_release_date,"
+    static const QString fields = QStringLiteral("fields name,summary,storyline,first_release_date,"
                                    "total_rating,aggregated_rating,rating,genres.name,game_modes.name,"
                                    "multiplayer_modes.offlinemax,platforms.name,"
                                    "involved_companies.developer,involved_companies.publisher,"
                                    "involved_companies.company.name,cover.image_id,screenshots.image_id,"
-                                   "artworks.image_id,artworks.width,artworks.height;").arg(clean);
+                                   "artworks.image_id,artworks.width,artworks.height;");
+    const auto query_for = [clean](int on_platform) {
+        QString q = QStringLiteral("search \"%1\"; ").arg(clean) + fields;
         if (on_platform > 0)
             q += QStringLiteral(" where platforms = (%1);").arg(on_platform);
         q += QStringLiteral(" limit 10;");
         return q.toUtf8();
     };
     const int tries = m_settings.value(QStringLiteral("retries")).toInt();
+    // known by the file's checksum (Hasheous): that game, no guessing
+    if (m_known_igdb_id > 0) {
+        note(LOGMSG("IGDB: game %1 (known by the file's checksum)").arg(m_known_igdb_id));
+        const QByteArray q = (fields + QStringLiteral(" where id = %1; limit 1;").arg(m_known_igdb_id)).toUtf8();
+        igdbPost(q, [this, done, query_for, platform, tries, clean](int status, const QByteArray& body){
+            const QJsonArray games = igdb_games(status, body);
+            note(igdb_answer(status, body));
+            if (status == 200 && games.isEmpty() && !m_stop) {
+                m_known_igdb_id = 0;  // not there after all: by name
+                igdbPost(query_for(platform), [this, done](int st, const QByteArray& b){
+                    note(igdb_answer(st, b));
+                    done(st, igdb_games(st, b));
+                }, tries);
+                return;
+            }
+            done(status, games);
+        }, tries);
+        return;
+    }
     note(LOGMSG("IGDB: searching \"%1\" (system `%2`, platform %3)").arg(clean, job.system).arg(platform));
     igdbPost(query_for(platform), [this, platform, query_for, tries, done, clean](int status, const QByteArray& body){
         // an error comes back as a list too (of error objects), so only a 200 is a list of games
@@ -1600,6 +1956,8 @@ void Scraper::igdbAuto(bool after_other)
     const Job& job = m_jobs[m_index];
     const bool by_title = m_settings.value(QStringLiteral("useMetadataNames")).toBool() && !job.title_is_file_name;
     QString name = by_title ? job.title : job.search_name;
+    if (!m_hash_name.isEmpty() && !by_title)
+        name = search_name_of(m_hash_name + QStringLiteral(".x"), m_hash_name);  // its No-Intro name, tags off
     if (after_other && m_changes.contains(QStringLiteral("title")))
         name = m_changes.value(QStringLiteral("title")).toString();  // the name the first source found
     igdbFind(name, [this, name, after_other](int status, const QJsonArray& games){
@@ -1616,14 +1974,37 @@ void Scraper::igdbAuto(bool after_other)
         if (status != 200)
             Log::warning(LOG_TAG, LOGMSG("IGDB: %1 for `%2`").arg(status).arg(name));
         if (status == 200 && !games.isEmpty()) {
-            QJsonObject game = games.first().toObject();
+            // the surest match: known by checksum, else the closest name
+            // (on this system's platform if IGDB says so); a weak one is
+            // left alone rather than giving the game another game's art
+            const int platform = igdb_platforms().value(m_jobs[m_index].system, 0);
+            QJsonObject best;
+            int best_score = -1;
             for (const QJsonValue& v : games) {
-                if (normalized(v.toObject().value(QStringLiteral("name")).toString()) == normalized(name)) {
-                    game = v.toObject();
-                    break;
+                const QJsonObject g = v.toObject();
+                int score = m_known_igdb_id > 0 && g.value(QStringLiteral("id")).toInt() == m_known_igdb_id
+                    ? 200 : name_score(name, g.value(QStringLiteral("name")).toString());
+                if (!m_hash_name.isEmpty())
+                    score = qMax(score, name_score(m_hash_name, g.value(QStringLiteral("name")).toString()));
+                if (platform > 0) {
+                    for (const QJsonValue& p : g.value(QStringLiteral("platforms")).toArray()) {
+                        if (p.toObject().value(QStringLiteral("id")).toInt() == platform || p.toInt() == platform)
+                            score += 5;
+                    }
+                }
+                if (score > best_score) {
+                    best_score = score;
+                    best = g;
                 }
             }
-            parseIgdb(game, after_other);
+            const int needed = m_settings.value(QStringLiteral("minMatch"), 60).toInt();
+            if (best_score >= needed) {
+                parseIgdb(best, after_other);
+            }
+            else {
+                note(LOGMSG("IGDB: no sure match for \"%1\" (closest \"%2\", %3 of %4 needed)")
+                     .arg(name, best.value(QStringLiteral("name")).toString()).arg(best_score).arg(needed));
+            }
         }
         fillMore();
     });
@@ -1730,6 +2111,10 @@ void Scraper::fillMore()
     if (!m_igdb_done && igdbReady() && source != QLatin1String("steamgriddb")
             && m_settings.value(QStringLiteral("igdbFill"), true).toBool()) {
         igdbAuto(true);
+        return;
+    }
+    if (!m_libretro_done && m_settings.value(QStringLiteral("useLibretro"), true).toBool()) {
+        libretroArt();
         return;
     }
     if (!m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty()) {

@@ -184,6 +184,27 @@ INI
     sed -i "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g; s/${SGDB_TEST_KEY:-NOKEY}/<key>/g" "$R/logs/11-scrape-igdb.log" "$R/logs/11-scrape-igdb.stdout" 2>/dev/null || true
 fi
 
+# -- a scrape without any login: Hasheous + libretro's thumbnails ----------------------------------
+# (the fixture's ROMs are made up, so Hasheous won't know them: libretro finds the art by file name)
+mkdir -p "$CFG"
+python3 - "$CFG/pegasusx.ini" <<'PY'
+import sys, configparser
+p = sys.argv[1]
+c = configparser.RawConfigParser(); c.optionxform = str
+c.read(p)
+if not c.has_section("scraper"): c.add_section("scraper")
+for k in ("igdbClientId", "igdbClientSecret", "sgdbKey"): c.remove_option("scraper", k)
+c.set("scraper", "source", "screenscraper")
+c.set("scraper", "overwrite", "true")
+with open(p, "w") as f: c.write(f, space_around_delimiters=False)
+PY
+# (Hasheous is asked with a real game's checksum, Banjo-Kazooie (USA), to see its answer)
+start 12-scrape-free "" 60 "PEGASUSX_TEST_SCRAPE=Super Mario World" "PEGASUSX_TEST_MD5=b29599651a13f681c9923d69354bf4a3"
+stop 12-scrape-free
+mkdir -p "$R/scraped-free"
+find "$CFG/downloaded_media/snes" -type f -iname "Super Mario World*" 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-free/files.txt" || true
+grep -h "Scraper\|libretro\|Hasheous\|\[test\]" "$R/logs/12-scrape-free.log" > "$R/scraped-free/scraper.log" || true
+
 # -- summary --------------------------------------------------------------------------------------
 # the metadata files as they are at the end (overrides are written along the way)
 find "$CFG/metadata" -type f 2>/dev/null | while read -r f; do
@@ -210,6 +231,10 @@ done
         echo "    FAILED: ES-DE's screenshot isn't on your own file's Chrono Trigger"
     fi
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game|Imports onto your games" | head -n 5 | sed 's/^/    /'
+    echo
+    echo "## Scrape without a login (Hasheous + libretro)"
+    grep -E "libretro|Hasheous|Saving|not found|no source" "$R/scraped-free/scraper.log" 2>/dev/null | head -n 12 | sed 's/^/    /'
+    sed 's/^/    file: /' "$R/scraped-free/files.txt" 2>/dev/null | sort -u | head -n 8
     echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40

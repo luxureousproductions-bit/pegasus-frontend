@@ -405,6 +405,9 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "overwrite", "text": qsTr("Overwrite files and data") + api.tr });
             out.push({ "kind": "toggle", "key": "useHashes", "text": qsTr("Search using file hashes") + api.tr });
             out.push({ "kind": "toggle", "key": "useMetadataNames", "text": qsTr("Search using metadata names") + api.tr });
+            out.push({ "kind": "toggle", "key": "useHasheous", "text": qsTr("Identify games by checksum (Hasheous, free)") + api.tr });
+            out.push({ "kind": "toggle", "key": "useLibretro", "text": qsTr("Free boxes and screenshots (libretro)") + api.tr });
+            out.push({ "kind": "number", "key": "minMatch", "text": qsTr("How sure a name match must be") + api.tr, "min": 0, "max": 100, "step": 5, "suffix": "%" });
             out.push({ "kind": "toggle", "key": "interactive", "text": qsTr("Interactive mode (pick each match)") + api.tr });
             out.push({ "kind": "toggle", "key": "autoAcceptSingle", "text": qsTr("Auto-accept a single match") + api.tr });
             out.push({ "kind": "section", "text": qsTr("Pictures") + api.tr });

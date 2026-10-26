@@ -1586,6 +1586,12 @@ QVariantMap scraper_defaults()
         { QStringLiteral("hashMaxMiB"), 800 },
         { QStringLiteral("overwrite"), false },
         { QStringLiteral("useHashes"), true },
+        // keyless sources: who the game is by its checksum (Hasheous), free
+        // boxes/screenshots/title screens (libretro), and how sure a match
+        // found by name has to be (0-100) to be used without asking
+        { QStringLiteral("useHasheous"), true },
+        { QStringLiteral("useLibretro"), true },
+        { QStringLiteral("minMatch"), 60 },
         { QStringLiteral("useMetadataNames"), true },
         { QStringLiteral("interactive"), false },
         { QStringLiteral("autoAcceptSingle"), true },
@@ -1894,7 +1900,8 @@ QString Settings::startScraperWith(QObject* collections, bool offline)
         return tr("Enter your SteamGridDB API key in Account settings first.");
     if (!offline && source == QLatin1String("igdb") && !has_igdb)
         return tr("Enter your IGDB Client ID and secret in Account settings first.");
-    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_sgdb && !has_igdb)
+    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_sgdb && !has_igdb
+            && !settings.value(QStringLiteral("useLibretro")).toBool())
         return tr("ScreenScraper isn't in this build yet. Pick IGDB or SteamGridDB, or add their login.");
 
     std::vector<scraper::Job> jobs;
@@ -1969,7 +1976,8 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
     const bool has_igdb = scraper_has_igdb(settings);
-    if (!scraperHasScreenScraper() && !has_sgdb && !has_igdb)
+    // (with none: libretro's free boxes and screenshots only)
+    if (!scraperHasScreenScraper() && !has_sgdb && !has_igdb && !settings.value(QStringLiteral("useLibretro")).toBool())
         return tr("Enter your IGDB or SteamGridDB login in Library > Scraper > Account settings first.");
     if (source == QLatin1String("igdb") && !has_igdb)
         return tr("Enter your IGDB Client ID and secret in Library > Scraper > Account settings first.");

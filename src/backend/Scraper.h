@@ -27,6 +27,7 @@
 #include <vector>
 #include <atomic>
 #include <QPointer>
+#include <QHash>
 #include <QSet>
 
 class QJsonObject;
@@ -124,6 +125,16 @@ private:
     int m_not_found = 0;
     int m_failed = 0;
     int m_run = 0;
+    // keyless sources: Hasheous (who the game is, by its checksum) and
+    // libretro's thumbnails (box, screenshot and title screen by name)
+    void hashThen(std::function<void(const QString&)> then);
+    void identify(std::function<void()> then);
+    void libretroArt();
+    QString m_hash_name;          ///< the game's name by its checksum (Hasheous), eg. "Chrono Trigger (USA)"
+    int m_known_igdb_id = 0;      ///< its IGDB id by its checksum
+    bool m_identified = false;
+    bool m_libretro_done = false;
+    QHash<QString, QStringList> m_libretro_lists;  ///< a system's thumbnail names, per kind (this run)
     QVariantMap m_match;   ///< what the game was matched to (source, id, name)
     QString m_md5;         ///< its file's MD5, when one was made
     void setMatch(const QString& source, const QString& id, const QString& name);
