@@ -19,6 +19,7 @@
 #include "PegasusAssets.h"
 #include <QStringBuilder>
 #include <QSet>
+#include <QDir>
 #include <QFileInfo>
 
 #include <QUrl>
@@ -163,16 +164,31 @@ void Assets::remove_listed(const QStringList& entries)
     static const HashMap<QString, AssetType> kinds {
         { QStringLiteral("box_front"), AssetType::BOX_FRONT },
         { QStringLiteral("box_back"), AssetType::BOX_BACK },
+        { QStringLiteral("box_spine"), AssetType::BOX_SPINE },
+        { QStringLiteral("box_full"), AssetType::BOX_FULL },
         { QStringLiteral("cartridge"), AssetType::CARTRIDGE },
         { QStringLiteral("logo"), AssetType::LOGO },
+        { QStringLiteral("poster"), AssetType::POSTER },
+        { QStringLiteral("marquee"), AssetType::ARCADE_MARQUEE },
+        { QStringLiteral("bezel"), AssetType::ARCADE_BEZEL },
+        { QStringLiteral("panel"), AssetType::ARCADE_PANEL },
+        { QStringLiteral("cabinet_left"), AssetType::ARCADE_CABINET_L },
+        { QStringLiteral("cabinet_right"), AssetType::ARCADE_CABINET_R },
+        { QStringLiteral("tile"), AssetType::UI_TILE },
+        { QStringLiteral("banner"), AssetType::UI_BANNER },
         { QStringLiteral("steam"), AssetType::UI_STEAMGRID },
         { QStringLiteral("background"), AssetType::BACKGROUND },
+        { QStringLiteral("music"), AssetType::MUSIC },
         { QStringLiteral("screenshot"), AssetType::SCREENSHOT },
         { QStringLiteral("titlescreen"), AssetType::TITLESCREEN },
         { QStringLiteral("video"), AssetType::VIDEO },
     };
-    const auto name_of = [](const QString& path) {
-        return path.mid(path.lastIndexOf(QLatin1Char('/')) + 1).toLower();
+    // the file itself, by its whole path: art from the scraper and from
+    // your media folder have the same names (covers/Game.png and
+    // media/box2dfront/Game.png), so a name alone hid both
+    const auto path_of = [](const QString& value) {
+        QString path = value.startsWith(QLatin1String("file:")) ? QUrl(value).toLocalFile() : value;
+        return QDir::cleanPath(path).toLower();
     };
     for (const QString& entry : entries) {
         const int bar = entry.indexOf(QLatin1Char('|'));
@@ -181,15 +197,15 @@ void Assets::remove_listed(const QStringList& entries)
         const auto kind = kinds.find(entry.left(bar).trimmed());
         if (kind == kinds.cend())
             continue;
-        const QString name = name_of(entry.mid(bar + 1).trimmed());
-        if (name.isEmpty())
+        const QString hidden = path_of(entry.mid(bar + 1).trimmed());
+        if (hidden.isEmpty() || hidden == QLatin1String("."))
             continue;
         const auto list = m_asset_lists.find(kind->second);
         if (list == m_asset_lists.end())
             continue;
         QStringList kept;
         for (const QString& url : qAsConst(list->second)) {
-            if (name_of(url) != name)
+            if (path_of(url) != hidden)
                 kept.append(url);
         }
         list->second = kept;

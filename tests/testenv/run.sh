@@ -61,6 +61,21 @@ find "$CFG/metadata" -type f 2>/dev/null | while read -r f; do
 done
 cp "$CFG/pegasusx-rom-folders.txt" "$R/files/" 2>/dev/null
 
+# a game scraped before, then its scraped files deleted: the override still
+# names a fan art that isn't there, and hides a scraped cover with the same
+# name as the one in the ROM folder's media: the folder's art must show
+mkdir -p "$CFG/metadata/overrides"
+cat >> "$CFG/metadata/overrides/Nintendo_64.metadata.pegasus.txt" <<TXT
+
+collection: Nintendo 64
+
+game: Mario Kart 64 (USA)
+file: $T/MyGames/Nintendo 64/Mario Kart 64 (USA).z64
+assets.background: $CFG/downloaded_media/n64/fanart/Mario Kart 64 (USA).png
+x-pegasusx-hidden-art: box_front|$CFG/downloaded_media/n64/covers/Mario Kart 64 (USA).png
+x-pegasusx-edited: assets.background
+TXT
+
 # -- 2. the settings ---------------------------------------------------------------
 start 02-settings "menu/settings/SettingsScreen.qml" 6
 shot 02-settings-top
