@@ -197,6 +197,30 @@ Window {
     }
 
 
+    // the test environment: one game scraped (PEGASUSX_TEST_SCRAPE=<title>)
+    function testScrape(testTitle) {
+        for (var g = 0; g < api.allGames.count; g++) {
+            var tg = api.allGames.get(g);
+            if (tg.title === testTitle) {
+                var coll = tg.collections.count > 0 ? tg.collections.get(0).name : "";
+                console.log("[test] scraping \"" + testTitle + "\" in \"" + coll + "\": "
+                            + (Internal.settings.scrapeGame(tg, coll, true) || "started"));
+                return;
+            }
+        }
+        console.log("[test] no game called \"" + testTitle + "\"");
+    }
+    Connections {
+        target: Internal.settings
+        function onLaunchBoxFinished(status) {
+            if (Internal.settings.testLaunchBox() && Internal.settings.testScrapeTitle() !== "") {
+                console.log("[test] LaunchBox database: " + (status.error ? status.error : "ready, " + status.games + " games"));
+                if (!status.error)
+                    testScrape(Internal.settings.testScrapeTitle());
+            }
+        }
+    }
+
     // Pegasus X: a scrape going on (Complete my library) while you're on the
     // theme: a thin line at the bottom, then what it did for a few seconds
     Rectangle {
@@ -458,16 +482,13 @@ Window {
                     Internal.settings.testDump(dump.join("\n"));
                     // the test environment: one game scraped (PEGASUSX_TEST_SCRAPE=<title>)
                     var testTitle = Internal.settings.testScrapeTitle();
-                    if (testTitle !== "") {
-                        for (var g = 0; g < api.allGames.count; g++) {
-                            var tg = api.allGames.get(g);
-                            if (tg.title === testTitle) {
-                                var coll = tg.collections.count > 0 ? tg.collections.get(0).name : "";
-                                console.log("[test] scraping \"" + testTitle + "\" in \"" + coll + "\": "
-                                            + (Internal.settings.scrapeGame(tg, coll, true) || "started"));
-                                break;
-                            }
-                        }
+                    if (testTitle !== "" && Internal.settings.testLaunchBox()) {
+                        // the LaunchBox database first; the scrape when it's read (below)
+                        console.log("[test] LaunchBox database: reading in");
+                        Internal.settings.launchBoxUpdate(api.collections, false);
+                    }
+                    else if (testTitle !== "") {
+                        testScrape(testTitle);
                     }
                     // the first start: where everything is kept
                     // (four steps: folder, game folders, import gamelist, complete my

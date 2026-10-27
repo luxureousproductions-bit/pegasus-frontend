@@ -30,6 +30,8 @@ add_library(pegasus-backend
     Updater.h
     Scraper.cpp
     Scraper.h
+    LaunchBoxDb.cpp
+    LaunchBoxDb.h
     ScraperKeys.h
 )
 

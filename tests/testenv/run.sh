@@ -43,6 +43,13 @@ start() {  # name, screen ("" for the theme), seconds to wait, extra env...
     fi
     sleep "$wait"
 }
+wait_log() {  # pattern, seconds: until the running Pegasus X's log has it
+    for _ in $(seq 1 "$2"); do
+        grep -q "$1" "$CFG/lastrun.log" 2>/dev/null && return 0
+        sleep 1
+    done
+    echo "  (no \"$1\" in the log after $2 s)"
+}
 stop() {  # name
     kill "$PID" 2>/dev/null; sleep 1; kill -9 "$PID" 2>/dev/null; wait "$PID" 2>/dev/null
     cp "$CFG/lastrun.log" "$R/logs/$1.log" 2>/dev/null
@@ -228,6 +235,39 @@ mkdir -p "$R/scraped-free"
 find "$CFG/downloaded_media/snes" -type f -iname "Super Mario World*" 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-free/files.txt" || true
 grep -h "Scraper\|libretro\|Hasheous\|\[test\]" "$R/logs/12-scrape-free.log" > "$R/scraped-free/scraper.log" || true
 
+# -- LaunchBox's database: read in for the fixture's systems, then a scrape from it ---------------
+# (the zip is downloaded by the workflow into lbcache/ next to the sources)
+LBZIP="$(dirname "$0")/../../lbcache/Metadata.zip"
+if [ -f "$LBZIP" ]; then
+    mkdir -p "$CFG/launchbox"
+    cp "$LBZIP" "$CFG/launchbox/Metadata.zip"
+    python3 - "$CFG/pegasusx.ini" <<'PY'
+import sys, configparser
+p = sys.argv[1]
+c = configparser.RawConfigParser(); c.optionxform = str
+c.read(p)
+if not c.has_section("scraper"): c.add_section("scraper")
+for k in ("igdbClientId", "igdbClientSecret", "sgdbKey"): c.remove_option("scraper", k)
+c.set("scraper", "source", "launchbox")
+c.set("scraper", "overwrite", "true")
+c.set("scraper", "useLibretro", "false")
+with open(p, "w") as f: c.write(f, space_around_delimiters=False)
+PY
+    start 13-scrape-launchbox "" 8 "PEGASUSX_TEST_SCRAPE=Chrono Trigger (my own file)" "PEGASUSX_TEST_LAUNCHBOX=1"
+    wait_log "Scraper: Done\|LaunchBox: Reading the database:\|Download failed" 900
+    sleep 2
+    stop 13-scrape-launchbox
+    mkdir -p "$R/scraped-launchbox"
+    find "$CFG/downloaded_media/snes" -type f -iname "Chrono*" 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-launchbox/files.txt" || true
+    grep -h "Scraper\|LaunchBox\|\[test\]" "$R/logs/13-scrape-launchbox.log" > "$R/scraped-launchbox/scraper.log" || true
+    cp "$CFG/launchbox/status.json" "$R/scraped-launchbox/" 2>/dev/null || true
+    python3 - "$CFG/launchbox/platforms.json" > "$R/scraped-launchbox/platforms.txt" 2>/dev/null <<'PY' || true
+import json, sys
+d = json.load(open(sys.argv[1]))
+for k in sorted(d): print("%6d  %s" % (d[k], k))
+PY
+fi
+
 # -- summary --------------------------------------------------------------------------------------
 # the game directory as it is at the end (written along the way)
 find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
@@ -259,6 +299,12 @@ done
     grep -E "libretro|Hasheous|Saving|not found|no source" "$R/scraped-free/scraper.log" 2>/dev/null | head -n 12 | sed 's/^/    /'
     sed 's/^/    file: /' "$R/scraped-free/files.txt" 2>/dev/null | sort -u | head -n 8
     echo
+    if [ -d "$R/scraped-launchbox" ]; then
+        echo "## Scrape from the LaunchBox database (no login)"
+        grep -E "LaunchBox|Downloaded|Saving|not found|no sure|Done:" "$R/scraped-launchbox/scraper.log" 2>/dev/null | head -n 16 | sed 's/^/    /'
+        sed 's/^/    file: /' "$R/scraped-launchbox/files.txt" 2>/dev/null | head -n 10
+        echo
+    fi
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40
     echo

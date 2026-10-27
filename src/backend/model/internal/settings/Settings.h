@@ -34,7 +34,7 @@ class QNetworkAccessManager;
 namespace model { class Game; }
 class ThemeStore;
 class Updater;
-namespace scraper { class Scraper; struct Job; }
+namespace scraper { class Scraper; struct Job; class LaunchBoxDb; }
 
 namespace model {
 
@@ -277,6 +277,16 @@ public:
     /// { running, done, total, current, title, result, ok, saved, notFound, failed, stopReason }
     Q_INVOKABLE QVariantMap scraperState() const;
 
+    // Pegasus X: the LaunchBox database (a source without a login)
+    /// { present, date, size, platforms, games, working, stage, progress, error }
+    Q_INVOKABLE QVariantMap launchBoxStatus();
+    /// downloads it (when missing or old, or `force`) and reads it in for the
+    /// library's systems (launchBoxProgress, launchBoxFinished)
+    Q_INVOKABLE void launchBoxUpdate(QObject* collections, bool force);
+    Q_INVOKABLE void launchBoxCancel();
+    /// the test environment: read the LaunchBox database in before the test scrape
+    Q_INVOKABLE bool testLaunchBox() const { return qEnvironmentVariable("PEGASUSX_TEST_LAUNCHBOX") == QLatin1String("1"); }
+
     // Pegasus X: Settings > Library's status rows
     /// { games, box, shots, details, fanart, videos, any (games missing what
     /// Complete my library fills by default), review, collections: { name: missing art },
@@ -357,6 +367,8 @@ signals:
     void scraperThumb(int index, QString url, int error);
     void reloadAllRequested();
     void scraperFinished(QVariantMap state);
+    void launchBoxProgress(QVariantMap status);
+    void launchBoxFinished(QVariantMap status);
     void fullscreenChanged();
     void mouseSupportChanged();
     void verifyFilesChanged();
@@ -385,6 +397,8 @@ private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
+    scraper::LaunchBoxDb* m_launchbox = nullptr;
+    scraper::LaunchBoxDb& launchBox();
     QPointer<model::Game> m_single_game;
     ThemeStore* m_theme_store = nullptr;
     Updater* m_updater = nullptr;

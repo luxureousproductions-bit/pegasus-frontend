@@ -56,6 +56,23 @@ jobs:
             tail -n 15 fixture.log | while IFS= read -r line; do echo "::error::${line}"; done
             exit 1
           }
+      # LaunchBox's database (over 100 MB): kept between runs, a week at a time
+      - name: LaunchBox database (cache)
+        id: lbcache
+        uses: actions/cache@v4
+        with:
+          path: lbcache/Metadata.zip
+          key: launchbox-metadata-${{ github.run_number }}
+          restore-keys: launchbox-metadata-
+      - name: LaunchBox database (download)
+        run: |
+          mkdir -p lbcache
+          if [ -f lbcache/Metadata.zip ] && [ -z "$(find lbcache/Metadata.zip -mtime +7)" ]; then
+            echo "cached ($(du -m lbcache/Metadata.zip | cut -f1) MB)"
+          else
+            curl -sSL -o lbcache/Metadata.zip -A PegasusX https://gamesdb.launchbox-app.com/Metadata.zip || rm -f lbcache/Metadata.zip
+            echo "downloaded ($(du -m lbcache/Metadata.zip 2>/dev/null | cut -f1) MB)"
+          fi
       - name: Run
         env:
           IGDB_TEST_CLIENT_ID: ${{ secrets.IGDB_TEST_CLIENT_ID }}

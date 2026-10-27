@@ -25,6 +25,7 @@ SOURCES += \
     ThemeStore.cpp \
     Updater.cpp \
     Scraper.cpp \
+    LaunchBoxDb.cpp \
 
 HEADERS += \
     Backend.h \
@@ -40,6 +41,7 @@ HEADERS += \
     ThemeStore.h \
     Updater.h \
     Scraper.h \
+    LaunchBoxDb.h \
     ScraperKeys.h \
 
 include(imggen/imggen.pri)

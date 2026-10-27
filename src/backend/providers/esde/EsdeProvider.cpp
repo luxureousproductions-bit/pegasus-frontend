@@ -891,6 +891,350 @@ namespace esde {
 // -- ES-DE import -----------------------------------------------------------------
 
 namespace {
+// (the metadata file reader/writer, used by the import and the editor)
+struct MetaEntry {
+    QString key;     ///< lowercase
+    int first = 0;   ///< line index
+    int last = 0;    ///< line index of its last continuation line
+    QStringList values;
+};
+
+/// A "collection:" or "game:" block and its entries
+struct MetaBlock {
+    bool is_collection = false;
+    QString name;
+    int first = 0;
+    int last = 0;  ///< last line of its last entry
+    std::vector<MetaEntry> entries;
+    int collection_index = -1;  ///< for a game, the collection block above it
+
+    const MetaEntry* entry(const QString& key) const {
+        for (const MetaEntry& e : entries) {
+            if (e.key == key)
+                return &e;
+        }
+        return nullptr;
+    }
+};
+
+/// A metadata file, kept as lines so it can be changed without touching
+/// anything else in it
+struct MetaFile {
+    QString path;
+    QString dir;
+    QStringList lines;
+    QString newline = QStringLiteral("\n");
+    std::vector<MetaBlock> blocks;
+
+    bool load(const QString& file_path) {
+        QFile file(file_path);
+        if (!file.open(QIODevice::ReadOnly))
+            return false;
+        QString text = QString::fromUtf8(file.readAll());
+        path = file_path;
+        dir = QFileInfo(file_path).absolutePath();
+        if (text.contains(QLatin1String("\r\n")))
+            newline = QStringLiteral("\r\n");
+        text.remove(QLatin1Char('\r'));
+        if (text.endsWith(QLatin1Char('\n')))
+            text.chop(1);
+        lines = text.split(QLatin1Char('\n'));
+        parse();
+        return true;
+    }
+
+    void parse() {
+        blocks.clear();
+        MetaBlock* block = nullptr;
+        MetaEntry* entry = nullptr;
+        int current_collection = -1;
+        for (int i = 0; i < lines.size(); i++) {
+            const QString& line = lines.at(i);
+            if (line.trimmed().isEmpty() || line.startsWith(QLatin1Char('#'))) {
+                continue;
+            }
+            const bool continuation = line.at(0).isSpace();
+            if (continuation) {
+                if (entry) {
+                    entry->last = i;
+                    entry->values.append(line.trimmed());
+                    block->last = i;
+                }
+                continue;
+            }
+            const int colon = line.indexOf(QLatin1Char(':'));
+            if (colon <= 0) {
+                entry = nullptr;
+                continue;
+            }
+            const QString key = line.left(colon).trimmed().toLower();
+            const QString value = line.mid(colon + 1).trimmed();
+
+            if (key == QLatin1String("collection") || key == QLatin1String("game")) {
+                blocks.emplace_back();
+                block = &blocks.back();
+                block->is_collection = key == QLatin1String("collection");
+                block->name = value;
+                block->first = i;
+                if (block->is_collection)
+                    current_collection = static_cast<int>(blocks.size()) - 1;
+                else
+                    block->collection_index = current_collection;
+            }
+            if (!block) {
+                entry = nullptr;
+                continue;
+            }
+            block->entries.emplace_back();
+            entry = &block->entries.back();
+            entry->key = key;
+            entry->first = i;
+            entry->last = i;
+            if (!value.isEmpty())
+                entry->values.append(value);
+            block->last = i;
+        }
+    }
+
+    /// The files of a game block, as absolute paths (URIs like
+    /// android:<package> as they are)
+    QStringList game_files(const MetaBlock& block) const {
+        QStringList out;
+        const QDir base(dir);
+        for (const MetaEntry& e : block.entries) {
+            if (e.key != QLatin1String("file") && e.key != QLatin1String("files"))
+                continue;
+            for (const QString& value : e.values)
+                out.append(is_uri(value) ? value : ::clean_abs_path(QFileInfo(base, value)));
+        }
+        return out;
+    }
+
+    static bool is_uri(const QString& value) {
+        static const QRegularExpression rx_uri(QStringLiteral("^[a-zA-Z][a-zA-Z0-9+\\-.]+:.+"));
+        return rx_uri.match(value).hasMatch() && !QFileInfo(value).isAbsolute();
+    }
+
+    /// A game file as written: relative when it's inside this file's folder
+    /// (so it moves with the ROM folder), absolute otherwise (the override
+    /// files live in the Pegasus X folder, which can move)
+    QString file_value(const QString& game_path) const {
+        if (is_uri(game_path))
+            return game_path;
+        const QString rel = QDir(dir).relativeFilePath(game_path);
+        return rel.startsWith(QLatin1String("..")) ? game_path : rel;
+    }
+
+    /// The paths in this file, written for `old_dir`, made absolute (after
+    /// the file moved to another folder)
+    bool rebase_from(const QString& old_dir) {
+        const QDir base(old_dir);
+        bool changed = false;
+        for (size_t b = 0; b < blocks.size(); b++) {
+            // the keys with paths, each once (set_entry replaces every entry of a key)
+            QStringList keys;
+            for (const MetaEntry& e : blocks[b].entries) {
+                const bool path_key = e.key == QLatin1String("file") || e.key == QLatin1String("files")
+                    || e.key.startsWith(QLatin1String("assets.")) || e.key == QLatin1String("x-manual");
+                if (path_key && !keys.contains(e.key))
+                    keys.append(e.key);
+            }
+            for (const QString& key : keys) {
+                QStringList values;
+                bool any = false;
+                for (const MetaEntry& e : blocks[b].entries) {
+                    if (e.key != key)
+                        continue;
+                    for (const QString& v : e.values) {
+                        const bool relative = !is_uri(v) && !QFileInfo(v).isAbsolute() && !v.startsWith(QLatin1String("image://"));
+                        values.append(relative ? ::clean_abs_path(QFileInfo(base, v)) : v);
+                        any = any || relative;
+                    }
+                }
+                if (any) {
+                    set_entry(b, { key }, key, values);
+                    changed = true;
+                }
+            }
+        }
+        return changed;
+    }
+
+    /// Sets (or removes, if `command` is empty) the launch entry of a block
+    void set_launch(int block_index, const QString& command) {
+        const MetaBlock& block = blocks.at(static_cast<size_t>(block_index));
+        const MetaEntry* existing = block.entry(QStringLiteral("launch"));
+        if (!existing)
+            existing = block.entry(QStringLiteral("command"));
+
+        const QString new_line = QStringLiteral("launch: ") % command.simplified();
+        if (existing) {
+            for (int i = existing->last; i > existing->first; i--)
+                lines.removeAt(i);
+            if (command.isEmpty())
+                lines.removeAt(existing->first);
+            else
+                lines[existing->first] = new_line;
+            parse();
+            return;
+        }
+        if (command.isEmpty())
+            return;
+
+        // where it goes: a collection's after its short name; a game's after
+        // its description, else before its rating, else at its end
+        int insert_at = block.last + 1;
+        if (block.is_collection) {
+            const MetaEntry* after = block.entry(QStringLiteral("shortname"));
+            if (!after)
+                after = &block.entries.front();
+            insert_at = after->last + 1;
+        }
+        else if (const MetaEntry* description = block.entry(QStringLiteral("description"))) {
+            insert_at = description->last + 1;
+        }
+        else if (const MetaEntry* rating = block.entry(QStringLiteral("rating"))) {
+            insert_at = rating->first;
+        }
+        lines.insert(insert_at, new_line);
+        parse();
+    }
+
+    /// Pegasus X metadata editor: replaces every entry of a block named by
+    /// `aliases` with `key` and `values` (one line each), or removes them if
+    /// `values` is empty. Lists go one item per line; text keeps its lines.
+    void set_entry(size_t block_index, const QStringList& aliases, const QString& key, const QStringList& values) {
+        const MetaBlock& block = blocks.at(block_index);
+        std::vector<std::pair<int, int>> ranges;
+        for (const MetaEntry& e : block.entries) {
+            if (aliases.contains(e.key))
+                ranges.emplace_back(e.first, e.last);
+        }
+        int insert_at = -1;
+        if (!ranges.empty()) {
+            std::sort(ranges.begin(), ranges.end());
+            insert_at = ranges.front().first;
+            for (auto it = ranges.rbegin(); it != ranges.rend(); ++it) {
+                for (int i = it->second; i >= it->first; i--)
+                    lines.removeAt(i);
+            }
+        }
+        else {
+            // new: before the block's art and x- fields, else at its end
+            insert_at = block.last + 1;
+            if (!key.startsWith(QLatin1String("assets.")) && !key.startsWith(QLatin1String("x-"))) {
+                for (const MetaEntry& e : block.entries) {
+                    if (e.key.startsWith(QLatin1String("assets.")) || e.key.startsWith(QLatin1String("x-"))) {
+                        insert_at = e.first;
+                        break;
+                    }
+                }
+            }
+        }
+        QStringList new_lines;
+        for (int i = 0; i < values.size(); i++) {
+            const QString value = values.at(i).trimmed();
+            if (i == 0)
+                new_lines.append(key % QStringLiteral(": ") % value);
+            else
+                new_lines.append(QStringLiteral("  ") % (value.isEmpty() ? QStringLiteral(".") : value));
+        }
+        if (!values.isEmpty() && !values.first().trimmed().isEmpty()) {
+            for (int i = 0; i < new_lines.size(); i++)
+                lines.insert(insert_at + i, new_lines.at(i));
+        }
+        parse();
+    }
+
+    /// Renames a block ("game: <title>" / "collection: <name>")
+    void set_header(size_t block_index, const QString& name) {
+        const MetaBlock& block = blocks.at(block_index);
+        lines[block.first] = (block.is_collection ? QStringLiteral("collection: ") : QStringLiteral("game: ")) % name.simplified();
+        parse();
+    }
+
+    /// Adds an empty game block (title and file) to the end of a collection's part
+    int add_game_block(int collection_index, const QString& title, const QString& game_path) {
+        int insert_at = lines.size();
+        for (size_t i = static_cast<size_t>(collection_index) + 1; i < blocks.size(); i++) {
+            if (blocks[i].is_collection) {
+                insert_at = blocks[i].first;
+                break;
+            }
+        }
+        while (insert_at > 0 && lines.at(insert_at - 1).trimmed().isEmpty())
+            insert_at--;
+        lines.insert(insert_at, QString());
+        lines.insert(insert_at + 1, QStringLiteral("game: ") % title.simplified());
+        lines.insert(insert_at + 2, QStringLiteral("file: ") % file_value(game_path));
+        parse();
+        for (size_t i = 0; i < blocks.size(); i++) {
+            if (blocks[i].first == insert_at + 1)
+                return static_cast<int>(i);
+        }
+        return -1;
+    }
+
+    /// Pegasus X's own markers of who wrote what: x-pegasusx-edited (you,
+    /// in the editor: wins, and a key listed without a value is a field you
+    /// cleared) and x-pegasusx-scraped (the scraper)
+    void mark(size_t block_index, const QString& marker, const QStringList& add, const QStringList& remove) {
+        QStringList all;
+        if (const MetaEntry* e = blocks.at(block_index).entry(marker)) {
+            for (const QString& value : e->values) {
+                for (const QString& k : value.split(QLatin1Char(','), QString::SkipEmptyParts))
+                    all.append(k.trimmed());
+            }
+        }
+        for (const QString& k : remove)
+            all.removeAll(k);
+        for (const QString& k : add) {
+            if (!all.contains(k))
+                all.append(k);
+        }
+        set_entry(block_index, { marker }, marker, { all.join(QStringLiteral(", ")) });
+    }
+    void mark_edited(size_t block_index, const QStringList& keys) {
+        mark(block_index, QStringLiteral("x-pegasusx-edited"), keys, {});
+    }
+
+    /// Adds a game block with a launch entry to the end of a collection's part of the file
+    void add_game(int collection_index, const QString& title, const QString& game_path, const QString& command) {
+        int insert_at = lines.size();
+        for (size_t i = static_cast<size_t>(collection_index) + 1; i < blocks.size(); i++) {
+            if (blocks[i].is_collection) {
+                insert_at = blocks[i].first;
+                break;
+            }
+        }
+        // after the last block of the collection, before any blank lines
+        while (insert_at > 0 && lines.at(insert_at - 1).trimmed().isEmpty())
+            insert_at--;
+
+        const QStringList block_lines {
+            QString(),
+            QStringLiteral("game: ") % title,
+            QStringLiteral("file: ") % file_value(game_path),
+            QStringLiteral("launch: ") % command.simplified(),
+        };
+        for (int i = 0; i < block_lines.size(); i++)
+            lines.insert(insert_at + i, block_lines.at(i));
+        parse();
+    }
+
+    /// Writes the file back (backups: providers::gamedir::backup)
+    QString save() const {
+        // in one go: the library scan may be reading it
+        QSaveFile file(path);
+        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+            return QStringLiteral("Could not write to %1 (no write access?)").arg(path);
+        file.write((lines.join(newline) + newline).toUtf8());
+        if (!file.commit())
+            return QStringLiteral("Could not write to %1 (%2)").arg(path, file.errorString());
+        return {};
+    }
+};
+
 const QString IMPORT_FILE_NAME = QStringLiteral("esde-import.metadata.pegasus.txt");
 // the import files' format: made again at start when older (2: every picture
 // of a kind, so 3D boxes are kept beside the covers)
@@ -2077,349 +2421,6 @@ int refresh_rom_folders()
 namespace {
 
 /// One "key: value" entry of a metadata file, with its continuation lines
-struct MetaEntry {
-    QString key;     ///< lowercase
-    int first = 0;   ///< line index
-    int last = 0;    ///< line index of its last continuation line
-    QStringList values;
-};
-
-/// A "collection:" or "game:" block and its entries
-struct MetaBlock {
-    bool is_collection = false;
-    QString name;
-    int first = 0;
-    int last = 0;  ///< last line of its last entry
-    std::vector<MetaEntry> entries;
-    int collection_index = -1;  ///< for a game, the collection block above it
-
-    const MetaEntry* entry(const QString& key) const {
-        for (const MetaEntry& e : entries) {
-            if (e.key == key)
-                return &e;
-        }
-        return nullptr;
-    }
-};
-
-/// A metadata file, kept as lines so it can be changed without touching
-/// anything else in it
-struct MetaFile {
-    QString path;
-    QString dir;
-    QStringList lines;
-    QString newline = QStringLiteral("\n");
-    std::vector<MetaBlock> blocks;
-
-    bool load(const QString& file_path) {
-        QFile file(file_path);
-        if (!file.open(QIODevice::ReadOnly))
-            return false;
-        QString text = QString::fromUtf8(file.readAll());
-        path = file_path;
-        dir = QFileInfo(file_path).absolutePath();
-        if (text.contains(QLatin1String("\r\n")))
-            newline = QStringLiteral("\r\n");
-        text.remove(QLatin1Char('\r'));
-        if (text.endsWith(QLatin1Char('\n')))
-            text.chop(1);
-        lines = text.split(QLatin1Char('\n'));
-        parse();
-        return true;
-    }
-
-    void parse() {
-        blocks.clear();
-        MetaBlock* block = nullptr;
-        MetaEntry* entry = nullptr;
-        int current_collection = -1;
-        for (int i = 0; i < lines.size(); i++) {
-            const QString& line = lines.at(i);
-            if (line.trimmed().isEmpty() || line.startsWith(QLatin1Char('#'))) {
-                continue;
-            }
-            const bool continuation = line.at(0).isSpace();
-            if (continuation) {
-                if (entry) {
-                    entry->last = i;
-                    entry->values.append(line.trimmed());
-                    block->last = i;
-                }
-                continue;
-            }
-            const int colon = line.indexOf(QLatin1Char(':'));
-            if (colon <= 0) {
-                entry = nullptr;
-                continue;
-            }
-            const QString key = line.left(colon).trimmed().toLower();
-            const QString value = line.mid(colon + 1).trimmed();
-
-            if (key == QLatin1String("collection") || key == QLatin1String("game")) {
-                blocks.emplace_back();
-                block = &blocks.back();
-                block->is_collection = key == QLatin1String("collection");
-                block->name = value;
-                block->first = i;
-                if (block->is_collection)
-                    current_collection = static_cast<int>(blocks.size()) - 1;
-                else
-                    block->collection_index = current_collection;
-            }
-            if (!block) {
-                entry = nullptr;
-                continue;
-            }
-            block->entries.emplace_back();
-            entry = &block->entries.back();
-            entry->key = key;
-            entry->first = i;
-            entry->last = i;
-            if (!value.isEmpty())
-                entry->values.append(value);
-            block->last = i;
-        }
-    }
-
-    /// The files of a game block, as absolute paths (URIs like
-    /// android:<package> as they are)
-    QStringList game_files(const MetaBlock& block) const {
-        QStringList out;
-        const QDir base(dir);
-        for (const MetaEntry& e : block.entries) {
-            if (e.key != QLatin1String("file") && e.key != QLatin1String("files"))
-                continue;
-            for (const QString& value : e.values)
-                out.append(is_uri(value) ? value : ::clean_abs_path(QFileInfo(base, value)));
-        }
-        return out;
-    }
-
-    static bool is_uri(const QString& value) {
-        static const QRegularExpression rx_uri(QStringLiteral("^[a-zA-Z][a-zA-Z0-9+\\-.]+:.+"));
-        return rx_uri.match(value).hasMatch() && !QFileInfo(value).isAbsolute();
-    }
-
-    /// A game file as written: relative when it's inside this file's folder
-    /// (so it moves with the ROM folder), absolute otherwise (the override
-    /// files live in the Pegasus X folder, which can move)
-    QString file_value(const QString& game_path) const {
-        if (is_uri(game_path))
-            return game_path;
-        const QString rel = QDir(dir).relativeFilePath(game_path);
-        return rel.startsWith(QLatin1String("..")) ? game_path : rel;
-    }
-
-    /// The paths in this file, written for `old_dir`, made absolute (after
-    /// the file moved to another folder)
-    bool rebase_from(const QString& old_dir) {
-        const QDir base(old_dir);
-        bool changed = false;
-        for (size_t b = 0; b < blocks.size(); b++) {
-            // the keys with paths, each once (set_entry replaces every entry of a key)
-            QStringList keys;
-            for (const MetaEntry& e : blocks[b].entries) {
-                const bool path_key = e.key == QLatin1String("file") || e.key == QLatin1String("files")
-                    || e.key.startsWith(QLatin1String("assets.")) || e.key == QLatin1String("x-manual");
-                if (path_key && !keys.contains(e.key))
-                    keys.append(e.key);
-            }
-            for (const QString& key : keys) {
-                QStringList values;
-                bool any = false;
-                for (const MetaEntry& e : blocks[b].entries) {
-                    if (e.key != key)
-                        continue;
-                    for (const QString& v : e.values) {
-                        const bool relative = !is_uri(v) && !QFileInfo(v).isAbsolute() && !v.startsWith(QLatin1String("image://"));
-                        values.append(relative ? ::clean_abs_path(QFileInfo(base, v)) : v);
-                        any = any || relative;
-                    }
-                }
-                if (any) {
-                    set_entry(b, { key }, key, values);
-                    changed = true;
-                }
-            }
-        }
-        return changed;
-    }
-
-    /// Sets (or removes, if `command` is empty) the launch entry of a block
-    void set_launch(int block_index, const QString& command) {
-        const MetaBlock& block = blocks.at(static_cast<size_t>(block_index));
-        const MetaEntry* existing = block.entry(QStringLiteral("launch"));
-        if (!existing)
-            existing = block.entry(QStringLiteral("command"));
-
-        const QString new_line = QStringLiteral("launch: ") % command.simplified();
-        if (existing) {
-            for (int i = existing->last; i > existing->first; i--)
-                lines.removeAt(i);
-            if (command.isEmpty())
-                lines.removeAt(existing->first);
-            else
-                lines[existing->first] = new_line;
-            parse();
-            return;
-        }
-        if (command.isEmpty())
-            return;
-
-        // where it goes: a collection's after its short name; a game's after
-        // its description, else before its rating, else at its end
-        int insert_at = block.last + 1;
-        if (block.is_collection) {
-            const MetaEntry* after = block.entry(QStringLiteral("shortname"));
-            if (!after)
-                after = &block.entries.front();
-            insert_at = after->last + 1;
-        }
-        else if (const MetaEntry* description = block.entry(QStringLiteral("description"))) {
-            insert_at = description->last + 1;
-        }
-        else if (const MetaEntry* rating = block.entry(QStringLiteral("rating"))) {
-            insert_at = rating->first;
-        }
-        lines.insert(insert_at, new_line);
-        parse();
-    }
-
-    /// Pegasus X metadata editor: replaces every entry of a block named by
-    /// `aliases` with `key` and `values` (one line each), or removes them if
-    /// `values` is empty. Lists go one item per line; text keeps its lines.
-    void set_entry(size_t block_index, const QStringList& aliases, const QString& key, const QStringList& values) {
-        const MetaBlock& block = blocks.at(block_index);
-        std::vector<std::pair<int, int>> ranges;
-        for (const MetaEntry& e : block.entries) {
-            if (aliases.contains(e.key))
-                ranges.emplace_back(e.first, e.last);
-        }
-        int insert_at = -1;
-        if (!ranges.empty()) {
-            std::sort(ranges.begin(), ranges.end());
-            insert_at = ranges.front().first;
-            for (auto it = ranges.rbegin(); it != ranges.rend(); ++it) {
-                for (int i = it->second; i >= it->first; i--)
-                    lines.removeAt(i);
-            }
-        }
-        else {
-            // new: before the block's art and x- fields, else at its end
-            insert_at = block.last + 1;
-            if (!key.startsWith(QLatin1String("assets.")) && !key.startsWith(QLatin1String("x-"))) {
-                for (const MetaEntry& e : block.entries) {
-                    if (e.key.startsWith(QLatin1String("assets.")) || e.key.startsWith(QLatin1String("x-"))) {
-                        insert_at = e.first;
-                        break;
-                    }
-                }
-            }
-        }
-        QStringList new_lines;
-        for (int i = 0; i < values.size(); i++) {
-            const QString value = values.at(i).trimmed();
-            if (i == 0)
-                new_lines.append(key % QStringLiteral(": ") % value);
-            else
-                new_lines.append(QStringLiteral("  ") % (value.isEmpty() ? QStringLiteral(".") : value));
-        }
-        if (!values.isEmpty() && !values.first().trimmed().isEmpty()) {
-            for (int i = 0; i < new_lines.size(); i++)
-                lines.insert(insert_at + i, new_lines.at(i));
-        }
-        parse();
-    }
-
-    /// Renames a block ("game: <title>" / "collection: <name>")
-    void set_header(size_t block_index, const QString& name) {
-        const MetaBlock& block = blocks.at(block_index);
-        lines[block.first] = (block.is_collection ? QStringLiteral("collection: ") : QStringLiteral("game: ")) % name.simplified();
-        parse();
-    }
-
-    /// Adds an empty game block (title and file) to the end of a collection's part
-    int add_game_block(int collection_index, const QString& title, const QString& game_path) {
-        int insert_at = lines.size();
-        for (size_t i = static_cast<size_t>(collection_index) + 1; i < blocks.size(); i++) {
-            if (blocks[i].is_collection) {
-                insert_at = blocks[i].first;
-                break;
-            }
-        }
-        while (insert_at > 0 && lines.at(insert_at - 1).trimmed().isEmpty())
-            insert_at--;
-        lines.insert(insert_at, QString());
-        lines.insert(insert_at + 1, QStringLiteral("game: ") % title.simplified());
-        lines.insert(insert_at + 2, QStringLiteral("file: ") % file_value(game_path));
-        parse();
-        for (size_t i = 0; i < blocks.size(); i++) {
-            if (blocks[i].first == insert_at + 1)
-                return static_cast<int>(i);
-        }
-        return -1;
-    }
-
-    /// Pegasus X's own markers of who wrote what: x-pegasusx-edited (you,
-    /// in the editor: wins, and a key listed without a value is a field you
-    /// cleared) and x-pegasusx-scraped (the scraper)
-    void mark(size_t block_index, const QString& marker, const QStringList& add, const QStringList& remove) {
-        QStringList all;
-        if (const MetaEntry* e = blocks.at(block_index).entry(marker)) {
-            for (const QString& value : e->values) {
-                for (const QString& k : value.split(QLatin1Char(','), QString::SkipEmptyParts))
-                    all.append(k.trimmed());
-            }
-        }
-        for (const QString& k : remove)
-            all.removeAll(k);
-        for (const QString& k : add) {
-            if (!all.contains(k))
-                all.append(k);
-        }
-        set_entry(block_index, { marker }, marker, { all.join(QStringLiteral(", ")) });
-    }
-    void mark_edited(size_t block_index, const QStringList& keys) {
-        mark(block_index, QStringLiteral("x-pegasusx-edited"), keys, {});
-    }
-
-    /// Adds a game block with a launch entry to the end of a collection's part of the file
-    void add_game(int collection_index, const QString& title, const QString& game_path, const QString& command) {
-        int insert_at = lines.size();
-        for (size_t i = static_cast<size_t>(collection_index) + 1; i < blocks.size(); i++) {
-            if (blocks[i].is_collection) {
-                insert_at = blocks[i].first;
-                break;
-            }
-        }
-        // after the last block of the collection, before any blank lines
-        while (insert_at > 0 && lines.at(insert_at - 1).trimmed().isEmpty())
-            insert_at--;
-
-        const QStringList block_lines {
-            QString(),
-            QStringLiteral("game: ") % title,
-            QStringLiteral("file: ") % file_value(game_path),
-            QStringLiteral("launch: ") % command.simplified(),
-        };
-        for (int i = 0; i < block_lines.size(); i++)
-            lines.insert(insert_at + i, block_lines.at(i));
-        parse();
-    }
-
-    /// Writes the file back (backups: providers::gamedir::backup)
-    QString save() const {
-        // in one go: the library scan may be reading it
-        QSaveFile file(path);
-        if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-            return QStringLiteral("Could not write to %1 (no write access?)").arg(path);
-        file.write((lines.join(newline) + newline).toUtf8());
-        if (!file.commit())
-            return QStringLiteral("Could not write to %1 (%2)").arg(path, file.errorString());
-        return {};
-    }
-};
-
 bool is_metafile_name(const QString& name)
 {
     return name == QLatin1String("metadata.pegasus.txt")

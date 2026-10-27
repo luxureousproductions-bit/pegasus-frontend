@@ -17,6 +17,9 @@
 
 #include "ZipReader.h"
 
+#include <algorithm>
+#include <functional>
+
 #include <cstring>
 
 
@@ -38,6 +41,26 @@ struct Inflater {
     int bitcnt = 0;
     bool error = false;
     QByteArray out;
+    // streaming: what's inflated goes to the sink in parts, the last 32 KiB
+    // kept for the back-references (so a 1 GB entry needs no 1 GB of memory)
+    std::function<bool(const char*, int)> sink;
+    static constexpr int WINDOW = 32768;
+    static constexpr int FLUSH_AT = 4 * 1024 * 1024;
+    bool flush(bool final)
+    {
+        if (!sink)
+            return true;
+        const int keep = final ? 0 : WINDOW;
+        if (out.size() <= keep || (!final && out.size() < FLUSH_AT))
+            return true;
+        const int give = out.size() - keep;
+        if (!sink(out.constData(), give)) {
+            error = true;
+            return false;
+        }
+        out.remove(0, give);
+        return true;
+    }
 
     int bits(int need)
     {
@@ -140,6 +163,8 @@ bool codes(Inflater& s, const Huffman& lencode, const Huffman& distcode)
         const int from = s.out.size() - dist;
         for (int i = 0; i < len; i++)
             s.out.append(s.out.at(from + i));
+        if (!s.flush(false))
+            return false;
     }
 }
 
@@ -156,7 +181,7 @@ bool stored(Inflater& s)
         return false;
     s.out.append(reinterpret_cast<const char*>(s.in + s.in_pos), static_cast<int>(len));
     s.in_pos += len;
-    return true;
+    return s.flush(false);
 }
 
 bool fixed(Inflater& s)
@@ -235,12 +260,15 @@ bool dynamic(Inflater& s)
     return codes(s, lencode, distcode);
 }
 
-bool inflate(const uchar* in, size_t in_len, quint32 size_hint, QByteArray& out)
+bool inflate(const uchar* in, size_t in_len, quint32 size_hint, QByteArray& out,
+             const std::function<bool(const char*, int)>& sink = {})
 {
     Inflater s;
     s.in = in;
     s.in_len = in_len;
-    s.out.reserve(static_cast<int>(size_hint));
+    s.sink = sink;
+    if (!sink)
+        s.out.reserve(static_cast<int>(size_hint));
     int last = 0;
     do {
         last = s.bits(1);
@@ -254,6 +282,8 @@ bool inflate(const uchar* in, size_t in_len, quint32 size_hint, QByteArray& out)
         if (!ok)
             return false;
     } while (!last);
+    if (sink)
+        return s.flush(true);
     out = std::move(s.out);
     return true;
 }
@@ -347,6 +377,31 @@ QByteArray ZipReader::fileData(const Entry& e, bool* ok) const
     if (ok)
         *ok = static_cast<quint32>(out.size()) == e.size;
     return out;
+}
+
+bool ZipReader::extract(const Entry& e, const std::function<bool(const char*, int)>& sink) const
+{
+    if (!m_ok || static_cast<qint64>(e.header_offset) + 30 > m_size
+            || u32(m_data + e.header_offset) != 0x04034b50u)
+        return false;
+    const uchar* h = m_data + e.header_offset;
+    const qint64 start = static_cast<qint64>(e.header_offset) + 30 + u16(h + 26) + u16(h + 28);
+    if (start + e.packed_size > m_size)
+        return false;
+    if (e.method == 0) {
+        // in parts, as the inflater does
+        const char* data = reinterpret_cast<const char*>(m_data + start);
+        for (quint32 at = 0; at < e.packed_size; at += 4 * 1024 * 1024) {
+            const int part = static_cast<int>(std::min<quint32>(4 * 1024 * 1024, e.packed_size - at));
+            if (!sink(data + at, part))
+                return false;
+        }
+        return true;
+    }
+    if (e.method != 8)
+        return false;
+    QByteArray unused;
+    return inflate(m_data + start, e.packed_size, 0, unused, sink);
 }
 
 } // namespace utils

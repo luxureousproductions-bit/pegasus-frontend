@@ -37,6 +37,7 @@
 #include "providers/LibraryRules.h"
 #include "providers/Overrides.h"
 #include "ScraperKeys.h"
+#include "LaunchBoxDb.h"
 #include "Scraper.h"
 #include "ThemeStore.h"
 #include "Updater.h"
@@ -1612,6 +1613,11 @@ QVariantMap scraper_defaults()
         // found by name has to be (0-100) to be used without asking
         { QStringLiteral("useHasheous"), true },
         { QStringLiteral("useLibretro"), true },
+        { QStringLiteral("useLaunchBox"), true },
+        { QStringLiteral("showAllSources"), false },
+        { QStringLiteral("launchboxFill"), true },
+        { QStringLiteral("getBanners"), true },
+        { QStringLiteral("getSpines"), true },
         { QStringLiteral("minMatch"), 60 },
         { QStringLiteral("useMetadataNames"), true },
         { QStringLiteral("interactive"), false },
@@ -1921,9 +1927,12 @@ QString Settings::startScraperWith(QObject* collections, bool offline)
         return tr("Enter your SteamGridDB API key in Account settings first.");
     if (!offline && source == QLatin1String("igdb") && !has_igdb)
         return tr("Enter your IGDB Client ID and secret in Account settings first.");
-    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_sgdb && !has_igdb
+    const bool has_lb = launchBox().ready();
+    if (!offline && source == QLatin1String("launchbox") && !has_lb)
+        return tr("Download the LaunchBox database in Account settings first.");
+    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_lb && !has_sgdb && !has_igdb
             && !settings.value(QStringLiteral("useLibretro")).toBool())
-        return tr("ScreenScraper isn't in this build yet. Pick IGDB or SteamGridDB, or add their login.");
+        return tr("ScreenScraper isn't in this build yet. Download the LaunchBox database in Account settings.");
 
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
@@ -1999,8 +2008,11 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
     const bool has_igdb = scraper_has_igdb(settings);
     // (with none: libretro's free boxes and screenshots only)
-    if (!scraperHasScreenScraper() && !has_sgdb && !has_igdb && !settings.value(QStringLiteral("useLibretro")).toBool())
-        return tr("Enter your IGDB or SteamGridDB login in Library > Scraper > Account settings first.");
+    if (!scraperHasScreenScraper() && !launchBox().ready() && !has_sgdb && !has_igdb
+            && !settings.value(QStringLiteral("useLibretro")).toBool())
+        return tr("Download the LaunchBox database in Library > Scraper > Account settings first.");
+    if (source == QLatin1String("launchbox") && !launchBox().ready())
+        return tr("Download the LaunchBox database in Library > Scraper > Account settings first.");
     if (source == QLatin1String("igdb") && !has_igdb)
         return tr("Enter your IGDB Client ID and secret in Library > Scraper > Account settings first.");
     if (source == QLatin1String("steamgriddb") && !has_sgdb)
@@ -2092,6 +2104,7 @@ QVariantMap Settings::libraryStatus(QObject* collections) const
     out.insert(QStringLiteral("igdb"), scraper_has_igdb(settings));
     out.insert(QStringLiteral("sgdb"), !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty());
     out.insert(QStringLiteral("ss"), scraperHasScreenScraper());
+    out.insert(QStringLiteral("launchbox"), launchBox().ready());
     return out;
 }
 
@@ -2134,8 +2147,9 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
     const QString source = settings.value(QStringLiteral("source")).toString();
     if ((source == QLatin1String("igdb") && !has_igdb) || (source == QLatin1String("steamgriddb") && !has_sgdb))
         settings.insert(QStringLiteral("source"), QStringLiteral("screenscraper"));
-    if (!has_ss && !has_sgdb && !has_igdb && !settings.value(QStringLiteral("useLibretro")).toBool())
-        return tr("Turn on the free pictures (Scraper > Other) or add a login in Account settings first.");
+    const bool has_lb = launchBox().ready();
+    if (!has_ss && !has_lb && !has_sgdb && !has_igdb && !settings.value(QStringLiteral("useLibretro")).toBool())
+        return tr("Download the LaunchBox database in Scraper > Account settings first.");
 
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
@@ -2145,8 +2159,9 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
         if (!coll)
             continue;
         const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
-        // no login and no free pictures for this system: nothing could be found
-        if (!has_ss && !has_sgdb && !has_igdb && !scraper::Scraper::hasFreeArt(system))
+        // no source for this system: nothing could be found
+        if (!has_ss && !has_sgdb && !has_igdb && !scraper::Scraper::hasFreeArt(system)
+                && !(has_lb && launchBox().hasSystem(system)))
             continue;
         for (model::Game* const game : coll->gameList()->entries()) {
             const std::vector<model::GameFile*>& files = game->filesModel()->entries();
@@ -2226,6 +2241,41 @@ void Settings::setNeverScrape(const QString& path, const QString& title, bool ne
     scraper::Scraper::setNeverScrape(path, title, never);
 }
 
+scraper::LaunchBoxDb& Settings::launchBox()
+{
+    if (!m_launchbox) {
+        m_launchbox = new scraper::LaunchBoxDb(this);
+        connect(m_launchbox, &scraper::LaunchBoxDb::progress, this, &Settings::launchBoxProgress);
+        connect(m_launchbox, &scraper::LaunchBoxDb::finished, this, &Settings::launchBoxFinished);
+    }
+    return *m_launchbox;
+}
+
+QVariantMap Settings::launchBoxStatus()
+{
+    return launchBox().status();
+}
+
+void Settings::launchBoxUpdate(QObject* collections, bool force)
+{
+    QStringList systems;
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    for (int i = 0; list && i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
+        if (!system.isEmpty() && !systems.contains(system))
+            systems.append(system);
+    }
+    launchBox().update(systems, force);
+}
+
+void Settings::launchBoxCancel()
+{
+    launchBox().cancel();
+}
+
 QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings)
 {
     const bool has_ss = scraperHasScreenScraper();
@@ -2235,6 +2285,7 @@ QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap
 
     if (!m_scraper) {
         m_scraper = new scraper::Scraper(this);
+        m_scraper->setLaunchBox(&launchBox());
         connect(m_scraper, &scraper::Scraper::progress, this, &Settings::scraperProgress);
         connect(m_scraper, &scraper::Scraper::choiceNeeded, this, &Settings::scraperNeedsChoice);
         connect(m_scraper, &scraper::Scraper::thumbReady, this, &Settings::scraperThumb);

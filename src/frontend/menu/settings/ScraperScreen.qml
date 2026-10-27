@@ -98,11 +98,38 @@ FocusScope {
 
     // -- What each page lists ----------------------------------------------------
 
-    readonly property var sourceChoices: [
-        { "v": "screenscraper", "t": "ScreenScraper" },
-        { "v": "igdb", "t": qsTr("IGDB (best for modern, PC and Android games)") + api.tr },
-        { "v": "steamgriddb", "t": qsTr("SteamGridDB (art only)") + api.tr },
-    ]
+    // IGDB and SteamGridDB are kept out of the list for now (Other settings
+    // > Show every source brings them back)
+    readonly property var sourceChoices: {
+        var out = [
+            { "v": "screenscraper", "t": "ScreenScraper" },
+            { "v": "launchbox", "t": qsTr("LaunchBox database (no login)") + api.tr },
+        ];
+        if (s.showAllSources) {
+            out.push({ "v": "igdb", "t": qsTr("IGDB (best for modern, PC and Android games)") + api.tr });
+            out.push({ "v": "steamgriddb", "t": qsTr("SteamGridDB (art only)") + api.tr });
+        }
+        return out;
+    }
+    property var lb: Internal.settings.launchBoxStatus()   // the LaunchBox database
+    Connections {
+        target: Internal.settings
+        function onLaunchBoxProgress(status) { root.lb = status; }
+        function onLaunchBoxFinished(status) {
+            root.keepPosition(function() { root.lb = status; });
+            root.message = status.error ? qsTr("LaunchBox database: %1").arg(status.error) + api.tr
+                                        : qsTr("LaunchBox database ready: %1 games on %2 platforms").arg(status.games).arg(Object.keys(status.platforms || {}).length) + api.tr;
+        }
+    }
+    readonly property string lbSummary: {
+        var l = lb || {};
+        if (l.working)
+            return (l.stage === "downloading" ? qsTr("Downloading... %1%") : qsTr("Reading... %1%")).arg(l.progress || 0) + api.tr;
+        if (l.present)
+            return qsTr("%1 games on %2 platforms · %3").arg(l.games || 0).arg(Object.keys(l.platforms || {}).length)
+                .arg(String(l.date || "").slice(0, 10)) + api.tr;
+        return qsTr("not downloaded") + api.tr;
+    }
     readonly property var gamesChoices: [
         { "v": "all", "t": qsTr("All games") + api.tr },
         { "v": "favorites", "t": qsTr("Favorite games") + api.tr },
@@ -184,6 +211,8 @@ FocusScope {
         ["getPhysical", qsTr("Physical media images") + api.tr],
         ["getFanart", qsTr("Fan art images") + api.tr],
         ["getLogos", qsTr("Logos (marquees)") + api.tr],
+        ["getBanners", qsTr("Banner images") + api.tr],
+        ["getSpines", qsTr("Box spine images") + api.tr],
         ["getManuals", qsTr("Game manuals") + api.tr],
     ]
 
@@ -309,6 +338,12 @@ FocusScope {
             return out;
         }
         if (page === "accounts") {
+            out.push({ "kind": "section", "text": qsTr("LaunchBox database (no login needed)") + api.tr });
+            out.push({ "kind": "info", "text": qsTr("Status") + api.tr, "value": lbSummary, "ok": !!(lb && lb.present) });
+            out.push({ "kind": "lbupdate", "text": (lb && lb.working) ? qsTr("Stop") + api.tr
+                       : (lb && lb.present) ? qsTr("Update the database") + api.tr : qsTr("Download the database") + api.tr,
+                       "value": (lb && lb.working) ? "" : qsTr("over 100 MB, once") + api.tr });
+            out.push({ "kind": "toggle", "key": "launchboxFill", "text": qsTr("Fill in what the main source doesn't have") + api.tr });
             out.push({ "kind": "section", "text": "ScreenScraper" });
             out.push({ "kind": "text", "key": "ssUser", "text": qsTr("Username") + api.tr,
                        "value": s.ssUser !== "" ? s.ssUser : qsTr("not set") + api.tr, "muted": s.ssUser === "" });
@@ -318,6 +353,8 @@ FocusScope {
             out.push({ "kind": "help", "key": "ss", "text": qsTr("How to get an account") + api.tr, "value": "" });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.ss || ""), "ok": !!accounts.ssOk });
+            if (!s.showAllSources)
+                return out;
             out.push({ "kind": "section", "text": "IGDB" });
             out.push({ "kind": "text", "key": "igdbClientId", "secret": true, "text": qsTr("Client ID") + api.tr,
                        "value": s.igdbClientId !== "" ? "••••" + String(s.igdbClientId).slice(-4) : qsTr("not set") + api.tr, "muted": s.igdbClientId === "" });
@@ -407,6 +444,7 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "useMetadataNames", "text": qsTr("Search using metadata names") + api.tr });
             out.push({ "kind": "toggle", "key": "useHasheous", "text": qsTr("Identify games by checksum (Hasheous, free)") + api.tr });
             out.push({ "kind": "toggle", "key": "useLibretro", "text": qsTr("Free boxes and screenshots (libretro)") + api.tr });
+            out.push({ "kind": "toggle", "key": "showAllSources", "text": qsTr("Show every source (IGDB, SteamGridDB)") + api.tr });
             out.push({ "kind": "number", "key": "minMatch", "text": qsTr("How sure a name match must be") + api.tr, "min": 0, "max": 100, "step": 5, "suffix": "%" });
             out.push({ "kind": "toggle", "key": "interactive", "text": qsTr("Interactive mode (pick each match)") + api.tr });
             out.push({ "kind": "toggle", "key": "autoAcceptSingle", "text": qsTr("Auto-accept a single match") + api.tr });
@@ -505,6 +543,13 @@ FocusScope {
         else if (row.kind === "text") textDialog.openFor(row);
         else if (row.kind === "start") startScraper();
         else if (row.kind === "help") helpDialog.openFor(row.key);
+        else if (row.kind === "lbupdate") {
+            if (lb && lb.working)
+                Internal.settings.launchBoxCancel();
+            else
+                Internal.settings.launchBoxUpdate(api.collections, !!(lb && lb.present));
+            lb = Internal.settings.launchBoxStatus();
+        }
         else if (row.kind === "offline") startGenerator();
         else if (row.kind === "stop") Internal.settings.stopScraper();
         else if (row.kind === "done") { page = "main"; message = ""; list.currentIndex = 0; }

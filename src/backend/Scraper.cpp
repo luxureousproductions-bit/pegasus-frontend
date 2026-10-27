@@ -808,10 +808,15 @@ void Scraper::search(const QString& name)
     const QString source = m_settings.value(QStringLiteral("source")).toString();
     const bool ss_ok = source == QLatin1String("screenscraper") && !m_dev_id.isEmpty()
         && screenscraper_systems().contains(job.system);
+    const bool lb_ok = lbReady() && m_lb->hasSystem(job.system);
     if (source == QLatin1String("igdb") && igdbReady())
         igdbSearch(name);
     else if (ss_ok)
         ssSearch(name);
+    else if (source == QLatin1String("launchbox") && lb_ok)
+        lbSearch(name);
+    else if (source != QLatin1String("steamgriddb") && source != QLatin1String("igdb") && lb_ok)
+        lbSearch(name);
     else if (source != QLatin1String("steamgriddb") && igdbReady())
         igdbSearch(name);
     else if (!m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty())
@@ -823,8 +828,12 @@ void Scraper::search(const QString& name)
             why = tr("ScreenScraper isn't in this build yet");
         else if (source == QLatin1String("screenscraper"))
             why = tr("ScreenScraper doesn't know the system `%1`").arg(job.system);
+        else if (source == QLatin1String("launchbox") && !lbReady())
+            why = tr("the LaunchBox database isn't downloaded yet (Scraper > Account settings)");
+        else if (source == QLatin1String("launchbox"))
+            why = tr("LaunchBox has no platform for the system `%1`").arg(job.system);
         else
-            why = tr("no source is set up (add an IGDB login or a SteamGridDB key)");
+            why = tr("no source is set up");
         note(LOGMSG("%1: %2").arg(name, why));
         if (!libretro_system(job.system).isEmpty() && m_settings.value(QStringLiteral("useLibretro"), true).toBool()) {
             // still: the free pictures (libretro's thumbnails), by checksum or name
@@ -1104,6 +1113,17 @@ void Scraper::choose(int index)
         fillMore();
         return;
     }
+    if (m_choice_source == QLatin1String("launchbox")) {
+        if (index < 0 || index >= static_cast<int>(m_lb_results.size())) {
+            m_waiting = true;
+            skip();
+            return;
+        }
+        m_lb_done = true;
+        parseLaunchBox(m_lb_results[static_cast<size_t>(index)], false);
+        fillMore();
+        return;
+    }
     if (m_choice_source == QLatin1String("igdb")) {
         if (index < 0 || index >= m_igdb_results.size()) {
             m_waiting = true;
@@ -1190,6 +1210,7 @@ void Scraper::next()
     m_libretro_done = false;
     m_got.clear();
     m_igdb_done = false;
+    m_lb_done = false;
     m_mix_done = false;
     m_mix_error.clear();
     m_picture_failures = 0;
@@ -1212,10 +1233,13 @@ void Scraper::next()
     const bool ss_ok = source == QLatin1String("screenscraper") && !m_dev_id.isEmpty()
         && screenscraper_systems().contains(job.system);
     if (!ss_ok) {
-        // who the game is by its checksum first (keyless), then IGDB (details
-        // and art), then the art sources
+        // who the game is by its checksum first (keyless), then LaunchBox's
+        // database (details and art, no login), or IGDB, then the art sources
         identify([this, source]{
-            if (source != QLatin1String("steamgriddb") && igdbReady())
+            const Job& job = m_jobs[m_index];
+            if (source != QLatin1String("igdb") && source != QLatin1String("steamgriddb") && lbReady() && m_lb->hasSystem(job.system))
+                lbAuto(false);
+            else if (source != QLatin1String("steamgriddb") && igdbReady())
                 igdbAuto(false);
             else
                 fillMore();
@@ -2234,12 +2258,191 @@ void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
          .arg(!overwrite && m_media.size() == media_before ? QStringLiteral(" (Overwrite is off: slots that have a file keep it)") : QString()));
 }
 
+// -- LaunchBox's database ----------------------------------------------------------
+
+bool Scraper::lbReady() const
+{
+    return m_lb && m_lb->ready() && m_settings.value(QStringLiteral("useLaunchBox"), true).toBool();
+}
+
+QVariantMap Scraper::lbCandidate(const LaunchBoxDb::Game& game) const
+{
+    QStringList info { game.platform };
+    if (game.year > 0)
+        info.append(QString::number(game.year));
+    QString thumb;
+    for (const LaunchBoxDb::Image& image : game.images) {
+        if (image.type == QLatin1String("Box - Front")) {
+            thumb = LaunchBoxDb::image_url(image.file);
+            break;
+        }
+    }
+    return QVariantMap {
+        { QStringLiteral("name"), game.name },
+        { QStringLiteral("info"), info.join(QStringLiteral(" · ")) },
+        { QStringLiteral("description"), game.overview },
+        { QStringLiteral("thumb"), thumb },
+        { QStringLiteral("developer"), game.developers.join(QStringLiteral(", ")) },
+        { QStringLiteral("publisher"), game.publishers.join(QStringLiteral(", ")) },
+        { QStringLiteral("genre"), game.genres.join(QStringLiteral(", ")) },
+        { QStringLiteral("players"), game.players > 0 ? QString::number(game.players) : QString() },
+        { QStringLiteral("release"), game.release.isValid() ? game.release.toString(Qt::ISODate) : QString() },
+        { QStringLiteral("rating"), game.rating > 0.f ? QString::number(qRound(game.rating * 100)) + QLatin1Char('%') : QString() },
+    };
+}
+
+// interactive: the closest games, to pick from
+void Scraper::lbSearch(const QString& name)
+{
+    const Job& job = m_jobs[m_index];
+    QString wanted = name;
+    if (!m_hash_name.isEmpty())
+        wanted = search_name_of(m_hash_name + QStringLiteral(".x"), m_hash_name);
+    m_lb_results = m_lb->candidates(job.system, wanted, 10);
+    note(LOGMSG("LaunchBox: %1 matches for \"%2\" (%3)").arg(m_lb_results.size()).arg(wanted, LaunchBoxDb::platform_for(job.system)));
+    QVariantList candidates;
+    for (const LaunchBoxDb::Game& game : m_lb_results)
+        candidates.append(lbCandidate(game));
+    m_choice_source = QStringLiteral("launchbox");
+    offerChoice(candidates);
+}
+
+// without asking: the surest match; a weak one is left for Needs your check
+void Scraper::lbAuto(bool after_other)
+{
+    m_lb_done = true;
+    const Job& job = m_jobs[m_index];
+    const bool by_title = m_settings.value(QStringLiteral("useMetadataNames")).toBool() && !job.title_is_file_name;
+    QString name = by_title ? job.title : job.search_name;
+    if (!m_hash_name.isEmpty() && !by_title)
+        name = search_name_of(m_hash_name + QStringLiteral(".x"), m_hash_name);
+    if (after_other && m_changes.contains(QStringLiteral("title")))
+        name = m_changes.value(QStringLiteral("title")).toString();
+    const std::vector<LaunchBoxDb::Game> found = m_lb->candidates(job.system, name, 5);
+    const int needed = m_settings.value(QStringLiteral("minMatch"), 60).toInt();
+    if (found.empty() || found.front().score < needed) {
+        note(LOGMSG("LaunchBox: no sure match for \"%1\" on %2%3").arg(name, LaunchBoxDb::platform_for(job.system))
+             .arg(found.empty() ? QString() : QStringLiteral(" (closest \"%1\", %2 of %3 needed)")
+                                      .arg(found.front().name).arg(found.front().score).arg(needed)));
+        if (!found.empty() && !after_other) {
+            m_review_hint = QVariantMap {
+                { QStringLiteral("closest"), found.front().name },
+                { QStringLiteral("info"), lbCandidate(found.front()).value(QStringLiteral("info")) },
+                { QStringLiteral("score"), found.front().score },
+                { QStringLiteral("launchbox"), found.front().id },
+            };
+        }
+        fillMore();
+        return;
+    }
+    parseLaunchBox(found.front(), after_other);
+    fillMore();
+}
+
+void Scraper::parseLaunchBox(const LaunchBoxDb::Game& game, bool after_other)
+{
+    const Job& job = m_jobs[m_index];
+    if (!after_other)
+        setMatch(QStringLiteral("launchbox"), QString::number(game.id), game.name);
+    note(LOGMSG("LaunchBox: using \"%1\" (%2, id %3)%4").arg(game.name, game.platform).arg(game.id)
+         .arg(after_other ? QStringLiteral(" for what's still missing") : QString()));
+    const bool overwrite = m_settings.value(QStringLiteral("overwrite")).toBool();
+    const auto open_key = [this, overwrite](const char* key, bool has) {
+        return !m_changes.contains(QLatin1String(key)) && (overwrite || !has);
+    };
+    if (!after_other && wants(QStringLiteral("getNames")) && (overwrite || job.title_is_file_name)) {
+        if (!game.name.isEmpty() && game.name != job.title)
+            m_changes.insert(QStringLiteral("title"), game.name);
+    }
+    if (wants(QStringLiteral("getRatings")) && open_key("rating", job.has_rating) && game.rating > 0.f)
+        m_changes.insert(QStringLiteral("rating"), QString::number(qRound(game.rating * 100)) + QLatin1Char('%'));
+    if (wants(QStringLiteral("getDetails"))) {
+        if (!game.overview.isEmpty() && open_key("description", job.has_description)) {
+            m_changes.insert(QStringLiteral("description"), game.overview);
+            m_changes.insert(QStringLiteral("summary"), QString());
+        }
+        if (!game.developers.isEmpty() && open_key("developer", job.has_developer))
+            m_changes.insert(QStringLiteral("developer"), game.developers);
+        if (!game.publishers.isEmpty() && open_key("publisher", job.has_publisher))
+            m_changes.insert(QStringLiteral("publisher"), game.publishers);
+        if (game.players > 0 && open_key("players", job.has_players))
+            m_changes.insert(QStringLiteral("players"), QString::number(game.players));
+        if (game.release.isValid() && open_key("release", job.has_release))
+            m_changes.insert(QStringLiteral("release"), game.release.toString(Qt::ISODate));
+        if (!game.genres.isEmpty() && open_key("genre", job.has_genre))
+            m_changes.insert(QStringLiteral("genre"), game.genres);
+    }
+
+    // the art: one picture per kind, the region you prefer first
+    const QString region = m_settings.value(QStringLiteral("region")).toString();
+    const QStringList region_order = region == QLatin1String("eu")
+        ? QStringList { "Europe", "World", "North America", "United States", "Japan" }
+        : region == QLatin1String("jp")
+        ? QStringList { "Japan", "World", "North America", "United States", "Europe" }
+        : QStringList { "North America", "United States", "World", "Europe", "Japan" };
+    const auto pick = [&game, &region_order](const QStringList& types) {
+        int best = 1000;
+        QString url;
+        for (const QString& type : types) {
+            for (const LaunchBoxDb::Image& image : game.images) {
+                if (image.type != type)
+                    continue;
+                int rank = region_order.indexOf(image.region);
+                if (rank < 0)
+                    rank = region_order.size() + (image.region.isEmpty() ? 0 : 1);
+                if (rank < best) {
+                    best = rank;
+                    url = LaunchBoxDb::image_url(image.file);
+                }
+            }
+            if (!url.isEmpty())
+                return url;  // the first type that has one
+        }
+        return url;
+    };
+    const auto add = [this, &job](const QString& url, const char* setting, const char* slot,
+                                  const char* folder, const char* kind) {
+        if (url.isEmpty() || !wants(QLatin1String(setting)))
+            return;
+        Media media;
+        media.setting = QLatin1String(setting);
+        media.slot = QLatin1String(slot);
+        media.folder = QLatin1String(folder);
+        media.kind = QLatin1String(kind);
+        media.url = QUrl(url);
+        media.ext = QFileInfo(media.url.path()).suffix().isEmpty() ? QStringLiteral("jpg") : QFileInfo(media.url.path()).suffix();
+        for (const Media& m : m_media) {
+            if (m.slot == media.slot && m.kind == media.kind)
+                return;  // the first source had it
+        }
+        if (slotFree(job, media))
+            m_media.push_back(media);
+    };
+    const size_t before = m_media.size();
+    add(pick({ "Box - Front", "Box - Front - Reconstructed", "Fanart - Box - Front" }), "getCovers", "assets.box_front", "covers", "2d");
+    add(pick({ "Box - 3D" }), "getCovers", "assets.box_front", "3dboxes", "3d");
+    add(pick({ "Box - Back", "Box - Back - Reconstructed" }), "getBackcovers", "assets.box_back", "backcovers", "");
+    add(pick({ "Cart - Front", "Disc", "Cart - 3D", "Fanart - Cart - Front", "Fanart - Disc" }), "getPhysical", "assets.cartridge", "physicalmedia", "");
+    add(pick({ "Screenshot - Gameplay", "Screenshot - Game Select", "Screenshot - Game Over" }), "getScreenshots", "assets.screenshot", "screenshots", "");
+    add(pick({ "Screenshot - Game Title" }), "getTitlescreens", "assets.titlescreen", "titlescreens", "");
+    add(pick({ "Fanart - Background" }), "getFanart", "assets.background", "fanart", "");
+    add(pick({ "Clear Logo" }), "getLogos", "assets.logo", "marquees", "");
+    add(pick({ "Banner", "Steam Banner" }), "getBanners", "assets.banner", "banners", "");
+    add(pick({ "Box - Spine" }), "getSpines", "assets.box_spine", "spines", "");
+    note(LOGMSG("LaunchBox: %1 pictures to download (of %2 it lists)").arg(m_media.size() - before).arg(game.images.size()));
+}
+
 void Scraper::fillMore()
 {
     const QString source = m_settings.value(QStringLiteral("source")).toString();
     if (!m_igdb_done && igdbReady() && source != QLatin1String("steamgriddb")
             && m_settings.value(QStringLiteral("igdbFill"), true).toBool()) {
         igdbAuto(true);
+        return;
+    }
+    if (!m_lb_done && lbReady() && m_settings.value(QStringLiteral("launchboxFill"), true).toBool()
+            && m_lb->hasSystem(m_jobs[m_index].system)) {
+        lbAuto(true);
         return;
     }
     if (!m_libretro_done && m_settings.value(QStringLiteral("useLibretro"), true).toBool()) {

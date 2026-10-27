@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "LaunchBoxDb.h"
+
 #include <QDateTime>
 #include <QJsonArray>
 #include <QObject>
@@ -82,6 +84,8 @@ class Scraper : public QObject {
 
 public:
     explicit Scraper(QObject* parent = nullptr);
+    /// the LaunchBox database (owned by Settings), a source without a login
+    void setLaunchBox(LaunchBoxDb* db) { m_lb = db; }
 
     void start(std::vector<Job> jobs, const QVariantMap& settings,
                const QString& dev_id, const QString& dev_password, const QString& data_dir);
@@ -136,6 +140,15 @@ private:
     int m_not_found = 0;
     int m_failed = 0;
     int m_run = 0;
+    // LaunchBox's database (no login): details and most art, offline once downloaded
+    LaunchBoxDb* m_lb = nullptr;
+    bool m_lb_done = false;
+    std::vector<LaunchBoxDb::Game> m_lb_results;   ///< its games, as found (interactive)
+    bool lbReady() const;
+    void lbSearch(const QString& name);
+    void lbAuto(bool after_other);
+    void parseLaunchBox(const LaunchBoxDb::Game& game, bool after_other);
+    QVariantMap lbCandidate(const LaunchBoxDb::Game& game) const;
     // keyless sources: Hasheous (who the game is, by its checksum) and
     // libretro's thumbnails (box, screenshot and title screen by name)
     void hashThen(std::function<void(const QString&)> then);

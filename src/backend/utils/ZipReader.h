@@ -20,6 +20,7 @@
 #include <QByteArray>
 #include <QFile>
 #include <QString>
+#include <functional>
 #include <vector>
 
 
@@ -48,6 +49,9 @@ public:
     const std::vector<Entry>& entries() const { return m_entries; }
     /// the entry's contents; ok is false if it couldn't be read
     QByteArray fileData(const Entry& entry, bool* ok = nullptr) const;
+    /// the entry's contents in parts, to `sink` (which returns false to stop);
+    /// for entries too big to hold at once
+    bool extract(const Entry& entry, const std::function<bool(const char*, int)>& sink) const;
 
 private:
     QFile m_file;
