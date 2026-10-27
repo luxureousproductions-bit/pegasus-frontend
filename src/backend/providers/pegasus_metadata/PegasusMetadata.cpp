@@ -609,7 +609,7 @@ void Metadata::finish_game_block(ParserState& ps) const
                                   AssetType::VIDEO }) {
         for (const QString& f : from.assets().get(type)) {
             if (!into.assets().get(type).contains(f))
-                into.assetsMut().add_file(type, f);
+                into.assetsMut().add_uri(type, f);
         }
     }
     for (auto it = from.extraMap().cbegin(); it != from.extraMap().cend(); ++it) {

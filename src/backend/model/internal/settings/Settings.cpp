@@ -1284,6 +1284,7 @@ QVariantList Settings::matchSystems(const QString& folder, const QStringList& pi
     return out;
 }
 
+#ifdef WITH_COMPAT_ESDE
 namespace {
 QVariantMap import_result_map(const providers::esde::EsdeImportResult& result)
 {
@@ -1294,6 +1295,7 @@ QVariantMap import_result_map(const providers::esde::EsdeImportResult& result)
     };
 }
 } // namespace
+#endif
 
 void Settings::importSystems(const QString& folder, const QStringList& systems)
 {
