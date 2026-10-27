@@ -168,8 +168,16 @@ stop 06-themes
 start 07-updater "menu/settings/UpdateDialog.qml" 8
 shot 07-updater
 stop 07-updater
-start 08-gamedirs "menu/settings/GameDirEditor.qml" 5
+start 08-gamedirs "menu/settings/GameDirectory.qml" 5
 shot 08-gamedirs
+keys Return
+sleep 1
+shot 08-gamedirs-add
+keys Down Down Return Down Return
+shot 08-gamedirs-picked
+keys Up Up Up Return
+sleep 1
+shot 08-gamedirs-folder
 stop 08-gamedirs
 start 09-esde-import "menu/settings/EsdeImport.qml" 6
 shot 09-esde-import

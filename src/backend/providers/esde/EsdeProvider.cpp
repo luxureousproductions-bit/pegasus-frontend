@@ -2008,6 +2008,17 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
                 target.lines.insert(at, QStringLiteral("# folder: ") % QDir::cleanPath(folder));
                 target.parse();
             }
+            // your own metadata file in the folder, read once: noted
+            if (!own_sctx.current_collection_games().empty()) {
+                const QString note = QStringLiteral("# own metadata: ") % QDir::cleanPath(folder);
+                if (!target.lines.contains(note)) {
+                    int at = 0;
+                    while (at < target.lines.size() && target.lines.at(at).startsWith(QLatin1Char('#')))
+                        at++;
+                    target.lines.insert(at, note);
+                    target.parse();
+                }
+            }
             // the files the system file lists already
             QSet<QString> listed;
             for (const MetaBlock& block : target.blocks) {
@@ -2330,7 +2341,143 @@ EsdeImportResult rom_folder_import(const QString& folder, const std::function<vo
     return result;
 }
 
-int refresh_rom_folders()
+std::vector<KnownSystem> known_systems()
+{
+    std::vector<KnownSystem> out;
+    const ImportSetup setup = rom_folder_setup();
+    for (const QString& name : setup.order) {
+        const EsdeSystem& sys = setup.systems.at(name);
+        KnownSystem k;
+        k.name = name;
+        k.fullname = sys.fullname.isEmpty() ? name : sys.fullname;
+        k.short_name = pegasus_short_name(name);
+        k.folder = system_folder_name(sys);
+        k.extensions = sys.extensions;
+        out.push_back(std::move(k));
+    }
+    std::sort(out.begin(), out.end(), [](const KnownSystem& a, const KnownSystem& b) {
+        return a.fullname.compare(b.fullname, Qt::CaseInsensitive) < 0;
+    });
+    return out;
+}
+
+EsdeImportResult import_folder_as(const QString& folder, const QString& system)
+{
+    const ImportSetup setup = rom_folder_setup();
+    EsdeImportResult result;
+    if (!setup.systems.count(system)) {
+        result.error = QStringLiteral("Unknown system %1").arg(system);
+        return result;
+    }
+    HashMap<QString, QStringList> only;
+    only[system] = QStringList { QDir::cleanPath(folder) };
+    const QString origin = QStringLiteral("# Made by Pegasus X from the ROM folder %1.\n").arg(QDir::cleanPath(folder));
+    result = import_systems(setup, QStringList { system }, only, {}, origin, {});
+    remember_rom_folders(result.folders, system);
+    return result;
+}
+
+EsdeImportResult rom_folder_import_only(const QString& folder, const QStringList& systems)
+{
+    if (systems.isEmpty())
+        return rom_folder_import(folder, {});
+    const ImportSetup setup = rom_folder_setup();
+    const HashMap<QString, QStringList> layout = rom_folder_layout(setup, folder);
+    QStringList todo;
+    for (const QString& name : setup.order) {
+        if (layout.count(name) && systems.contains(name))
+            todo.append(name);
+    }
+    EsdeImportResult result;
+    if (todo.isEmpty()) {
+        result.error = QStringLiteral("None of the systems picked has a folder in %1").arg(folder);
+        return result;
+    }
+    const QString origin = QStringLiteral("# Made by Pegasus X from the ROM folder %1.\n").arg(QDir::cleanPath(folder));
+    result = import_systems(setup, todo, layout, {}, origin, {});
+    for (const QString& name : todo) {
+        QStringList written;
+        for (const QString& dir : layout.at(name)) {
+            if (result.folders.contains(dir))
+                written.append(dir);
+        }
+        remember_rom_folders(written, name);
+    }
+    return result;
+}
+
+EsdeImportResult reimport_system(const QString& system_file)
+{
+    EsdeImportResult result;
+    // the folders in its header, and where it came from
+    QStringList folders;
+    QString esde_dir;
+    QFile f(system_file);
+    if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        for (int i = 0; i < 40 && !f.atEnd(); i++) {
+            const QString line = QString::fromUtf8(f.readLine()).trimmed();
+            if (!line.startsWith(QLatin1Char('#')) && !line.isEmpty())
+                break;
+            if (line.startsWith(QLatin1String("# folder: ")))
+                folders.append(line.mid(10).trimmed());
+            static const QRegularExpression rx_esde(QStringLiteral("^# Made by Pegasus X from ES-DE \\((.+)\\)\\.$"));
+            const auto m = rx_esde.match(line);
+            if (m.hasMatch())
+                esde_dir = m.captured(1);
+        }
+    }
+    if (folders.isEmpty()) {
+        result.error = QStringLiteral("This system wasn't made from a folder");
+        return result;
+    }
+    const ImportSetup setup = (!esde_dir.isEmpty() && QFileInfo(esde_dir).isDir()) ? load_import_setup(esde_dir) : rom_folder_setup();
+    const QString origin = esde_dir.isEmpty() ? QStringLiteral("# Made by Pegasus X from the ROM folder %1.\n").arg(folders.first())
+                                              : QStringLiteral("# Made by Pegasus X from ES-DE (%1).\n").arg(setup.esde_dir);
+    const std::vector<std::pair<QString, QString>> remembered = read_rom_folders();
+    for (const QString& folder : folders) {
+        if (!QFileInfo(folder).isDir())
+            continue;
+        QString system;
+        for (const auto& entry : remembered) {
+            if (entry.first == folder)
+                system = entry.second;
+        }
+        if (system.isEmpty() || !setup.systems.count(system))
+            system = system_of_folder(setup, QFileInfo(folder).fileName());
+        if (system.isEmpty())
+            continue;
+        HashMap<QString, QStringList> only;
+        only[system] = QStringList { folder };
+        const EsdeImportResult one = import_systems(setup, QStringList { system }, only, {}, origin, {});
+        result.systems = 1;
+        result.games += one.games;
+        result.folders += one.folders;
+        if (!one.error.isEmpty())
+            result.error = one.error;
+    }
+    return result;
+}
+
+std::vector<std::pair<QString, QString>> watched_rom_folders()
+{
+    return read_rom_folders();
+}
+
+void forget_rom_folders(const QStringList& folders)
+{
+    std::vector<std::pair<QString, QString>> list = read_rom_folders();
+    list.erase(std::remove_if(list.begin(), list.end(), [&folders](const std::pair<QString, QString>& e) {
+        return folders.contains(e.first);
+    }), list.end());
+    write_rom_folders(list);
+}
+
+int rescan_rom_folders()
+{
+    return refresh_rom_folders(true);
+}
+
+int refresh_rom_folders(bool force)
 {
     // a folder changed since its list was made (games added or removed): made again
     const std::vector<std::pair<QString, QString>> list = read_rom_folders();
@@ -2379,7 +2526,7 @@ int refresh_rom_folders()
             for (const QFileInfo& kind : QDir(media.absoluteFilePath()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
                 changed = qMax(changed, kind.lastModified());
         }
-        if (!listed.isValid() || (!old_format && changed <= listed))
+        if (!force && (!listed.isValid() || (!old_format && changed <= listed)))
             continue;
         if (!esde_dir.isEmpty() && QFileInfo(esde_dir).isDir()) {
             ImportSetup esde_setup = load_import_setup(esde_dir);

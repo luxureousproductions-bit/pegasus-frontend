@@ -59,7 +59,7 @@ FocusScope {
         onClose: root.close()
         onOpenKeySettings: root.openScreen("KeyEditor.qml")
         onOpenGamepadSettings: root.openScreen("GamepadEditor.qml")
-        onOpenGameDirSettings: root.openModal("GameDirEditor.qml")
+        onOpenGameDirSettings: root.openScreen("GameDirectory.qml")
         onOpenEsdeImport: root.openModal("EsdeImport.qml")
         onOpenThemeDownloader: root.openScreen("ThemeDownloader.qml")
         onOpenUpdater: root.openModal("UpdateDialog.qml")
@@ -76,6 +76,7 @@ FocusScope {
         asynchronous: true
 
         anchors.fill: parent
+        z: 2  // above a sub screen it was opened from
 
         enabled: focus
         onLoaded: {
@@ -87,6 +88,8 @@ FocusScope {
     Connections {
         target: modal.item
         function onClose() {
+            if (root.state === "sub")
+                return;  // opened from a sub screen (below)
             main.focus = true;
             root.state = "";
         }
@@ -110,9 +113,28 @@ FocusScope {
     }
     Connections {
         target: subscreen.item
+        ignoreUnknownSignals: true
         function onClose() {
             main.focus = true;
             root.state = "";
+        }
+        // the Game directory screen: Import gamelist opens the ES-DE import on top
+        function onOpenEsdeImport() {
+            modal.source = "";
+            modal.source = "EsdeImport.qml";
+            modal.focus = true;
+        }
+    }
+    Connections {
+        target: modal.item
+        ignoreUnknownSignals: true
+        function onClose() {
+            if (root.state === "sub" && subscreen.item) {
+                // back to the screen under it
+                subscreen.focus = true;
+                if (subscreen.item.refresh)
+                    subscreen.item.refresh();
+            }
         }
     }
 

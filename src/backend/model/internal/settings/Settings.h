@@ -163,6 +163,27 @@ public:
     /// Makes a ROM folder's game lists (background: romFolderImportFinished)
     Q_INVOKABLE void importRomFolder(const QString& folder);
 
+    // Pegasus X: Settings > Game directory
+    /// the systems in the game directory: [{ key, name, shortName, games, folders, source, file }]
+    Q_INVOKABLE QVariantList gameDirectorySystems() const;
+    /// every system known: [{ name, fullName, shortName, folder, extensions, inDirectory }]
+    Q_INVOKABLE QVariantList knownSystems() const;
+    /// a ROM folder's systems among those picked: [{ name, fullName, folders, games,
+    /// ownMetadata, mediaFolder, gamelist }] plus the picked ones without a folder (games 0)
+    Q_INVOKABLE QVariantList matchSystems(const QString& folder, const QStringList& picked);
+    /// imports these systems of a ROM folder (background: romFolderImportFinished)
+    Q_INVOKABLE void importSystems(const QString& folder, const QStringList& systems);
+    /// imports one folder as one system (background: romFolderImportFinished)
+    Q_INVOKABLE void importFolderAs(const QString& folder, const QString& system);
+    /// reads a system's folders again (background: romFolderImportFinished)
+    Q_INVOKABLE void reimportSystem(const QString& key);
+    /// sets a system's file aside in backup/<system>/ and forgets its folders
+    Q_INVOKABLE QString removeSystem(const QString& key);
+    /// the ROM folders watched for new games: [{ folder, system, systems }]
+    Q_INVOKABLE QVariantList watchedRomFolders() const;
+    /// reads every watched folder again (background: romFolderImportFinished)
+    Q_INVOKABLE void rescanRomFolders();
+
     // Pegasus X: emulators
     Q_INVOKABLE QVariantList emulatorCollections() const;
     /// Same as emulatorCollections(), in the background: emulatorCollectionsReady

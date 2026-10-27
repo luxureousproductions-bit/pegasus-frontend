@@ -145,18 +145,11 @@ FocusScope {
         },
 
         SettingsEntry {
-            label: QT_TR_NOOP("Set game directories...")
+            label: QT_TR_NOOP("Game directory...")
+            desc: QT_TR_NOOP("Your systems and where their games are: pick systems, then the ROM folder they're in, or import a gamelist. Pegasus X keeps one metadata file per system in its own folder; your ROM folders are only read.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openGameDirSettings
             section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("ES-DE import...")
-            desc: QT_TR_NOOP("Turn ES-DE's game details, art and manuals into Pegasus metadata files, for some systems or all of them.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openEsdeImport
-            section: "gaming"
-            enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
             label: QT_TR_NOOP("Library...")

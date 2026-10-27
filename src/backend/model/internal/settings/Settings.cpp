@@ -1179,6 +1179,214 @@ void Settings::importRomFolder(const QString& folder)
 #endif
 }
 
+// -- Settings > Game directory ---------------------------------------------------
+
+QVariantList Settings::gameDirectorySystems() const
+{
+    QVariantList out;
+    for (const QString& path : providers::gamedir::metafiles()) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        QVariantMap item;
+        item.insert(QStringLiteral("key"), providers::gamedir::system_of(path));
+        item.insert(QStringLiteral("file"), path);
+        QStringList folders;
+        QString source;
+        int games = 0;
+        QString name, short_name;
+        bool own = false;
+        while (!file.atEnd()) {
+            const QString line = QString::fromUtf8(file.readLine()).trimmed();
+            if (line.startsWith(QLatin1String("# folder: ")))
+                folders.append(line.mid(10).trimmed());
+            else if (line.startsWith(QLatin1String("# Made by Pegasus X from ES-DE")))
+                source = QStringLiteral("gamelist");
+            else if (line.startsWith(QLatin1String("# own metadata:")))
+                own = true;
+            else if (line.startsWith(QLatin1String("game:")))
+                games++;
+            else if (name.isEmpty() && line.startsWith(QLatin1String("collection:")))
+                name = line.mid(11).trimmed();
+            else if (short_name.isEmpty() && line.startsWith(QLatin1String("shortname:")))
+                short_name = line.mid(10).trimmed();
+        }
+        item.insert(QStringLiteral("name"), name.isEmpty() ? item.value(QStringLiteral("key")).toString() : name);
+        item.insert(QStringLiteral("shortName"), short_name);
+        item.insert(QStringLiteral("games"), games);
+        item.insert(QStringLiteral("folders"), folders);
+        item.insert(QStringLiteral("source"), own ? QStringLiteral("own metadata") : source);
+        out.append(item);
+    }
+    return out;
+}
+
+QVariantList Settings::knownSystems() const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    QSet<QString> in_dir;
+    for (const QString& path : providers::gamedir::metafiles())
+        in_dir.insert(providers::gamedir::system_of(path));
+    for (const auto& sys : providers::esde::known_systems()) {
+        out.append(QVariantMap {
+            { QStringLiteral("name"), sys.name },
+            { QStringLiteral("fullName"), sys.fullname },
+            { QStringLiteral("shortName"), sys.short_name },
+            { QStringLiteral("folder"), sys.folder },
+            { QStringLiteral("extensions"), sys.extensions },
+            { QStringLiteral("inDirectory"), in_dir.contains(providers::gamedir::key_for(sys.fullname, sys.short_name)) },
+        });
+    }
+#endif
+    return out;
+}
+
+QVariantList Settings::matchSystems(const QString& folder, const QStringList& picked)
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    QSet<QString> found;
+    for (const auto& sys : providers::esde::rom_folder_systems(folder)) {
+        if (!picked.isEmpty() && !picked.contains(sys.name))
+            continue;
+        found.insert(sys.name);
+        bool own = false, media = false;
+        for (const QString& dir : sys.folders) {
+            own = own || folderHasMetadata(dir);
+            for (const QString& sub : { QStringLiteral("/media"), QStringLiteral("/.media"), QStringLiteral("/skraper") })
+                media = media || QFileInfo(dir + sub).isDir();
+        }
+        out.append(QVariantMap {
+            { QStringLiteral("name"), sys.name },
+            { QStringLiteral("fullName"), sys.fullname },
+            { QStringLiteral("folders"), sys.folders },
+            { QStringLiteral("games"), sys.games },
+            { QStringLiteral("ownMetadata"), own },
+            { QStringLiteral("mediaFolder"), media },
+            { QStringLiteral("gamelist"), sys.has_gamelist },
+        });
+    }
+    for (const auto& sys : providers::esde::known_systems()) {
+        if (!picked.contains(sys.name) || found.contains(sys.name))
+            continue;
+        out.append(QVariantMap {
+            { QStringLiteral("name"), sys.name },
+            { QStringLiteral("fullName"), sys.fullname },
+            { QStringLiteral("folders"), QStringList() },
+            { QStringLiteral("games"), 0 },
+            { QStringLiteral("folderName"), sys.folder },
+        });
+    }
+#else
+    Q_UNUSED(folder); Q_UNUSED(picked);
+#endif
+    return out;
+}
+
+namespace {
+QVariantMap import_result_map(const providers::esde::EsdeImportResult& result)
+{
+    return QVariantMap {
+        { QStringLiteral("systems"), result.systems },
+        { QStringLiteral("games"), result.games },
+        { QStringLiteral("error"), result.error },
+    };
+}
+} // namespace
+
+void Settings::importSystems(const QString& folder, const QStringList& systems)
+{
+#ifdef WITH_COMPAT_ESDE
+    QtConcurrent::run([this, folder, systems]{
+        const auto result = providers::esde::rom_folder_import_only(folder, systems);
+        QMetaObject::invokeMethod(this, [this, result]{ emit romFolderImportFinished(import_result_map(result)); }, Qt::QueuedConnection);
+    });
+#else
+    Q_UNUSED(folder); Q_UNUSED(systems);
+#endif
+}
+
+void Settings::importFolderAs(const QString& folder, const QString& system)
+{
+#ifdef WITH_COMPAT_ESDE
+    QtConcurrent::run([this, folder, system]{
+        const auto result = providers::esde::import_folder_as(folder, system);
+        QMetaObject::invokeMethod(this, [this, result]{ emit romFolderImportFinished(import_result_map(result)); }, Qt::QueuedConnection);
+    });
+#else
+    Q_UNUSED(folder); Q_UNUSED(system);
+#endif
+}
+
+void Settings::reimportSystem(const QString& key)
+{
+#ifdef WITH_COMPAT_ESDE
+    const QString file = providers::gamedir::system_file(key);
+    QtConcurrent::run([this, file]{
+        const auto result = providers::esde::reimport_system(file);
+        QMetaObject::invokeMethod(this, [this, result]{ emit romFolderImportFinished(import_result_map(result)); }, Qt::QueuedConnection);
+    });
+#else
+    Q_UNUSED(key);
+#endif
+}
+
+QString Settings::removeSystem(const QString& key)
+{
+    const QString file = providers::gamedir::system_file(key);
+    if (!QFileInfo::exists(file))
+        return tr("No such system in the game directory.");
+    // its folders are forgotten (no longer watched), the file set aside
+    QStringList folders;
+    {
+        QFile f(file);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            while (!f.atEnd()) {
+                const QString line = QString::fromUtf8(f.readLine()).trimmed();
+                if (!line.startsWith(QLatin1Char('#')) && !line.isEmpty())
+                    break;
+                if (line.startsWith(QLatin1String("# folder: ")))
+                    folders.append(line.mid(10).trimmed());
+            }
+        }
+    }
+#ifdef WITH_COMPAT_ESDE
+    providers::esde::forget_rom_folders(folders);
+#endif
+    const QString aside = providers::gamedir::backup_dir(key) + QStringLiteral("/removed-")
+        + QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+    QDir().mkpath(aside);
+    if (!QFile::rename(file, aside + QStringLiteral("/metadata.pegasus.txt")))
+        return tr("Couldn't move %1").arg(file);
+    QDir(QFileInfo(file).absolutePath()).rmdir(QStringLiteral("."));
+    Log::info(LOGMSG("Game directory: `%1` set aside in `%2`").arg(file, aside));
+    reloadLibrary();
+    return {};
+}
+
+QVariantList Settings::watchedRomFolders() const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& entry : providers::esde::watched_rom_folders())
+        out.append(QVariantMap { { QStringLiteral("folder"), entry.first }, { QStringLiteral("system"), entry.second } });
+#endif
+    return out;
+}
+
+void Settings::rescanRomFolders()
+{
+#ifdef WITH_COMPAT_ESDE
+    QtConcurrent::run([this]{
+        const int n = providers::esde::rescan_rom_folders();
+        QMetaObject::invokeMethod(this, [this, n]{
+            emit romFolderImportFinished(QVariantMap { { QStringLiteral("systems"), n }, { QStringLiteral("games"), 0 }, { QStringLiteral("error"), QString() } });
+        }, Qt::QueuedConnection);
+    });
+#endif
+}
+
 void Settings::startEsdeImport(const QStringList& system_names)
 {
 #ifdef WITH_COMPAT_ESDE

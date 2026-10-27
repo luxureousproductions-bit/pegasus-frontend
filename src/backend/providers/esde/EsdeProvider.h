@@ -96,11 +96,32 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
 
 /// The systems with games in a folder (by its name or its folders' names)
 std::vector<EsdeImportSystem> rom_folder_systems(const QString& folder);
+/// Every system known (ES-DE's list and your custom ones): for picking
+/// systems before a ROM folder
+struct KnownSystem {
+    QString name;        ///< eg. "snes"
+    QString fullname;    ///< eg. "Nintendo SNES (Super Nintendo)"
+    QString short_name;  ///< the theme name, eg. "snes"
+    QString folder;      ///< the folder name expected, eg. "snes"
+    QString extensions;  ///< ".sfc .smc .zip"
+};
+std::vector<KnownSystem> known_systems();
+/// Imports one folder as one system (when its name doesn't say which)
+EsdeImportResult import_folder_as(const QString& folder, const QString& system);
+/// Imports only these systems of a ROM folder (empty: every one found)
+EsdeImportResult rom_folder_import_only(const QString& folder, const QStringList& systems);
+/// Reads the folders a system was imported from again (merging)
+EsdeImportResult reimport_system(const QString& system_file);
+/// Reads every remembered ROM folder again, changed or not
+int rescan_rom_folders();
+/// the remembered ROM folders: (folder, system)
+std::vector<std::pair<QString, QString>> watched_rom_folders();
+void forget_rom_folders(const QStringList& folders);
 /// Writes the game lists of a ROM folder's systems
 EsdeImportResult rom_folder_import(const QString& folder, const std::function<void(int, int, const QString&)>& progress);
 /// The remembered folders whose games changed since their list was made: made
 /// again. Returns how many. Quick when nothing changed.
-int refresh_rom_folders();
+int refresh_rom_folders(bool force = false);
 /// Remembers system folders with a list made by Pegasus X (for refresh_rom_folders)
 void remember_rom_folders(const QStringList& folders, const QString& system);
 
