@@ -412,7 +412,7 @@ bool migrated()
 
 bool migration_needed()
 {
-    if (migrated() || !metafiles().isEmpty())
+    if (migrated())
         return false;
     const QString metadata = paths::writableConfigDir() % QStringLiteral("/metadata");
     bool old_layers = false;
@@ -423,7 +423,13 @@ bool migration_needed()
         if (QDir::cleanPath(line) != QDir::cleanPath(dir()))
             other_dirs = true;
     });
-    return old_layers || other_dirs;
+    if (!old_layers && !other_dirs) {
+        // nothing from before: the game directory model from the start
+        QDir().mkpath(dir());
+        write_all(dir() % QStringLiteral("/.migrated"), QStringLiteral("fresh\n"));
+        return false;
+    }
+    return true;
 }
 
 int migrate(const std::vector<model::Collection*>& collections, const std::vector<model::Game*>& games)
@@ -447,9 +453,26 @@ int migrate(const std::vector<model::Collection*>& collections, const std::vecto
 
         QString text;
         QTextStream stream(&text);
-        stream << "# Pegasus X game directory: " << coll->name() << "\n"
-               << "# Made from your library on " << QDateTime::currentDateTime().toString(Qt::ISODate) << ".\n"
-               << "# Pegasus X writes here (imports, Settings > Library, the scraper).\n\n"
+        // a file an import made just now: its leading comments stay (the
+        // folders it came from, and ES-DE's place, are in them)
+        QStringList header;
+        {
+            QFile existing(system_file(key));
+            if (existing.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                for (const QString& line : QString::fromUtf8(existing.readAll()).split(QLatin1Char('\n'))) {
+                    if (line.startsWith(QLatin1Char('#')))
+                        header.append(line);
+                    else if (!line.trimmed().isEmpty())
+                        break;
+                }
+            }
+        }
+        if (header.isEmpty()) {
+            header << QStringLiteral("# Pegasus X game directory: ") % coll->name()
+                   << QStringLiteral("# Made from your library on ") % QDateTime::currentDateTime().toString(Qt::ISODate) % QLatin1Char('.')
+                   << QStringLiteral("# Pegasus X writes here (imports, Settings > Library, the scraper).");
+        }
+        stream << header.join(QLatin1Char('\n')) << "\n\n"
                << "collection: " << coll->name() << '\n';
         if (!coll->shortName().isEmpty())
             stream << "shortname: " << coll->shortName() << '\n';

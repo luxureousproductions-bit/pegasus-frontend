@@ -90,16 +90,18 @@ std::vector<QString> find_all_metafiles(const QStringList& gamedirs)
         }
     };
 
-    // Pegasus X: the game directory's system files first (one folder each)
+    add_dir(paths::writableConfigDir() + QLatin1String("/metafiles"));
+    for (const QString& dir_path : gamedirs)
+        add_dir(dir_path);
+    // Pegasus X: the game directory's system files (one folder each); after
+    // the game folders, so on the start that makes the game directory from
+    // them your own files still win as before
     for (const QString& path : providers::gamedir::metafiles()) {
         if (!seen.contains(path)) {
             seen.insert(path);
             own.push_back(path);
         }
     }
-    add_dir(paths::writableConfigDir() + QLatin1String("/metafiles"));
-    for (const QString& dir_path : gamedirs)
-        add_dir(dir_path);
     // the ES-DE imports are always read (they used to be a game folder of their own)
     add_dir(paths::writableConfigDir() + QLatin1String("/metadata/imports"));
 
