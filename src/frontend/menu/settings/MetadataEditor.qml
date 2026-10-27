@@ -418,15 +418,29 @@ FocusScope {
         if (scrapingGame)
             return;
         var s = Internal.settings.scraperSettings();
-        var sourceName = s.source === "igdb" ? "IGDB" : s.source === "steamgriddb" ? "SteamGridDB" : "ScreenScraper";
-        chooser.openFor(qsTr("Scrape \"%1\" from %2").arg(current("title")).arg(sourceName) + api.tr, [
+        // the sources on offer: ScreenScraper and LaunchBox (IGDB and
+        // SteamGridDB only with Other settings > Show every source)
+        var sources = ["screenscraper", "launchbox"];
+        if (s.showAllSources)
+            sources = sources.concat(["igdb", "steamgriddb"]);
+        if (sources.indexOf(s.source) < 0) {
+            Internal.settings.setScraperSetting("source", "launchbox");
+            s.source = "launchbox";
+        }
+        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr,
+                      "igdb": "IGDB", "steamgriddb": "SteamGridDB" };
+        var sourceName = names[s.source] || s.source;
+        var lbReady = !!Internal.settings.launchBoxStatus().present;
+        var sourceNote = s.source === "launchbox" && !lbReady ? qsTr(" (not downloaded yet: Scraper > Account settings)") + api.tr
+                       : s.source === "screenscraper" && !Internal.settings.scraperHasScreenScraper() ? qsTr(" (not in this build yet: LaunchBox fills in)") + api.tr : "";
+        chooser.openFor(qsTr("Scrape \"%1\" from %2").arg(current("title")).arg(sourceName + sourceNote) + api.tr, [
             { "act": "fill", "text": qsTr("Fill what's empty") + api.tr },
             { "act": "replace", "text": qsTr("Replace with what's found") + api.tr },
             { "act": "source", "text": qsTr("Scrape from: %1  (change)").arg(sourceName) + api.tr },
             { "act": "options", "text": qsTr("Scraper options... (content, pictures, accounts)") + api.tr },
         ], function(act) {
             if (act === "source") {
-                var next = s.source === "screenscraper" ? "igdb" : s.source === "igdb" ? "steamgriddb" : "screenscraper";
+                var next = sources[(sources.indexOf(s.source) + 1) % sources.length];
                 Internal.settings.setScraperSetting("source", next);
                 Qt.callLater(root.scrapeThisGame);
                 return;

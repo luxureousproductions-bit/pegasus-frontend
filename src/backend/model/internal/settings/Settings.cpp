@@ -1877,6 +1877,13 @@ QVariantMap Settings::scraperSettings() const
             it.value() = saved.toString();
     }
     out.insert(QStringLiteral("hasScreenScraper"), scraperHasScreenScraper());
+    // the sources on offer: ScreenScraper and LaunchBox (IGDB and SteamGridDB
+    // only with Show every source); a build without ScreenScraper starts on LaunchBox
+    const QString source = out.value(QStringLiteral("source")).toString();
+    const bool all = out.value(QStringLiteral("showAllSources")).toBool();
+    const bool hidden = (source == QLatin1String("igdb") || source == QLatin1String("steamgriddb")) && !all;
+    if (hidden || (source == QLatin1String("screenscraper") && !scraperHasScreenScraper() && !file.contains(SCRAPER_GROUP + QStringLiteral("source"))))
+        out.insert(QStringLiteral("source"), QStringLiteral("launchbox"));
     return out;
 }
 

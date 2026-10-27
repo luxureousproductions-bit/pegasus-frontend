@@ -2895,6 +2895,11 @@ void Scraper::save()
     m_last_changes = m_changes;
     recordMatch(job);
     QStringList what;
+    // which source the game came from
+    const QString from = m_match.value(QStringLiteral("source")).toString();
+    if (from == QLatin1String("launchbox")) what.append(QStringLiteral("LaunchBox"));
+    else if (from == QLatin1String("screenscraper")) what.append(QStringLiteral("ScreenScraper"));
+    else if (from == QLatin1String("igdb")) what.append(QStringLiteral("IGDB"));
     if (m_changes.contains(QStringLiteral("description")) || m_changes.contains(QStringLiteral("developer")))
         what.append(tr("details"));
     for (const QString& folder : m_got) {
