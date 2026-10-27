@@ -38,6 +38,7 @@
 #include "providers/Overrides.h"
 #include "ScraperKeys.h"
 #include "LaunchBoxDb.h"
+#include "providers/GameDirectory.h"
 #include "Scraper.h"
 #include "ThemeStore.h"
 #include "Updater.h"
@@ -2108,6 +2109,42 @@ QVariantMap Settings::libraryStatus(QObject* collections) const
     return out;
 }
 
+QVariantMap Settings::libraryHousekeeping() const
+{
+    const auto size = providers::gamedir::backup_size();
+    QString data = dataDir();
+    if (data.isEmpty())
+        data = paths::writableConfigDir() + QStringLiteral("/downloaded_media");
+    const providers::gamedir::Cleanup gone = providers::gamedir::clean_up(data, true);
+    return QVariantMap {
+        { QStringLiteral("backupFiles"), size.first },
+        { QStringLiteral("backupMB"), static_cast<double>(size.second) / 1048576.0 },
+        { QStringLiteral("goneGames"), gone.games },
+        { QStringLiteral("goneFiles"), gone.files },
+        { QStringLiteral("goneTitles"), gone.titles.mid(0, 20) },
+    };
+}
+
+int Settings::clearBackups()
+{
+    return providers::gamedir::clear_backups();
+}
+
+QVariantMap Settings::cleanUpGoneGames()
+{
+    QString data = dataDir();
+    if (data.isEmpty())
+        data = paths::writableConfigDir() + QStringLiteral("/downloaded_media");
+    const providers::gamedir::Cleanup done = providers::gamedir::clean_up(data, false);
+    if (done.games > 0 && done.error.isEmpty())
+        reloadLibrary();
+    return QVariantMap {
+        { QStringLiteral("games"), done.games },
+        { QStringLiteral("files"), done.files },
+        { QStringLiteral("error"), done.error },
+    };
+}
+
 QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
 {
     if (m_scraper && m_scraper->running())
@@ -2241,10 +2278,10 @@ void Settings::setNeverScrape(const QString& path, const QString& title, bool ne
     scraper::Scraper::setNeverScrape(path, title, never);
 }
 
-scraper::LaunchBoxDb& Settings::launchBox()
+scraper::LaunchBoxDb& Settings::launchBox() const
 {
     if (!m_launchbox) {
-        m_launchbox = new scraper::LaunchBoxDb(this);
+        m_launchbox = new scraper::LaunchBoxDb(const_cast<Settings*>(this));
         connect(m_launchbox, &scraper::LaunchBoxDb::progress, this, &Settings::launchBoxProgress);
         connect(m_launchbox, &scraper::LaunchBoxDb::finished, this, &Settings::launchBoxFinished);
     }

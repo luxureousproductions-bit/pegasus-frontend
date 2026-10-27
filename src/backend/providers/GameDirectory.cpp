@@ -34,6 +34,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QSet>
 #include <QStringBuilder>
 #include <QTextStream>
 #include <QUrl>
@@ -305,6 +306,103 @@ int clear_backups()
     QDir(backup_dir()).removeRecursively();
     Log::info(LOG_TAG, LOGMSG("Backups cleared: %1 files").arg(before.first));
     return before.first;
+}
+
+Cleanup clean_up(const QString& media_dir, bool dry)
+{
+    Cleanup out;
+    for (const QString& path : metafiles()) {
+        const QString system = system_of(path);
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+        file.close();
+        // the blocks: from a "game:"/"collection:" line to the line before the next
+        struct Block { int first; int last; QString title; QStringList files; bool game; };
+        std::vector<Block> blocks;
+        for (int i = 0; i < lines.size(); i++) {
+            const QString& line = lines.at(i);
+            const bool game = line.startsWith(QLatin1String("game:"));
+            if (game || line.startsWith(QLatin1String("collection:"))) {
+                if (!blocks.empty())
+                    blocks.back().last = i - 1;
+                blocks.push_back({ i, lines.size() - 1, game ? line.mid(5).trimmed() : QString(), {}, game });
+            }
+        }
+        const QDir base(QFileInfo(path).absolutePath());
+        QSet<int> gone;
+        for (size_t b = 0; b < blocks.size(); b++) {
+            Block& block = blocks[b];
+            if (!block.game)
+                continue;
+            for (int i = block.first; i <= block.last; i++) {
+                const QString& line = lines.at(i);
+                if (line.startsWith(QLatin1String("file:"))) {
+                    block.files.append(line.mid(5).trimmed());
+                }
+                else if (line.startsWith(QLatin1String("files:"))) {
+                    for (int j = i + 1; j <= block.last && lines.at(j).startsWith(QLatin1Char(' ')); j++)
+                        block.files.append(lines.at(j).trimmed());
+                }
+            }
+            if (block.files.isEmpty())
+                continue;
+            bool any_there = false;
+            for (const QString& f : block.files) {
+                const bool uri = f.contains(QLatin1String("://")) || f.startsWith(QLatin1String("android:"));
+                if (uri || QFileInfo::exists(QFileInfo(base, f).absoluteFilePath()))
+                    any_there = true;
+            }
+            if (!any_there)
+                gone.insert(static_cast<int>(b));
+        }
+        if (gone.isEmpty())
+            continue;
+        const QString aside = backup_dir(system) % QStringLiteral("/cleanup");
+        QStringList kept;
+        for (size_t b = 0; b < blocks.size(); b++) {
+            const Block& block = blocks[b];
+            const int from = b == 0 ? 0 : block.first;  // the comments above the first block too
+            if (!gone.contains(static_cast<int>(b))) {
+                for (int i = from; i <= block.last; i++)
+                    kept.append(lines.at(i));
+                continue;
+            }
+            out.games++;
+            out.titles.append(block.title);
+            // its scraped art: downloaded_media/<system>/<kind>/<game file name>.*
+            for (const QString& f : block.files) {
+                const QString stem = QFileInfo(f).completeBaseName();
+                if (stem.isEmpty())
+                    continue;
+                const QDir media(media_dir % QLatin1Char('/') % system);
+                for (const QFileInfo& kind : media.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+                    for (const QFileInfo& art : QDir(kind.absoluteFilePath()).entryInfoList({ stem % QStringLiteral(".*") }, QDir::Files)) {
+                        out.files++;
+                        if (dry)
+                            continue;
+                        const QString to_dir = aside % QLatin1Char('/') % kind.fileName();
+                        QDir().mkpath(to_dir);
+                        QFile::remove(to_dir % QLatin1Char('/') % art.fileName());
+                        QFile::rename(art.absoluteFilePath(), to_dir % QLatin1Char('/') % art.fileName());
+                    }
+                }
+            }
+        }
+        if (dry)
+            continue;
+        // the file without them, the old one kept beside what was set aside
+        QDir().mkpath(aside);
+        const QString stamp = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
+        QFile::copy(path, aside % QLatin1Char('/') % FILE_NAME % QStringLiteral(".before-cleanup.") % stamp);
+        while (!kept.isEmpty() && kept.last().trimmed().isEmpty())
+            kept.removeLast();
+        if (!write_all(path, kept.join(QLatin1Char('\n')) % QLatin1Char('\n')))
+            out.error = QStringLiteral("Could not write %1").arg(path);
+        Log::info(LOG_TAG, LOGMSG("`%1`: %2 games whose files are gone set aside").arg(path).arg(gone.size()));
+    }
+    return out;
 }
 
 bool migrated()

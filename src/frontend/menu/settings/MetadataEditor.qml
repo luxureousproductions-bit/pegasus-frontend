@@ -77,9 +77,47 @@ FocusScope {
     property var run: Internal.settings.scraperState()
     property bool completeRunning: false   // the run going is Complete my library's
     property string lastRun: ""            // "Done: ..." after it
+    property var housekeeping: ({})   // Settings.libraryHousekeeping: backups, games whose files are gone
     function refreshStatus() {
         status = Internal.settings.libraryStatus(api.collections);
         reviews = Internal.settings.reviewList();
+        housekeeping = Internal.settings.libraryHousekeeping();
+    }
+    function cleanUp() {
+        var hk = housekeeping || {};
+        if ((hk.goneGames || 0) === 0) {
+            message = qsTr("Every game's file is there: nothing to clean up.") + api.tr;
+            return;
+        }
+        var names = (hk.goneTitles || []).slice(0, 6).join(", ") + ((hk.goneGames || 0) > 6 ? ", …" : "");
+        chooser.openFor(qsTr("%1 games whose files are gone (%2 pictures of theirs): set their entries and art aside in backup/<system>/cleanup?").arg(hk.goneGames).arg(hk.goneFiles) + api.tr + "\n" + names, [
+            { "act": "clean", "text": qsTr("Clean up") + api.tr },
+            { "act": "stay", "text": qsTr("Not now") + api.tr },
+        ], function(act) {
+            if (act !== "clean")
+                return;
+            var done = Internal.settings.cleanUpGoneGames();
+            root.message = done.error ? done.error
+                : qsTr("Set aside: %1 games, %2 pictures. The library is read again.").arg(done.games).arg(done.files) + api.tr;
+            root.keepPosition(root.refreshStatus);
+        });
+    }
+    function clearBackups() {
+        var hk = housekeeping || {};
+        if ((hk.backupFiles || 0) === 0) {
+            message = qsTr("No backups.") + api.tr;
+            return;
+        }
+        chooser.openFor(qsTr("Remove every backup (%1 files, %2 MB)? Those are the copies made before edits and scrapes, and what Clean up set aside.").arg(hk.backupFiles).arg((hk.backupMB || 0).toFixed(1)) + api.tr, [
+            { "act": "clear", "text": qsTr("Remove them") + api.tr },
+            { "act": "stay", "text": qsTr("Keep them") + api.tr },
+        ], function(act) {
+            if (act !== "clear")
+                return;
+            var n = Internal.settings.clearBackups();
+            root.message = qsTr("%1 backup files removed.").arg(n) + api.tr;
+            root.keepPosition(root.refreshStatus);
+        });
     }
     readonly property string completeSub: {
         if (run && run.running)
@@ -1262,6 +1300,13 @@ FocusScope {
                 out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
                 out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
                            "value": root.dataDir, "muted": false });
+                var hk = root.housekeeping || {};
+                out.push({ "kind": "cleanup", "text": qsTr("Clean up deleted games") + api.tr,
+                           "value": (hk.goneGames || 0) > 0 ? qsTr("%1 games, %2 pictures").arg(hk.goneGames).arg(hk.goneFiles) + api.tr : qsTr("nothing to clean") + api.tr,
+                           "warn": (hk.goneGames || 0) > 0, "muted": (hk.goneGames || 0) === 0 });
+                out.push({ "kind": "backups", "text": qsTr("Clear backups") + api.tr,
+                           "value": (hk.backupFiles || 0) > 0 ? qsTr("%1 files, %2 MB").arg(hk.backupFiles).arg((hk.backupMB || 0).toFixed(1)) + api.tr : qsTr("none") + api.tr,
+                           "muted": (hk.backupFiles || 0) === 0 });
                 return out;
             }
             if (root.page === "review") {
@@ -1579,6 +1624,10 @@ FocusScope {
                 root.scrapeThisGame();
             else if (row.kind === "emulist")
                 root.updateEmulatorList();
+            else if (row.kind === "cleanup")
+                root.cleanUp();
+            else if (row.kind === "backups")
+                root.clearBackups();
             else if (row.kind === "datadir")
                 root.pickDataFolder();
             else if (row.kind === "art")

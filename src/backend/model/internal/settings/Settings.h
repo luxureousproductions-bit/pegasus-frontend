@@ -292,6 +292,13 @@ public:
     /// Complete my library fills by default), review, collections: { name: missing art },
     /// igdb, sgdb, ss (logins there) }
     Q_INVOKABLE QVariantMap libraryStatus(QObject* collections) const;
+    /// Pegasus X: backups (backup/<system>/) and games whose files are gone
+    /// { backupFiles, backupMB, goneGames, goneFiles, goneTitles }
+    Q_INVOKABLE QVariantMap libraryHousekeeping() const;
+    Q_INVOKABLE int clearBackups();
+    /// sets aside the entries and scraped art of games whose files are gone
+    /// (into backup/<system>/cleanup/); the library is read again
+    Q_INVOKABLE QVariantMap cleanUpGoneGames();
     /// Complete my library: only what's missing, the kinds ticked in `what`
     /// { boxes, shots, details, fanart, videos }; games it isn't sure about go
     /// to Needs your check. Returns an error, or empty when it started
@@ -397,8 +404,8 @@ private:
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
-    scraper::LaunchBoxDb* m_launchbox = nullptr;
-    scraper::LaunchBoxDb& launchBox();
+    mutable scraper::LaunchBoxDb* m_launchbox = nullptr;
+    scraper::LaunchBoxDb& launchBox() const;
     QPointer<model::Game> m_single_game;
     ThemeStore* m_theme_store = nullptr;
     Updater* m_updater = nullptr;

@@ -64,6 +64,12 @@ std::pair<int, qint64> backup_size();
 /// removes every backup (and what Clean up set aside)
 int clear_backups();
 
+/// Games whose files are gone: their entries and their scraped art
+/// (downloaded_media/<system>/<kind>/<name>.*) set aside in
+/// backup/<system>/cleanup/. { games, files } found (`dry`: only counted)
+struct Cleanup { int games = 0; int files = 0; QStringList titles; QString error; };
+Cleanup clean_up(const QString& media_dir, bool dry);
+
 /// Was the library made the old way (imports, overrides, ROM folders as
 /// game directories) and the game directory not made yet?
 bool migration_needed();
