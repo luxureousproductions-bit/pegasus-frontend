@@ -281,6 +281,9 @@ FocusScope {
         model: root.options
         keyNavigationWraps: false
 
+        // (not interactive: the arrows are handled here)
+        Keys.onUpPressed: if (currentIndex > 0) currentIndex--
+        Keys.onDownPressed: if (currentIndex < count - 1) currentIndex++
         Keys.onPressed: {
             if (event.isAutoRepeat)
                 return;

@@ -1244,7 +1244,7 @@ FocusScope {
                     var hiddenHere = root.hiddenGamesOf(c.name).length;
                     var collHidden = root.isCollectionHidden(c.name);
                     var missingArt = perColl[c.name] || 0;
-                    var count = qsTr("%1 games").arg(c.count) + api.tr
+                    var count = (c.count === 1 ? qsTr("1 game") : qsTr("%1 games").arg(c.count)) + api.tr
                         + (hiddenHere > 0 ? qsTr(" · %1 hidden").arg(hiddenHere) + api.tr : "");
                     out.push({ "kind": "coll", "text": c.name, "coll": c, "hidden": collHidden,
                                "value": collHidden ? qsTr("Hidden") + api.tr
@@ -1266,7 +1266,8 @@ FocusScope {
             }
             if (root.page === "review") {
                 out.push({ "kind": "section", "text": root.reviews.length > 0
-                    ? qsTr("%1 games: the closest match wasn't sure enough to use by itself").arg(root.reviews.length) + api.tr
+                    ? (root.reviews.length === 1 ? qsTr("1 game: the closest match wasn't sure enough to use by itself")
+                       : qsTr("%1 games: the closest match wasn't sure enough to use by itself").arg(root.reviews.length)) + api.tr
                     : qsTr("Nothing to check") + api.tr });
                 for (i = 0; i < root.reviews.length; i++) {
                     var e = root.reviews[i];
