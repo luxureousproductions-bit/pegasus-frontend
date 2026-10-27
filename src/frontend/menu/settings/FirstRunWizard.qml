@@ -30,6 +30,7 @@ FocusScope {
     signal close
 
     property int step: 1
+    property int tick: 0   // bumped when a step's screen closes, so the texts read again
     property bool libraryChanged: false   // game folders or an import: read again before step 4
 
     anchors.fill: parent
@@ -67,28 +68,29 @@ FocusScope {
     }
 
     readonly property var stepNames: [
-        qsTr("Where to keep things") + api.tr,
-        qsTr("Your game folders") + api.tr,
+        qsTr("Data folder") + api.tr,
+        qsTr("Systems and ROM folders") + api.tr,
         qsTr("Import gamelist") + api.tr,
         qsTr("Complete my library") + api.tr,
     ]
     readonly property string title: {
         switch (step) {
             case 1: return qsTr("Where Pegasus X keeps things") + api.tr;
-            case 2: return qsTr("Where are your games?") + api.tr;
+            case 2: return qsTr("Which systems do you have?") + api.tr;
             case 3: return qsTr("Import gamelist") + api.tr;
             case 4: return qsTr("Complete my library") + api.tr;
         }
         return "";
     }
     readonly property string body: {
+        var t = tick;
         switch (step) {
             case 1:
                 return qsTr("Settings, themes, game details and scraped art all live in one folder. Inside the app is fine to start; a folder of your own (eg. PegasusX on an SD card) survives an uninstall and is easy to reach.") + api.tr;
             case 2:
-                var n = Internal.settings.gameDirs.length;
-                return (n === 0 ? qsTr("Add the folders your games are in (eg. ROMs). Pegasus X finds the systems inside them.")
-                                : qsTr("%1 game folders added. Add more, or go on.").arg(n)) + api.tr;
+                var n = Internal.settings.gameDirectorySystems().length;
+                return (n === 0 ? qsTr("Pick your systems, then the folder your ROMs are in. Pegasus X finds each system's folder by name (snes, psx, ...) and makes its game directory. Your ROM folders are only read.")
+                                : qsTr("%1 systems in your game directory. Add more, or go on.").arg(n)) + api.tr;
             case 3:
                 return qsTr("Already set up another front end? Bring its games, details and art in, so there's nothing to do again.") + api.tr;
             case 4:
@@ -114,15 +116,18 @@ FocusScope {
         return "";
     }
     readonly property var options: {
+        var t = tick;
         switch (step) {
             case 1: return [
                 { "act": "keep", "text": qsTr("Keep it inside the app") + api.tr, "value": qsTr("recommended to start") + api.tr },
                 { "act": "pick", "text": qsTr("Pick a folder...") + api.tr, "value": "" },
             ];
-            case 2: return [
-                { "act": "dirs", "text": qsTr("Add game folders...") + api.tr, "value": "" },
-                { "act": "next", "text": qsTr("Next") + api.tr, "value": "" },
-            ];
+            case 2:
+                var have = Internal.settings.gameDirectorySystems().length;
+                return [
+                    { "act": "dirs", "text": qsTr("Add systems...") + api.tr, "value": have === 0 ? qsTr("nothing added yet") + api.tr : "" },
+                    { "act": "next", "text": qsTr("Next") + api.tr, "value": "" },
+                ];
             case 3: return [
                 { "act": "import", "text": qsTr("Import gamelist...") + api.tr, "value": "" },
                 { "act": "next", "text": qsTr("Skip") + api.tr, "value": "" },
@@ -151,7 +156,7 @@ FocusScope {
                 openSub("RootFolderSetup.qml", { "firstRun": true });
                 break;
             case "dirs":
-                openSub("GameDirEditor.qml", {});
+                openSub("GameDirectory.qml", { "addOnly": true });
                 break;
             case "import":
                 openSub("EsdeImport.qml", {});
@@ -183,8 +188,9 @@ FocusScope {
         if (from.indexOf("RootFolderSetup") >= 0) {
             goTo(2);
         }
-        else if (from.indexOf("GameDirEditor") >= 0) {
+        else if (from.indexOf("GameDirectory") >= 0) {
             libraryChanged = true;
+            tick++;  // the texts read the directory again
             list.currentIndex = 1;  // Next
         }
         else if (from.indexOf("EsdeImport") >= 0) {

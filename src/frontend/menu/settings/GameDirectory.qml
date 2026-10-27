@@ -32,6 +32,7 @@ FocusScope {
     signal openEsdeImport
 
     property string page: "main"     // main, add, found
+    property bool addOnly: false     // opened for Add systems alone (the first-start setup)
     property string message: ""
     property bool changed: false     // the library is read again on the way out
     property bool working: false
@@ -48,7 +49,11 @@ FocusScope {
     enabled: focus
     visible: focus
 
-    Component.onCompleted: refresh()
+    Component.onCompleted: {
+        refresh();
+        if (addOnly)
+            openAdd();
+    }
 
     function refresh() {
         systems = Internal.settings.gameDirectorySystems();
@@ -169,7 +174,7 @@ FocusScope {
             list.currentIndex = 0;
             return;
         }
-        if (page === "add") {
+        if (page === "add" && !addOnly) {
             page = "main";
             message = "";
             list_top();
@@ -224,7 +229,8 @@ FocusScope {
                 for (i = 0; i < root.systems.length; i++) {
                     var s = root.systems[i];
                     var where = s.folders.length > 0 ? root.shortFolder(s.folders[0]) + (s.folders.length > 1 ? " +" + (s.folders.length - 1) : "") : "";
-                    out.push({ "kind": "system", "text": s.name, "sub": s.shortName !== "" ? "· " + s.shortName : "", "entry": s,
+                    out.push({ "kind": "system", "text": s.name, "entry": s,
+                               "sub": (s.shortName !== "" && s.shortName !== s.name.toLowerCase()) ? "· " + s.shortName : "",
                                "value": (s.games === 1 ? qsTr("1 game") : qsTr("%1 games").arg(s.games)) + api.tr
                                       + (where !== "" ? " · " + where : "")
                                       + (s.source !== "" ? " · " + (s.source === "gamelist" ? qsTr("gamelist") : qsTr("own metadata")) + api.tr : ""),
@@ -474,6 +480,9 @@ FocusScope {
         pickFolders: true
         allowNewFolder: false
         fileExtensions: []
+        infoText: root.folderFor !== ""
+            ? qsTr("Pick the folder the %1 games are in.").arg(root.folderFor) + api.tr
+            : qsTr("Pick the folder your ROMs are in: the one with the systems' folders inside (snes, psx, ...), or one system's folder.") + api.tr
         onCancel: { focus = false; list.focus = true; }
         onPickFolder: {
             focus = false;

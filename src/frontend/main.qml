@@ -493,10 +493,11 @@ Window {
                     // the first start: where everything is kept
                     // (four steps: folder, game folders, import gamelist, complete my
                     // library; it goes on from where it was if Pegasus X closed in between)
-                    // (the four-step setup is off until the data folder model is rebuilt)
-                    if (Internal.settings.rootSetupNeeded && Internal.settings.startupScreen() === "" && testTitle === "") {
-                        Internal.settings.setWizardStep(0);
-                        firstRunSetup.setSource("menu/settings/RootFolderSetup.qml", { "firstRun": true });
+                    // (four steps: folder, systems and ROM folders, import gamelist, complete
+                    // my library; it goes on from where it was if Pegasus X closed in between)
+                    if ((Internal.settings.rootSetupNeeded || Internal.settings.wizardStep() > 0)
+                            && Internal.settings.startupScreen() === "" && testTitle === "") {
+                        firstRunSetup.setSource("menu/settings/FirstRunWizard.qml");
                         firstRunSetup.focus = true;
                     }
                     // the Pegasus X folder couldn't be used (SD card missing?): say so,

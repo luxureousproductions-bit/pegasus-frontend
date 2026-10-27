@@ -57,7 +57,18 @@ stop() {  # name
 
 # -- 1. first start: the ES-DE import and the ROM folder import, then the theme --
 start 01-first-start "" 15 PEGASUSX_TEST_ESDE_IMPORT=1 "PEGASUSX_TEST_ROM_FOLDERS=$T/MyGames"
-keys Right Return
+# the first-start setup: through its four steps (keeping the folder, skipping the rest)
+shot 01-wizard-1
+keys Return
+sleep 1
+shot 01-wizard-2
+keys Down Return
+sleep 1
+shot 01-wizard-3
+keys Down Return
+sleep 3
+shot 01-wizard-4
+keys Down Return
 sleep 2
 shot 01-theme
 stop 01-first-start
