@@ -2121,7 +2121,7 @@ QVariantMap Settings::libraryHousekeeping() const
         { QStringLiteral("backupMB"), static_cast<double>(size.second) / 1048576.0 },
         { QStringLiteral("goneGames"), gone.games },
         { QStringLiteral("goneFiles"), gone.files },
-        { QStringLiteral("goneTitles"), gone.titles.mid(0, 20) },
+        { QStringLiteral("goneTitles"), QVariant(gone.titles.mid(0, 20)) },
     };
 }
 
