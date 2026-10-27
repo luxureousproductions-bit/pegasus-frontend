@@ -47,6 +47,10 @@ struct ParserState {
     std::vector<FileFilter> filters;
     std::vector<model::Collection*> all_colls;
     size_t found_issues = 0;
+    // Pegasus X: the game's files belonged to another game already: this
+    // block's details fill that game's gaps when the block ends
+    model::Game* conflict_owner = nullptr;
+    int cur_game_files = 0;
 
     explicit ParserState(const QString&);
     NO_COPY_NO_MOVE(ParserState)
@@ -89,6 +93,7 @@ private:
     bool apply_extra_entry_maybe(ParserState&, const metafile::Entry&) const;
     bool apply_asset_entry_maybe(ParserState&, const metafile::Entry&) const;
     void apply_entry(ParserState&, const metafile::Entry&, SearchContext&) const;
+    void finish_game_block(ParserState&) const;
 
     QString assetline_to_url(ParserState&, const metafile::Entry&, const QString&) const;
 };

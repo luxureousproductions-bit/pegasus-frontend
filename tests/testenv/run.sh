@@ -43,9 +43,9 @@ start() {  # name, screen ("" for the theme), seconds to wait, extra env...
     fi
     sleep "$wait"
 }
-wait_log() {  # pattern, seconds: until the running Pegasus X's log has it
+wait_log() {  # pattern, seconds, stdout file: until the running Pegasus X's output has it
     for _ in $(seq 1 "$2"); do
-        grep -q "$1" "$CFG/lastrun.log" 2>/dev/null && return 0
+        grep -q "$1" "$CFG/lastrun.log" "$3" 2>/dev/null && return 0
         sleep 1
     done
     echo "  (no \"$1\" in the log after $2 s)"
@@ -253,13 +253,13 @@ c.set("scraper", "overwrite", "true")
 c.set("scraper", "useLibretro", "false")
 with open(p, "w") as f: c.write(f, space_around_delimiters=False)
 PY
-    start 13-scrape-launchbox "" 8 "PEGASUSX_TEST_SCRAPE=Chrono Trigger (my own file)" "PEGASUSX_TEST_LAUNCHBOX=1"
-    wait_log "Scraper: Done\|LaunchBox: Reading the database:\|Download failed" 900
+    start 13-scrape-launchbox "" 8 "PEGASUSX_TEST_SCRAPE=Super Mario World" "PEGASUSX_TEST_LAUNCHBOX=1"
+    wait_log "Scraper: Done\|LaunchBox: Reading the database:\|Download failed\|no game called" 900 "$R/logs/13-scrape-launchbox.stdout"
     sleep 2
     stop 13-scrape-launchbox
     mkdir -p "$R/scraped-launchbox"
-    find "$CFG/downloaded_media/snes" -type f -iname "Chrono*" 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-launchbox/files.txt" || true
-    grep -h "Scraper\|LaunchBox\|\[test\]" "$R/logs/13-scrape-launchbox.log" > "$R/scraped-launchbox/scraper.log" || true
+    find "$CFG/downloaded_media/snes" -type f -iname "Super Mario World*" 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-launchbox/files.txt" || true
+    grep -h "Scraper\|LaunchBox\|\[test\]" "$R/logs/13-scrape-launchbox.stdout" | sed 's/\x1b\[[0-9;]*m//g' > "$R/scraped-launchbox/scraper.log" || true
     cp "$CFG/launchbox/status.json" "$R/scraped-launchbox/" 2>/dev/null || true
     python3 - "$CFG/launchbox/platforms.json" > "$R/scraped-launchbox/platforms.txt" 2>/dev/null <<'PY' || true
 import json, sys

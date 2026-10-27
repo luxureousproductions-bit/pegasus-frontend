@@ -316,6 +316,8 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
                         // Pegasus X: an ES-DE import's game your own file has: used on top of it later
                         if (providers::overrides::is_import_file(ps.path))
                             providers::overrides::note_import_conflict(ps.path);
+                        else if (!ps.conflict_owner)
+                            ps.conflict_owner = game_ptr;  // this block fills its gaps (finish_game_block)
                         else
                             print_warning(ps, entry, LOGMSG("This URI already belongs to a different game: `%1`").arg(line));
                         continue;
@@ -323,6 +325,7 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
 
                     Q_ASSERT(game_ptr == nullptr);
                     sctx.game_add_uri(*ps.cur_game, line);
+                    ps.cur_game_files++;
                 }
                 else {
                     QFileInfo finfo(ps.dir, line);
@@ -343,6 +346,8 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
                         // Pegasus X: an ES-DE import's game your own file has: used on top of it later
                         if (providers::overrides::is_import_file(ps.path))
                             providers::overrides::note_import_conflict(ps.path);
+                        else if (!ps.conflict_owner)
+                            ps.conflict_owner = game_ptr;  // this block fills its gaps (finish_game_block)
                         else
                             print_warning(ps, entry, LOGMSG("This file already belongs to a different game: `%1`").arg(line));
                         continue;
@@ -350,6 +355,7 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
 
                     Q_ASSERT(game_ptr == nullptr);
                     sctx.game_add_filepath(*ps.cur_game, std::move(path));
+                    ps.cur_game_files++;
                 }
             }
             break;
@@ -523,6 +529,8 @@ void Metadata::apply_entry(ParserState& ps, const metafile::Entry& entry, Search
     Q_ASSERT(!entry.values.front().isEmpty());
 
     // TODO: set cur_* by the return value of emplace
+    if (entry.key == m_primary_key_collection || entry.key == m_primary_key_game)
+        finish_game_block(ps);
     if (entry.key == m_primary_key_collection) {
         const QString& name = first_line_of(ps, entry);
 
@@ -537,6 +545,8 @@ void Metadata::apply_entry(ParserState& ps, const metafile::Entry& entry, Search
 
     if (entry.key == m_primary_key_game) {
         ps.cur_game = sctx.create_game();
+        ps.cur_game_files = 0;
+        ps.conflict_owner = nullptr;
         ps.cur_game->setTitle(first_line_of(ps, entry));
         ps.cur_game->setLaunchCmdBasedir(ps.dir.path());
         // Pegasus X: where the entry came from, so duplicates can be told
@@ -572,6 +582,45 @@ void Metadata::apply_entry(ParserState& ps, const metafile::Entry& entry, Search
         apply_collection_entry(ps, entry);
 }
 
+// Pegasus X: a game block whose files all belonged to a game read earlier
+// (yours, in another file): its details and art go onto that game where it
+// has none, instead of being lost with a warning
+void Metadata::finish_game_block(ParserState& ps) const
+{
+    if (!ps.cur_game || !ps.conflict_owner || ps.cur_game_files > 0)
+        return;
+    model::Game& into = *ps.conflict_owner;
+    const model::Game& from = *ps.cur_game;
+    if (into.summary().isEmpty()) into.setSummary(from.summary());
+    if (into.description().isEmpty()) into.setDescription(from.description());
+    if (into.developerListConst().isEmpty()) into.developerList() = from.developerListConst();
+    if (into.publisherListConst().isEmpty()) into.publisherList() = from.publisherListConst();
+    if (into.genreListConst().isEmpty()) into.genreList() = from.genreListConst();
+    if (into.tagListConst().isEmpty()) into.tagList() = from.tagListConst();
+    if (into.playerCount() <= 1 && from.playerCount() > 1) into.setPlayerCount(from.playerCount());
+    if (!into.releaseDate().isValid()) into.setReleaseDate(from.releaseDate());
+    if (into.rating() <= 0.f) into.setRating(from.rating());
+    if (into.launchCmd().isEmpty()) into.setLaunchCmd(from.launchCmd());
+    for (const AssetType type : { AssetType::BOX_FRONT, AssetType::BOX_BACK, AssetType::BOX_SPINE, AssetType::BOX_FULL,
+                                  AssetType::CARTRIDGE, AssetType::LOGO, AssetType::POSTER, AssetType::ARCADE_MARQUEE,
+                                  AssetType::ARCADE_BEZEL, AssetType::ARCADE_PANEL, AssetType::ARCADE_CABINET_L,
+                                  AssetType::ARCADE_CABINET_R, AssetType::UI_TILE, AssetType::UI_BANNER, AssetType::UI_STEAMGRID,
+                                  AssetType::BACKGROUND, AssetType::MUSIC, AssetType::SCREENSHOT, AssetType::TITLESCREEN,
+                                  AssetType::VIDEO }) {
+        for (const QString& f : from.assets().get(type)) {
+            if (!into.assets().get(type).contains(f))
+                into.assetsMut().add_file(type, f);
+        }
+    }
+    for (auto it = from.extraMap().cbegin(); it != from.extraMap().cend(); ++it) {
+        if (it.key() != QLatin1String("pegasusx-source") && !into.extraMap().contains(it.key()))
+            into.extraMapMut().insert(it.key(), it.value());
+    }
+    Log::info(m_log_tag, LOGMSG("`%1`: `%2` is defined earlier: this file's details filled its gaps")
+        .arg(::pretty_path(ps.path), into.title()));
+    ps.conflict_owner = nullptr;
+}
+
 std::vector<FileFilter> Metadata::apply_metafile(const QString& metafile_path, SearchContext& sctx) const
 {
     ParserState ps(metafile_path);
@@ -587,6 +636,7 @@ std::vector<FileFilter> Metadata::apply_metafile(const QString& metafile_path, S
         Log::error(m_log_tag, LOGMSG("Failed to read metadata file `%1`")
             .arg(::pretty_path(metafile_path)));
     }
+    finish_game_block(ps);
     if (ps.found_issues > ISSUE_LOG_LIMIT) {
         Log::warning(m_log_tag, LOGMSG("%1 other issues omitted").arg(QString::number(ps.found_issues - ISSUE_LOG_LIMIT)));
     }
