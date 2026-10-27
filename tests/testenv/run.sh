@@ -50,6 +50,19 @@ stop() {  # name
 
 # -- 1. first start: the ES-DE import and the ROM folder import, then the theme --
 start 01-first-start "" 15 PEGASUSX_TEST_ESDE_IMPORT=1 "PEGASUSX_TEST_ROM_FOLDERS=$T/MyGames"
+# the first-start setup: through its four steps (keeping the folder, skipping the rest)
+shot 01-wizard-1
+keys Return
+sleep 1
+shot 01-wizard-2
+keys Down Return
+sleep 1
+shot 01-wizard-3
+keys Down Return
+sleep 3
+shot 01-wizard-4
+keys Down Return
+sleep 2
 shot 01-theme
 stop 01-first-start
 cp "$CFG/game_dirs.txt" "$R/files/game_dirs.txt" 2>/dev/null
@@ -76,6 +89,13 @@ x-pegasusx-hidden-art: box_front|$CFG/downloaded_media/n64/covers/Mario Kart 64 
 x-pegasusx-edited: assets.background
 TXT
 
+# a game an earlier run wasn't sure about (Library > Needs your check)
+cat > "$CFG/metadata/review.json" <<JSON
+{ "version": 1, "games": {
+  "$T/MyGames/Nintendo 64/Star Fox 64 (USA).z64": { "title": "Star Fox 64 (USA)", "collection": "Nintendo 64",
+    "system": "n64", "closest": "Star Fox 64 3D", "info": "Nintendo 3DS · 2011", "score": 55, "igdb": 2183 } } }
+JSON
+
 # -- 2. the settings ---------------------------------------------------------------
 start 02-settings "menu/settings/SettingsScreen.qml" 6
 shot 02-settings-top
@@ -86,7 +106,15 @@ stop 02-settings
 # -- 3. Library: collections, a collection, a game -------------------------------------
 start 03-library "menu/settings/MetadataEditor.qml" 6
 shot 03-library
-keys Down Down Down Down Down Down
+keys Return
+sleep 1
+shot 03-library-complete
+keys Escape
+keys Down Return
+sleep 1
+shot 03-library-review
+keys Escape
+keys Down Down Down Down Down
 shot 03-library-down
 keys Return
 sleep 2

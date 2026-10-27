@@ -66,7 +66,106 @@ FocusScope {
     Component.onCompleted: {
         libStart = libState();
         Internal.settings.libraryOpen = true;  // a finished scrape waits for you to leave
+        refreshStatus();
         list.currentIndex = 1;  // the first option, below the title
+    }
+
+    // -- The status rows: Complete my library, Needs your check --------------------
+
+    property var status: ({})       // Settings.libraryStatus
+    property var reviews: []        // Settings.reviewList
+    property var run: Internal.settings.scraperState()
+    property bool completeRunning: false   // the run going is Complete my library's
+    property string lastRun: ""            // "Done: ..." after it
+    function refreshStatus() {
+        status = Internal.settings.libraryStatus(api.collections);
+        reviews = Internal.settings.reviewList();
+    }
+    readonly property string completeSub: {
+        if (run && run.running)
+            return qsTr("Working: %1 of %2%3").arg(run.done || 0).arg(run.total || 0)
+                .arg(run.current ? " · " + run.current : "") + api.tr;
+        if (lastRun !== "")
+            return lastRun;
+        var st = status || {};
+        if ((st.any || 0) === 0)
+            return qsTr("Every game has a box, a screenshot and a description") + api.tr;
+        var parts = [];
+        var art = Math.max(st.box || 0, st.shots || 0);
+        if (art > 0)
+            parts.push(qsTr("%1 games miss a box or screenshot").arg(art) + api.tr);
+        if ((st.details || 0) > 0)
+            parts.push(qsTr("%1 have no description").arg(st.details) + api.tr);
+        return parts.join(" · ");
+    }
+    readonly property string completeValue: (run && run.running) ? qsTr("Stop") + api.tr
+        : ((status.any || 0) > 0 ? qsTr("Find %1 ›").arg(status.any) + api.tr : "")
+    Connections {
+        target: Internal.settings
+        function onScraperProgress(state) { root.run = state; }
+        function onScraperFinished(state) {
+            root.run = state;
+            if (root.completeRunning) {
+                root.completeRunning = false;
+                root.lastRun = qsTr("Done: %1 filled, %2 to check").arg(state.saved || 0)
+                    .arg((state.notFound || 0) + (state.failed || 0)) + api.tr;
+            }
+            root.keepPosition(function() { root.reviews = Internal.settings.reviewList(); });
+        }
+    }
+
+    // what Complete my library fills (its pop-up's rows)
+    property var completeWhat: ({ "boxes": true, "shots": true, "details": true, "fanart": false, "videos": false })
+    function openComplete() {
+        if (run && run.running) {
+            Internal.settings.stopScraper();
+            message = qsTr("Stopping...") + api.tr;
+            return;
+        }
+        refreshStatus();
+        completeDialog.focus = true;
+    }
+    function startComplete() {
+        // only the kinds that can be found with the logins there are
+        var what = {};
+        for (var i = 0; i < completeDialog.kinds.length; i++) {
+            var k = completeDialog.kinds[i];
+            what[k[0]] = !!completeWhat[k[0]] && k[3] === "";
+        }
+        var error = Internal.settings.completeLibrary(api.collections, what);
+        list.focus = true;
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        completeRunning = true;
+        lastRun = "";
+        scrapedHere = true;
+        message = qsTr("Working in the background: you can leave Settings and play.") + api.tr;
+    }
+    function openReview() {
+        reviews = Internal.settings.reviewList();
+        page = "review";
+        message = "";
+        list.currentIndex = 1;
+        list.positionViewAtBeginning();
+    }
+    function reviewAct(entry, mode) {
+        if (mode === "never") {
+            Internal.settings.setNeverScrape(entry.path, entry.title, true);
+            keepPosition(function() { root.reviews = Internal.settings.reviewList(); });
+            message = qsTr("\"%1\" won't be scraped again.").arg(entry.title) + api.tr;
+            return;
+        }
+        if (mode === "use" && !(entry.igdb > 0))
+            mode = "choose";
+        var error = Internal.settings.reviewScrape(api.collections, entry.path, mode, entry.igdb || 0);
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        scrapedHere = true;
+        message = qsTr("Scraping \"%1\"...").arg(entry.title) + api.tr;
     }
 
     // -- Library: hidden games and collections, Android sections -------------------
@@ -869,9 +968,17 @@ FocusScope {
             return;
         }
         building = false;
-        if (page === "hidden") {
+        if (page === "hidden" || page === "review") {
+            var wanted = page === "hidden" ? "hiddenlist" : "review";
             page = "collections";
-            list.currentIndex = 2;
+            refreshStatus();
+            for (var k = 0; k < list.rows.length; k++) {
+                if (list.rows[k].kind === wanted) {
+                    list.currentIndex = k;
+                    list.positionViewAtIndex(k, ListView.Center);
+                    break;
+                }
+            }
             return;
         }
         if (page === "collection") {
@@ -1093,6 +1200,7 @@ FocusScope {
         id: header
         text: (page === "collections" ? qsTr("Settings > Library")
              : page === "hidden" ? qsTr("Library > Hidden")
+             : page === "review" ? qsTr("Library > Needs your check")
              : page === "collection" ? qsTr("Library > %1").arg(root.collName)
              : qsTr("%1 > %2").arg(root.collName).arg(root.current("title"))) + api.tr
         z: 2
@@ -1121,25 +1229,52 @@ FocusScope {
             var out = [];
             var i;
             if (root.page === "collections") {
-                out.push({ "kind": "section", "text": qsTr("Options") + api.tr });
-                var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
-                out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
-                out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
-                           "value": root.dataDir, "muted": false });
-                out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
-                           "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
-                           "muted": hiddenCount === 0 });
-                out.push({ "kind": "section", "text": qsTr("Scraper") + api.tr });
-                out.push({ "kind": "scraper", "text": qsTr("Scraper...") + api.tr, "value": "" });
+                // how the library is doing first, then the collections, then the options
+                var st = root.status || {};
+                var nReview = root.reviews.length;
+                out.push({ "kind": "section", "text": qsTr("Your library · %1 games").arg(st.games || 0) + api.tr });
+                out.push({ "kind": "complete", "text": qsTr("Complete my library") + api.tr, "sub": " " });
+                out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
+                           "value": nReview === 1 ? qsTr("1 game") + api.tr : qsTr("%1 games").arg(nReview) + api.tr,
+                           "warn": nReview > 0, "muted": nReview === 0 });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
+                var perColl = st.collections || {};
                 for (i = 0; i < root.collections.length; i++) {
                     var c = root.collections[i];
                     var hiddenHere = root.hiddenGamesOf(c.name).length;
                     var collHidden = root.isCollectionHidden(c.name);
+                    var missingArt = perColl[c.name] || 0;
+                    var count = qsTr("%1 games").arg(c.count) + api.tr
+                        + (hiddenHere > 0 ? qsTr(" · %1 hidden").arg(hiddenHere) + api.tr : "");
                     out.push({ "kind": "coll", "text": c.name, "coll": c, "hidden": collHidden,
                                "value": collHidden ? qsTr("Hidden") + api.tr
-                                      : hiddenHere > 0 ? qsTr("%1 games · %2 hidden").arg(c.count).arg(hiddenHere) + api.tr
-                                      : qsTr("%1 games").arg(c.count) + api.tr });
+                                      : !c.loaded ? count
+                                      : count + " · " + (missingArt > 0 ? qsTr("%1 missing art").arg(missingArt) : qsTr("all art")) + api.tr,
+                               "warn": !collHidden && c.loaded && missingArt > 0,
+                               "done": !collHidden && c.loaded && missingArt === 0 && c.count > 0 });
+                }
+                out.push({ "kind": "section", "text": qsTr("Options") + api.tr });
+                out.push({ "kind": "scraper", "text": qsTr("Scraper settings...") + api.tr, "value": "" });
+                var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
+                out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
+                           "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
+                           "muted": hiddenCount === 0 });
+                out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
+                out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
+                           "value": root.dataDir, "muted": false });
+                return out;
+            }
+            if (root.page === "review") {
+                out.push({ "kind": "section", "text": root.reviews.length > 0
+                    ? qsTr("%1 games: the closest match wasn't sure enough to use by itself").arg(root.reviews.length) + api.tr
+                    : qsTr("Nothing to check") + api.tr });
+                for (i = 0; i < root.reviews.length; i++) {
+                    var e = root.reviews[i];
+                    out.push({ "kind": "reviewgame", "text": e.title, "entry": e,
+                               "sub": e.closest ? qsTr("Closest: %1").arg(e.closest) + api.tr + (e.info ? " · " + e.info : "")
+                                                : qsTr("No match found") + api.tr,
+                               "value": e.closest ? (e.score || 0) + "%" : "—",
+                               "warn": !!e.closest, "muted": !e.closest });
                 }
                 return out;
             }
@@ -1376,7 +1511,13 @@ FocusScope {
             if (!selectable(index))
                 return;
             var row = rows[index];
-            if (row.kind === "coll")
+            if (row.kind === "complete")
+                root.openComplete();
+            else if (row.kind === "review")
+                root.openReview();
+            else if (row.kind === "reviewgame")
+                root.reviewAct(row.entry, "use");
+            else if (row.kind === "coll")
                 root.openCollection(row.coll);
             else if (row.kind === "game") {
                 if (root.isAndroidCollection(root.collObj))
@@ -1453,6 +1594,10 @@ FocusScope {
             if (!selectable(index))
                 return;
             var row = rows[index];
+            if (row.kind === "reviewgame") {
+                root.reviewAct(row.entry, "never");
+                return;
+            }
             if (row.kind === "field") {
                 if (row.field.key && root.undoEdit(row.field.key))
                     root.message = qsTr("Undone.") + api.tr;
@@ -1480,6 +1625,8 @@ FocusScope {
                 var row = currentIndex >= 0 && currentIndex < rows.length ? rows[currentIndex] : null;
                 if (row && row.kind === "game")
                     root.setGameHidden(row.game.key, row.game.title, !row.hidden);
+                else if (row && row.kind === "reviewgame")
+                    root.reviewAct(row.entry, "choose");
             }
         }
 
@@ -1489,9 +1636,12 @@ FocusScope {
             readonly property bool isSave: modelData.kind === "save"
             readonly property bool highlighted: !isSection && !isInfo
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
+            // a second, smaller line (Complete my library: live while it works)
+            readonly property string subText: modelData.kind === "complete" ? root.completeSub : (modelData.sub || "")
+            readonly property bool hasSub: subText !== ""
 
             width: ListView.view.width
-            height: isSection ? sectionText.height : (isInfo ? vpx(44) : isSave ? vpx(64) : vpx(22) * 2.4)
+            height: isSection ? sectionText.height : (isInfo ? vpx(44) : isSave ? vpx(64) : hasSub ? vpx(22) * 3.4 : vpx(22) * 2.4)
 
             Text {
                 id: sectionText
@@ -1538,13 +1688,27 @@ FocusScope {
                 anchors.left: parent.left
                 anchors.leftMargin: vpx(30)
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.width * 0.4
+                anchors.verticalCenterOffset: parent.hasSub ? -vpx(12) : 0
+                width: parent.hasSub ? parent.width * 0.7 : parent.width * 0.4
+                elide: Text.ElideRight
+            }
+            Text {
+                visible: parent.hasSub && !parent.isSection
+                text: parent.subText
+                color: "#999"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(16)
+                anchors.left: rowLabel.left
+                anchors.top: rowLabel.bottom
+                anchors.topMargin: vpx(2)
+                width: parent.width * 0.75
                 elide: Text.ElideRight
             }
             Text {
                 visible: !parent.isSection && !parent.isSave
-                text: modelData.value || ""
+                text: modelData.kind === "complete" ? root.completeValue : (modelData.value || "")
                 color: parent.isInfo ? "#999"
+                     : modelData.warn ? "#e9a23b"
                      : modelData.hidden ? "#e8b06a"
                      : modelData.edited ? "#5cc"
                      : modelData.done ? "#9d9"
@@ -1576,8 +1740,9 @@ FocusScope {
     Text {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "collections" ? qsTr("Edit, hide and sort your collections and games. Saved in Pegasus metadata files, so every theme shows it.") + api.tr
+            : root.page === "collections" ? qsTr("A open · B back. Edits are saved in Pegasus metadata files, so every theme shows them.") + api.tr
             : root.page === "hidden" ? qsTr("A shows it again.") + api.tr
+            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · B back") + api.tr
             : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr
         height: implicitHeight
@@ -1982,6 +2147,58 @@ FocusScope {
         onNewFolderRequested: nameDialog.openFor(parent_path)
     }
 
+
+    // -- Complete my library: what to fill ------------------------------------------
+
+    PegasusOptionsDialog {
+        id: completeDialog
+        z: 8
+        title: qsTr("Complete my library") + api.tr
+        text: qsTr("Looks up only what's missing: your own edits and art are never replaced. It keeps going in the background, so you can play while it works.") + api.tr
+        closeLabel: qsTr("Cancel") + api.tr
+        readonly property var st: root.status || {}
+        // the kinds: [key, label, missing count, the login it needs or ""]
+        readonly property var kinds: [
+            [ "boxes", qsTr("Boxes") + api.tr, st.box || 0, "" ],
+            [ "shots", qsTr("Screenshots and title screens") + api.tr, st.shots || 0, "" ],
+            [ "details", qsTr("Descriptions, genre, year") + api.tr, st.details || 0,
+              (st.igdb || st.ss) ? "" : qsTr("needs an IGDB login") + api.tr ],
+            [ "fanart", qsTr("Fan art and logos") + api.tr, st.fanart || 0,
+              (st.igdb || st.sgdb || st.ss) ? "" : qsTr("needs IGDB or SteamGridDB") + api.tr ],
+            [ "videos", qsTr("Videos and manuals") + api.tr, st.videos || 0,
+              st.ss ? "" : qsTr("needs ScreenScraper") + api.tr ],
+        ]
+        rows: {
+            var out = [];
+            for (var i = 0; i < kinds.length; i++) {
+                var k = kinds[i];
+                var on = !!root.completeWhat[k[0]] && k[3] === "";
+                out.push({ "text": (on ? "☑  " : "☐  ") + k[1],
+                           "value": k[3] !== "" ? k[3] : qsTr("%1 missing").arg(k[2]) + api.tr });
+            }
+            var using = [];
+            if (st.ss) using.push("ScreenScraper");
+            if (st.igdb) using.push("IGDB");
+            using.push(qsTr("checksums (Hasheous)") + api.tr);
+            using.push(qsTr("libretro pictures") + api.tr);
+            if (st.sgdb) using.push("SteamGridDB");
+            out.push({ "text": qsTr("Start") + api.tr, "value": qsTr("Using: %1").arg(using.join(" · ")) + api.tr });
+            return out;
+        }
+        onActivated: {
+            if (index >= kinds.length) {
+                root.startComplete();
+                return;
+            }
+            var k = kinds[index];
+            if (k[3] !== "")
+                return;  // needs a login first
+            var w = Object.assign({}, root.completeWhat);
+            w[k[0]] = !w[k[0]];
+            root.completeWhat = w;
+        }
+        onClosed: list.focus = true
+    }
 
     // -- One choice from a short list: unsaved changes, kind of art -----------------
 

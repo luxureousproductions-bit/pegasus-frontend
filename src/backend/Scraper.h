@@ -64,6 +64,7 @@ struct Job {
     bool has_box2d = false;
     bool has_box3d = false;
     QStringList hidden_art;  ///< art removed in Library ("<kind>|<file>")
+    int igdb_id = 0;         ///< the game's IGDB id when you picked it (Needs your check)
 };
 
 /// What a source gave for one game
@@ -101,6 +102,16 @@ public:
     void refine(const QString& search_name);
     void skip();
 
+    // Needs your check (metadata/review.json): games a run wasn't sure about,
+    // and the ones you never want scraped
+    /// [{ path, title, collection, system, closest, score, igdb, date }], by title
+    static QVariantList reviewList();
+    static void reviewRemove(const QString& path);
+    static void setNeverScrape(const QString& path, const QString& title, bool never);
+    static QSet<QString> neverScrape();
+    /// libretro has free pictures for this system (ES-DE's name)
+    static bool hasFreeArt(const QString& system);
+
 signals:
     /// a match's picture arrived (url: a local file) or didn't (error)
     void thumbReady(int index, QString url, int error);
@@ -135,6 +146,8 @@ private:
     bool m_identified = false;
     bool m_libretro_done = false;
     QHash<QString, QStringList> m_libretro_lists;  ///< a system's thumbnail names, per kind (this run)
+    QVariantMap m_review_hint;  ///< the closest match when it wasn't sure enough (closest, score, igdb)
+    void reviewAdd(const Job& job);
     QVariantMap m_match;   ///< what the game was matched to (source, id, name)
     QString m_md5;         ///< its file's MD5, when one was made
     void setMatch(const QString& source, const QString& id, const QString& name);

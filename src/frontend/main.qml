@@ -197,6 +197,74 @@ Window {
     }
 
 
+    // Pegasus X: a scrape going on (Complete my library) while you're on the
+    // theme: a thin line at the bottom, then what it did for a few seconds
+    Rectangle {
+        id: scrapeStrip
+        property var runState: ({})
+        property string doneText: ""
+        readonly property bool working: !!runState.running
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        height: vpx(34)
+        color: "#d0000000"
+        z: 50
+        visible: content.focus && theme.focus && (working || doneText !== "")
+        Connections {
+            target: Internal.settings
+            function onScraperProgress(state) {
+                scrapeStrip.runState = state;
+                if (state.running)
+                    scrapeStrip.doneText = "";
+            }
+            function onScraperFinished(state) {
+                scrapeStrip.runState = state;
+                if ((state.total || 0) > 1) {
+                    scrapeStrip.doneText = qsTr("Done: %1 filled, %2 to check in Settings > Library")
+                        .arg(state.saved || 0).arg((state.notFound || 0) + (state.failed || 0)) + api.tr;
+                    stripHide.restart();
+                }
+            }
+        }
+        Timer { id: stripHide; interval: 6000; onTriggered: scrapeStrip.doneText = "" }
+        Row {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: vpx(20)
+            spacing: vpx(16)
+            Text {
+                text: scrapeStrip.working ? qsTr("Completing your library") + api.tr : scrapeStrip.doneText
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(15)
+                anchors.verticalCenter: parent.verticalCenter
+            }
+            Rectangle {
+                visible: scrapeStrip.working
+                width: vpx(220)
+                height: vpx(6)
+                color: "#444"
+                anchors.verticalCenter: parent.verticalCenter
+                Rectangle {
+                    height: parent.height
+                    color: "#3aa"
+                    width: parent.width * ((scrapeStrip.runState.total || 0) > 0
+                        ? Math.min(1, (scrapeStrip.runState.done || 0) / scrapeStrip.runState.total) : 0)
+                }
+            }
+            Text {
+                visible: scrapeStrip.working
+                text: qsTr("%1 of %2").arg(scrapeStrip.runState.done || 0).arg(scrapeStrip.runState.total || 0) + api.tr
+                      + (scrapeStrip.runState.current ? " · " + scrapeStrip.runState.current : "")
+                color: "#ccc"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(15)
+                anchors.verticalCenter: parent.verticalCenter
+            }
+        }
+    }
+
     Loader {
         id: powerDialog
         anchors.fill: parent
@@ -402,8 +470,11 @@ Window {
                         }
                     }
                     // the first start: where everything is kept
-                    if (Internal.settings.rootSetupNeeded && Internal.settings.startupScreen() === "" && testTitle === "") {
-                        firstRunSetup.setSource("menu/settings/RootFolderSetup.qml", { "firstRun": true });
+                    // (four steps: folder, game folders, import gamelist, complete my
+                    // library; it goes on from where it was if Pegasus X closed in between)
+                    if ((Internal.settings.rootSetupNeeded || Internal.settings.wizardStep() > 0)
+                            && Internal.settings.startupScreen() === "" && testTitle === "") {
+                        firstRunSetup.setSource("menu/settings/FirstRunWizard.qml");
                         firstRunSetup.focus = true;
                     }
                     // the Pegasus X folder couldn't be used (SD card missing?): say so,

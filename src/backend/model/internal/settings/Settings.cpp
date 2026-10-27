@@ -204,6 +204,27 @@ void Settings::setRootSetupAsked()
     emit pegasusxSettingsChanged();
 }
 
+int Settings::wizardStep() const
+{
+    QFile file(paths::privateConfigDir() + QStringLiteral("/pegasusx-wizard"));
+    if (!file.open(QIODevice::ReadOnly))
+        return 0;
+    return qBound(0, QString::fromLatin1(file.readAll()).trimmed().toInt(), 4);
+}
+
+void Settings::setWizardStep(int step)
+{
+    const QString path = paths::privateConfigDir() + QStringLiteral("/pegasusx-wizard");
+    if (step <= 0) {
+        QFile::remove(path);
+        return;
+    }
+    QDir().mkpath(paths::privateConfigDir());
+    QFile file(path);
+    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        file.write(QByteArray::number(step) + '\n');
+}
+
 namespace {
 // the files and folders of one folder into another (what's already there is
 // kept when the copy fails); returns how many files were copied, -1 on error
@@ -1906,6 +1927,7 @@ QString Settings::startScraperWith(QObject* collections, bool offline)
 
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
+    const QSet<QString> never = scraper::Scraper::neverScrape();
     for (int i = 0; i < list->count(); i++) {
         auto* const coll = qobject_cast<model::Collection*>(list->get(i));
         if (!coll || !systems.contains(coll->name()))
@@ -1916,7 +1938,7 @@ QString Settings::startScraperWith(QObject* collections, bool offline)
             if (files.empty())
                 continue;
             const QString path = files.front()->path();
-            if (seen.contains(path))
+            if (seen.contains(path) || never.contains(path))
                 continue;
             const model::Assets& assets = game->assets();
             const bool no_details = game->description().isEmpty() && game->summary().isEmpty() && game->developerListConst().isEmpty();
@@ -1991,6 +2013,217 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     if (!error.isEmpty())
         m_single_game.clear();
     return error;
+}
+
+// -- Settings > Library: status, Complete my library, Needs your check ---------
+
+namespace {
+bool has_real(const QStringList& files)
+{
+    for (const QString& f : files) {
+        if (!f.startsWith(QLatin1String("image://")))
+            return true;
+    }
+    return false;
+}
+
+// what a game misses, of the kinds Complete my library fills
+struct Missing {
+    bool box = false, shots = false, details = false, fanart = false, videos = false;
+};
+Missing missing_of(const model::Game& game)
+{
+    const model::Assets& a = game.assets();
+    Missing m;
+    m.box = !has_real(a.boxFrontList());
+    m.shots = a.screenshotList().isEmpty();
+    m.details = game.description().isEmpty() && game.summary().isEmpty();
+    m.fanart = a.backgroundList().isEmpty();
+    m.videos = a.videoList().isEmpty();
+    return m;
+}
+} // namespace
+
+QVariantMap Settings::libraryStatus(QObject* collections) const
+{
+    QVariantMap out;
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    int games = 0, box = 0, shots = 0, details = 0, fanart = 0, videos = 0, any = 0;
+    QVariantMap per_coll;
+    QSet<QString> seen;
+    const QSet<QString> never = scraper::Scraper::neverScrape();
+    for (int i = 0; list && i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        int coll_missing = 0;
+        for (model::Game* const game : coll->gameList()->entries()) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            const QString path = files.empty() ? QString() : files.front()->path();
+            const Missing m = missing_of(*game);
+            const bool art_missing = m.box || m.shots;
+            if (art_missing && !never.contains(path))
+                coll_missing++;
+            if (path.isEmpty() || seen.contains(path))
+                continue;
+            seen.insert(path);
+            games++;
+            if (never.contains(path))
+                continue;
+            box += m.box;
+            shots += m.shots;
+            details += m.details;
+            fanart += m.fanart;
+            videos += m.videos;
+            any += (m.box || m.shots || m.details);
+        }
+        per_coll.insert(coll->name(), coll_missing);
+    }
+    const QVariantMap settings = scraperSettings();
+    out.insert(QStringLiteral("games"), games);
+    out.insert(QStringLiteral("box"), box);
+    out.insert(QStringLiteral("shots"), shots);
+    out.insert(QStringLiteral("details"), details);
+    out.insert(QStringLiteral("fanart"), fanart);
+    out.insert(QStringLiteral("videos"), videos);
+    out.insert(QStringLiteral("any"), any);
+    out.insert(QStringLiteral("collections"), per_coll);
+    out.insert(QStringLiteral("review"), scraper::Scraper::reviewList().size());
+    out.insert(QStringLiteral("igdb"), scraper_has_igdb(settings));
+    out.insert(QStringLiteral("sgdb"), !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty());
+    out.insert(QStringLiteral("ss"), scraperHasScreenScraper());
+    return out;
+}
+
+QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
+{
+    if (m_scraper && m_scraper->running())
+        return tr("The scraper is already running.");
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    if (!list)
+        return tr("No library to scrape.");
+    const bool want_box = what.value(QStringLiteral("boxes")).toBool();
+    const bool want_shots = what.value(QStringLiteral("shots")).toBool();
+    const bool want_details = what.value(QStringLiteral("details")).toBool();
+    const bool want_fanart = what.value(QStringLiteral("fanart")).toBool();
+    const bool want_videos = what.value(QStringLiteral("videos")).toBool();
+    if (!want_box && !want_shots && !want_details && !want_fanart && !want_videos)
+        return tr("Tick what to fill first.");
+
+    QVariantMap settings = scraperSettings();
+    const bool has_ss = scraperHasScreenScraper();
+    const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
+    const bool has_igdb = scraper_has_igdb(settings);
+    // only what's empty, nothing asked: what it isn't sure about waits in Needs your check
+    settings.insert(QStringLiteral("overwrite"), false);
+    settings.insert(QStringLiteral("interactive"), false);
+    settings.insert(QStringLiteral("reviewQueue"), true);
+    settings.insert(QStringLiteral("getNames"), false);
+    settings.insert(QStringLiteral("getCovers"), want_box);
+    settings.insert(QStringLiteral("getScreenshots"), want_shots);
+    settings.insert(QStringLiteral("getTitlescreens"), want_shots);
+    settings.insert(QStringLiteral("getDetails"), want_details);
+    settings.insert(QStringLiteral("getRatings"), want_details);
+    settings.insert(QStringLiteral("getFanart"), want_fanart);
+    settings.insert(QStringLiteral("getLogos"), want_fanart);
+    settings.insert(QStringLiteral("getVideos"), want_videos);
+    settings.insert(QStringLiteral("getManuals"), want_videos);
+    settings.insert(QStringLiteral("getBackcovers"), false);
+    settings.insert(QStringLiteral("getPhysical"), false);
+    // the source picked needs a login that isn't there: the ones that are
+    const QString source = settings.value(QStringLiteral("source")).toString();
+    if ((source == QLatin1String("igdb") && !has_igdb) || (source == QLatin1String("steamgriddb") && !has_sgdb))
+        settings.insert(QStringLiteral("source"), QStringLiteral("screenscraper"));
+    if (!has_ss && !has_sgdb && !has_igdb && !settings.value(QStringLiteral("useLibretro")).toBool())
+        return tr("Turn on the free pictures (Scraper > Other) or add a login in Account settings first.");
+
+    std::vector<scraper::Job> jobs;
+    QSet<QString> seen;
+    const QSet<QString> never = scraper::Scraper::neverScrape();
+    for (int i = 0; i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
+        // no login and no free pictures for this system: nothing could be found
+        if (!has_ss && !has_sgdb && !has_igdb && !scraper::Scraper::hasFreeArt(system))
+            continue;
+        for (model::Game* const game : coll->gameList()->entries()) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            if (files.empty())
+                continue;
+            const QString path = files.front()->path();
+            if (seen.contains(path) || never.contains(path))
+                continue;
+            const Missing m = missing_of(*game);
+            const bool take = (want_box && m.box) || (want_shots && m.shots) || (want_details && m.details)
+                           || (want_fanart && m.fanart) || (want_videos && m.videos);
+            if (!take)
+                continue;
+            seen.insert(path);
+            jobs.push_back(make_scraper_job(*coll, game, system, path));
+        }
+    }
+    if (jobs.empty())
+        return tr("Nothing is missing.");
+    m_single_game.clear();
+    return runScraper(std::move(jobs), settings);
+}
+
+QVariantList Settings::reviewList() const
+{
+    return scraper::Scraper::reviewList();
+}
+
+QString Settings::reviewScrape(QObject* collections, const QString& path, const QString& mode, int igdb_id)
+{
+    if (m_scraper && m_scraper->running())
+        return tr("The scraper is already running.");
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    model::Game* found = nullptr;
+    const model::Collection* found_coll = nullptr;
+    for (int i = 0; list && i < list->count() && !found; i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        for (model::Game* const game : coll->gameList()->entries()) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            if (!files.empty() && files.front()->path() == path) {
+                found = game;
+                found_coll = coll;
+                break;
+            }
+        }
+    }
+    if (!found)
+        return tr("This game isn't in the library any more.");
+    QVariantMap settings = scraperSettings();
+    settings.insert(QStringLiteral("overwrite"), false);
+    settings.insert(QStringLiteral("reviewQueue"), true);
+    settings.insert(QStringLiteral("interactive"), mode == QLatin1String("choose"));
+    const bool has_igdb = scraper_has_igdb(settings);
+    const QString source = settings.value(QStringLiteral("source")).toString();
+    if (mode == QLatin1String("use") && has_igdb)
+        settings.insert(QStringLiteral("source"), QStringLiteral("igdb"));
+    else if ((source == QLatin1String("igdb") && !has_igdb)
+             || (source == QLatin1String("steamgriddb") && settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty()))
+        settings.insert(QStringLiteral("source"), QStringLiteral("screenscraper"));
+    scraper::Job job = make_scraper_job(*found_coll, found,
+        scraper::Scraper::system_of(found_coll->name(), found_coll->shortName()), path);
+    if (mode == QLatin1String("use"))
+        job.igdb_id = igdb_id;
+    std::vector<scraper::Job> jobs;
+    jobs.push_back(std::move(job));
+    m_single_game = found;
+    const QString error = runScraper(std::move(jobs), settings);
+    if (!error.isEmpty())
+        m_single_game.clear();
+    return error;
+}
+
+void Settings::setNeverScrape(const QString& path, const QString& title, bool never)
+{
+    scraper::Scraper::setNeverScrape(path, title, never);
 }
 
 QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings)

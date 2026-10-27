@@ -1182,8 +1182,9 @@ void Scraper::next()
     m_match.clear();
     m_md5.clear();
     m_hash_name.clear();
-    m_known_igdb_id = 0;
-    m_identified = false;
+    m_known_igdb_id = job.igdb_id;
+    m_identified = job.igdb_id > 0;  // picked by you: no need to ask by checksum
+    m_review_hint.clear();
     m_libretro_done = false;
     m_got.clear();
     m_igdb_done = false;
@@ -1502,6 +1503,112 @@ void Scraper::recordMatch(const Job& job)
     if (!file.open(QIODevice::WriteOnly) || file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) < 0
             || !file.commit())
         note(LOGMSG("Couldn't write `%1`").arg(indexPath()));
+}
+
+// -- Needs your check ----------------------------------------------------------
+
+namespace {
+QString review_path() { return paths::writableConfigDir() + QStringLiteral("/metadata/review.json"); }
+
+QJsonObject read_review()
+{
+    QFile file(review_path());
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(file.readAll()).object();
+}
+
+void write_review(QJsonObject root)
+{
+    root[QStringLiteral("version")] = 1;
+    QDir().mkpath(QFileInfo(review_path()).absolutePath());
+    QSaveFile file(review_path());
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+        file.commit();
+    }
+}
+} // namespace
+
+void Scraper::reviewAdd(const Job& job)
+{
+    if (job.path.isEmpty())
+        return;
+    QJsonObject root = read_review();
+    QJsonObject games = root.value(QStringLiteral("games")).toObject();
+    QJsonObject entry {
+        { QStringLiteral("title"), job.title },
+        { QStringLiteral("collection"), job.collection },
+        { QStringLiteral("system"), job.system },
+        { QStringLiteral("date"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+    };
+    if (!m_review_hint.isEmpty()) {
+        entry[QStringLiteral("closest")] = m_review_hint.value(QStringLiteral("closest")).toString();
+        entry[QStringLiteral("info")] = m_review_hint.value(QStringLiteral("info")).toString();
+        entry[QStringLiteral("score")] = m_review_hint.value(QStringLiteral("score")).toInt();
+        entry[QStringLiteral("igdb")] = m_review_hint.value(QStringLiteral("igdb")).toInt();
+    }
+    games[job.path] = entry;
+    root[QStringLiteral("games")] = games;
+    write_review(root);
+}
+
+void Scraper::reviewRemove(const QString& path)
+{
+    QJsonObject root = read_review();
+    QJsonObject games = root.value(QStringLiteral("games")).toObject();
+    if (!games.contains(path))
+        return;
+    games.remove(path);
+    root[QStringLiteral("games")] = games;
+    write_review(root);
+}
+
+QVariantList Scraper::reviewList()
+{
+    const QJsonObject games = read_review().value(QStringLiteral("games")).toObject();
+    QVariantList out;
+    for (auto it = games.constBegin(); it != games.constEnd(); ++it) {
+        QVariantMap entry = it.value().toObject().toVariantMap();
+        entry.insert(QStringLiteral("path"), it.key());
+        out.append(entry);
+    }
+    std::sort(out.begin(), out.end(), [](const QVariant& a, const QVariant& b) {
+        return a.toMap().value(QStringLiteral("title")).toString()
+            .compare(b.toMap().value(QStringLiteral("title")).toString(), Qt::CaseInsensitive) < 0;
+    });
+    return out;
+}
+
+void Scraper::setNeverScrape(const QString& path, const QString& title, bool never)
+{
+    QJsonObject root = read_review();
+    QJsonObject excluded = root.value(QStringLiteral("neverScrape")).toObject();
+    if (never) {
+        excluded[path] = title;
+        QJsonObject games = root.value(QStringLiteral("games")).toObject();
+        games.remove(path);
+        root[QStringLiteral("games")] = games;
+    }
+    else {
+        excluded.remove(path);
+    }
+    root[QStringLiteral("neverScrape")] = excluded;
+    write_review(root);
+}
+
+bool Scraper::hasFreeArt(const QString& system)
+{
+    return !libretro_system(system).isEmpty();
+}
+
+QSet<QString> Scraper::neverScrape()
+{
+    QSet<QString> out;
+    const QJsonObject excluded = read_review().value(QStringLiteral("neverScrape")).toObject();
+    for (auto it = excluded.constBegin(); it != excluded.constEnd(); ++it)
+        out.insert(it.key());
+    return out;
 }
 
 // several requests in a row without an answer (no connection, servers
@@ -2010,6 +2117,20 @@ void Scraper::igdbAuto(bool after_other)
             else {
                 note(LOGMSG("IGDB: no sure match for \"%1\" (closest \"%2\", %3 of %4 needed)")
                      .arg(name, best.value(QStringLiteral("name")).toString()).arg(best_score).arg(needed));
+                // for Needs your check: what it would have been
+                QStringList info;
+                const QJsonArray platforms = best.value(QStringLiteral("platforms")).toArray();
+                if (!platforms.isEmpty())
+                    info.append(platforms.first().toObject().value(QStringLiteral("name")).toString());
+                const QDate released = igdb_release(best);
+                if (released.isValid())
+                    info.append(QString::number(released.year()));
+                m_review_hint = QVariantMap {
+                    { QStringLiteral("closest"), best.value(QStringLiteral("name")).toString() },
+                    { QStringLiteral("info"), info.join(QStringLiteral(" · ")) },
+                    { QStringLiteral("score"), qBound(0, best_score, 100) },
+                    { QStringLiteral("igdb"), best.value(QStringLiteral("id")).toInt() },
+                };
             }
         }
         fillMore();
@@ -2628,6 +2749,18 @@ void Scraper::finishGame(const QString& given_result, bool ok)
     if (m_index < m_jobs.size()) {
         m_last_title = m_jobs[m_index].title;
         m_preview = previewOf(m_jobs[m_index]);
+        // Needs your check: a game it wasn't sure about (or found nothing
+        // for) waits there; one that was saved leaves it. Not for a stop or
+        // a lost connection.
+        if (m_settings.value(QStringLiteral("reviewQueue")).toBool()) {
+            if (ok)
+                reviewRemove(m_jobs[m_index].path);
+            else if (!m_stop && m_transport_streak == 0)
+                reviewAdd(m_jobs[m_index]);
+        }
+        else if (ok) {
+            reviewRemove(m_jobs[m_index].path);
+        }
     }
     m_last_result = result;
     m_last_ok = ok;

@@ -103,6 +103,10 @@ public:
     bool rootSetupNeeded() const;
     QString rootMissing() const;
     Q_INVOKABLE void setRootSetupAsked();
+    /// The first-start setup's step (1-4), or 0 when it's done (kept outside
+    /// the Pegasus X folder, so picking one in step 1 doesn't lose it)
+    Q_INVOKABLE int wizardStep() const;
+    Q_INVOKABLE void setWizardStep(int step);
     /// Makes `dir` the Pegasus X folder (from the next start); with `move_data`,
     /// what's in the folder used now is copied there first. Returns what's
     /// wrong right away, or "" when the work started: rootDirChanged tells how
@@ -272,6 +276,22 @@ public:
     Q_INVOKABLE QString scrapeGame(QObject* game, const QString& collection_name, bool overwrite);
     /// { running, done, total, current, title, result, ok, saved, notFound, failed, stopReason }
     Q_INVOKABLE QVariantMap scraperState() const;
+
+    // Pegasus X: Settings > Library's status rows
+    /// { games, box, shots, details, fanart, videos, any (games missing what
+    /// Complete my library fills by default), review, collections: { name: missing art },
+    /// igdb, sgdb, ss (logins there) }
+    Q_INVOKABLE QVariantMap libraryStatus(QObject* collections) const;
+    /// Complete my library: only what's missing, the kinds ticked in `what`
+    /// { boxes, shots, details, fanart, videos }; games it isn't sure about go
+    /// to Needs your check. Returns an error, or empty when it started
+    Q_INVOKABLE QString completeLibrary(QObject* collections, const QVariantMap& what);
+    /// Needs your check: [{ path, title, collection, system, closest, info, score, igdb }]
+    Q_INVOKABLE QVariantList reviewList() const;
+    /// a game there: "use" its closest match (IGDB id), or "choose" from the matches
+    Q_INVOKABLE QString reviewScrape(QObject* collections, const QString& path, const QString& mode, int igdb_id);
+    /// never scraped again (Complete my library, the Scraper's runs)
+    Q_INVOKABLE void setNeverScrape(const QString& path, const QString& title, bool never);
     /// Pegasus X: what the scraper did lately (Library > Scraper > Log)
     Q_INVOKABLE QStringList scraperLog() const;
     /// Settings > Library is open: it reads the library again when you leave;
