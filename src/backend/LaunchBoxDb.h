@@ -18,6 +18,7 @@
 #pragma once
 
 #include <QDate>
+#include <QFile>
 #include <QFuture>
 #include <QFutureWatcher>
 #include <QHash>
@@ -31,7 +32,6 @@
 
 class QNetworkAccessManager;
 class QNetworkReply;
-class QFile;
 
 
 namespace scraper {

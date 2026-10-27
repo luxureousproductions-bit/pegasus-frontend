@@ -1469,6 +1469,7 @@ QString local_path(const QString& value)
 /// emulators picked since: game file -> command, and the collection's in
 /// `collection_launch`
 void migrate_in_folder_edits(const QString& old_path, const QString& collection_name);
+void stamp_imported_folder(const QString& folder);
 QStringList aliases_of(const QString& key);
 QString edits_file_path(const QString& collection_name);
 
