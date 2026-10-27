@@ -21,6 +21,7 @@
 #include "Paths.h"
 #include "Miximage.h"
 #ifdef WITH_COMPAT_ESDE
+#include "providers/GameDirectory.h"
 #include "providers/esde/EsdeProvider.h"
 #endif
 
@@ -752,6 +753,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_cancel_hash = false;
     m_transport_streak = 0;
     m_libretro_lists.clear();
+    m_backed_up.clear();
     m_running = true;
     m_run++;  // answers still on their way from the last run are ignored
     note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, IGDB login: %7, SteamGridDB key: %8)")
@@ -2666,6 +2668,14 @@ void Scraper::save()
     }
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
 #ifdef WITH_COMPAT_ESDE
+    // the collection's file backed up once a run, before its first change
+    if (m_settings.value(QStringLiteral("overwrite")).toBool()) {
+        const QString file = providers::esde::metadata_location(job.collection, QString()).file;
+        if (!m_backed_up.contains(file)) {
+            m_backed_up.insert(file);
+            providers::gamedir::backup(file, QStringLiteral("scrape"));
+        }
+    }
     const QString error = providers::esde::save_game_metadata(job.collection, job.path, title, m_changes, true);
 #else
     // metadata editing is Android only for now

@@ -6,6 +6,7 @@ HEADERS += \
     $$PWD/GameDataCache.h \
     $$PWD/LibraryRules.h \
     $$PWD/Overrides.h \
+    $$PWD/GameDirectory.h \
 
 SOURCES += \
     $$PWD/Provider.cpp \
@@ -15,6 +16,7 @@ SOURCES += \
     $$PWD/GameDataCache.cpp \
     $$PWD/LibraryRules.cpp \
     $$PWD/Overrides.cpp \
+    $$PWD/GameDirectory.cpp \
 
 include(pegasus_favorites/pegasus_favorites.pri)
 include(pegasus_metadata/pegasus_metadata.pri)

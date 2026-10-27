@@ -21,6 +21,7 @@
 #include "Paths.h"
 #include "Provider.h"
 #include "SearchContext.h"
+#include "GameDirectory.h"
 #include "model/ObjectListModel.h"
 #include "model/gaming/Assets.h"
 #include "model/gaming/Collection.h"
@@ -320,6 +321,9 @@ QString GameDataCache::buildFingerprint(
     // Edit metadata saves games Pegasus found by itself): without it, a change
     // there kept the old list in use
     add_metadata_fingerprints(metadata_files, paths::writableConfigDir() + QStringLiteral("/metafiles"));
+    // Pegasus X: the game directory's system files (one folder each)
+    for (const QString& path : providers::gamedir::metafiles())
+        add_file_fingerprint(metadata_files, path);
     for (const QString& dir : sctx.root_game_dirs())
         add_metadata_fingerprints(metadata_files, dir);
     // Pegasus X: the ES-DE imports, read whatever the game folders are

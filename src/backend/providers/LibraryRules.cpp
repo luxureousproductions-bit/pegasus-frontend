@@ -16,6 +16,7 @@
 
 
 #include "LibraryRules.h"
+#include "providers/GameDirectory.h"
 #include "providers/Overrides.h"
 
 #include "Log.h"
@@ -775,7 +776,14 @@ void apply_library_rules(std::vector<model::Collection*>& collections, std::vect
 {
     // what's laid on top of the metadata files: ES-DE's data for your own
     // games, then your edits and scraped data (Overrides.cpp)
-    providers::overrides::apply(collections, games);
+    // the old layers (imports-fill, overrides), only until the game directory
+    // is made from them, below; after that the game directory is what's read
+    if (!providers::gamedir::migrated())
+        providers::overrides::apply(collections, games);
+    // the first start of the game directory model: the library as it is,
+    // written into gamedirectory/<system>/ (then read again from there)
+    if (providers::gamedir::migration_needed())
+        providers::gamedir::migrate(collections, games);
     merge_android(collections, games, merge_android_enabled());
     dedupe_collections(collections, games);
     // the same picture found twice (eg. in your metadata and in a media

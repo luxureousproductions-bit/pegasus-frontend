@@ -19,6 +19,7 @@
 
 #include "Log.h"
 #include "Paths.h"
+#include "providers/GameDirectory.h"
 #include "providers/Overrides.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
@@ -89,6 +90,13 @@ std::vector<QString> find_all_metafiles(const QStringList& gamedirs)
         }
     };
 
+    // Pegasus X: the game directory's system files first (one folder each)
+    for (const QString& path : providers::gamedir::metafiles()) {
+        if (!seen.contains(path)) {
+            seen.insert(path);
+            own.push_back(path);
+        }
+    }
     add_dir(paths::writableConfigDir() + QLatin1String("/metafiles"));
     for (const QString& dir_path : gamedirs)
         add_dir(dir_path);

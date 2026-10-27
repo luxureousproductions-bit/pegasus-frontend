@@ -153,6 +153,7 @@ private:
     void setMatch(const QString& source, const QString& id, const QString& name);
     void recordMatch(const Job& job);
     static QString indexPath();
+    QSet<QString> m_backed_up;   ///< the files backed up this run (before overwriting)
     QSet<QNetworkReply*> m_replies;   ///< requests on their way (Stop aborts them)
     std::atomic<bool> m_cancel_hash { false };
     int m_transport_streak = 0;  ///< requests in a row with no answer

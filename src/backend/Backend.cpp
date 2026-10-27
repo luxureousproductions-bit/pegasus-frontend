@@ -23,6 +23,7 @@
 #include "ProcessLauncher.h"
 #include "ScriptRunner.h"
 #include "Paths.h"
+#include "providers/GameDirectory.h"
 #include "platform/PowerCommands.h"
 #include "types/AppCloseType.h"
 
@@ -283,6 +284,11 @@ void Backend::onScanFinished()
 
     m_api_public->setGameData(std::move(colls), std::move(games));
 
+    // Pegasus X: the game directory was just made from the old layers: read it
+    if (providers::gamedir::take_reload_wanted() && !m_scan_pending) {
+        m_scan_pending = true;
+        m_scan_pending_force = true;
+    }
     if (m_scan_pending) {
         const bool force_refresh = m_scan_pending_force;
         m_scan_pending = false;

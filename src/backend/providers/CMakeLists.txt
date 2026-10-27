@@ -13,6 +13,8 @@ target_sources(pegasus-backend PRIVATE
     LibraryRules.h
     Overrides.cpp
     Overrides.h
+    GameDirectory.cpp
+    GameDirectory.h
 )
 
 

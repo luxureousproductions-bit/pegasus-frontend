@@ -91,7 +91,7 @@ FocusScope {
         var dirs = Internal.settings.gameDirs;
         for (var d = 0; d < dirs.length; d++) {
             var dir = String(dirs[d]);
-            if (dir.indexOf("/metadata/imports") >= 0)
+            if (dir.indexOf("/metadata/imports") >= 0 || dir.indexOf("/gamedirectory") >= 0)
                 continue;
             var dirName = dir.replace(/\/+$/, "");
             dirName = dirName.substring(dirName.lastIndexOf("/") + 1) || dirName;

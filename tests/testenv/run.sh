@@ -63,20 +63,26 @@ find "$CFG/metadata" -type f 2>/dev/null | while read -r f; do
 done
 cp "$CFG/pegasusx-rom-folders.txt" "$R/files/" 2>/dev/null
 
-# a game scraped before, then its scraped files deleted: the override still
-# names a fan art that isn't there, and hides a scraped cover with the same
-# name as the one in the ROM folder's media: the folder's art must show
-mkdir -p "$CFG/metadata/overrides"
-cat >> "$CFG/metadata/overrides/Nintendo_64.metadata.pegasus.txt" <<TXT
-
-collection: Nintendo 64
-
-game: Mario Kart 64 (USA)
-file: $T/MyGames/Nintendo 64/Mario Kart 64 (USA).z64
-assets.background: $CFG/downloaded_media/n64/fanart/Mario Kart 64 (USA).png
-x-pegasusx-hidden-art: box_front|$CFG/downloaded_media/n64/covers/Mario Kart 64 (USA).png
-x-pegasusx-edited: assets.background
-TXT
+# a game scraped before, then its scraped files deleted: the game directory
+# still names a fan art that isn't there, and hides a scraped cover with the
+# same name as the one in the ROM folder's media: the folder's art must show
+N64="$CFG/gamedirectory/n64/metadata.pegasus.txt"
+if [ -f "$N64" ]; then
+    python3 - "$N64" "$T" "$CFG" <<'PY'
+import sys
+path, t, cfg = sys.argv[1:4]
+lines = open(path, encoding="utf-8").read().split("\n")
+out = []
+for line in lines:
+    out.append(line)
+    if line.strip() == "file: %s/MyGames/Nintendo 64/Mario Kart 64 (USA).z64" % t:
+        out.append("assets.background: %s/downloaded_media/n64/fanart/Mario Kart 64 (USA).png" % cfg)
+        out.append("x-pegasusx-hidden-art: box_front|%s/downloaded_media/n64/covers/Mario Kart 64 (USA).png" % cfg)
+open(path, "w", encoding="utf-8").write("\n".join(out))
+PY
+else
+    echo "!! no game directory file for n64 after the first start"
+fi
 
 # a game an earlier run wasn't sure about (Library > Needs your check)
 cat > "$CFG/metadata/review.json" <<JSON
@@ -195,7 +201,7 @@ INI
     find "$CFG/downloaded_media" -type f 2>/dev/null | head -n 12 | while read -r f; do
         cp "$f" "$R/scraped/$(echo "${f#$CFG/downloaded_media/}" | tr '/' '_')"
     done
-    cp "$CFG"/metadata/overrides/*.metadata.pegasus.txt "$R/scraped/" 2>/dev/null || true
+    cp "$CFG"/gamedirectory/snes/metadata.pegasus.txt "$R/scraped/" 2>/dev/null || true
     # the log, without the login
     grep -h "Scraper\|\[test\]" "$R/logs/11-scrape-igdb.log" | sed "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g" > "$R/scraped/scraper.log" || true
     sed -i "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g; s/${SGDB_TEST_KEY:-NOKEY}/<key>/g" "$R/logs/11-scrape-igdb.log" "$R/logs/11-scrape-igdb.stdout" 2>/dev/null || true
@@ -223,8 +229,8 @@ find "$CFG/downloaded_media/snes" -type f -iname "Super Mario World*" 2>/dev/nul
 grep -h "Scraper\|libretro\|Hasheous\|\[test\]" "$R/logs/12-scrape-free.log" > "$R/scraped-free/scraper.log" || true
 
 # -- summary --------------------------------------------------------------------------------------
-# the metadata files as they are at the end (overrides are written along the way)
-find "$CFG/metadata" -type f 2>/dev/null | while read -r f; do
+# the game directory as it is at the end (written along the way)
+find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
     cp "$f" "$R/files/$(echo "${f#$CFG/}" | tr '/ ' '__')"
 done
 {
@@ -275,13 +281,13 @@ done
     echo "## Screen open times"
     strip_ansi "$R"/logs/*.stdout | grep -h "\[timing\]" | sed 's/.*\[timing\] /    /' | sort | uniq
     echo
-    echo "## Metadata written by Pegasus X"
-    find "$CFG/metadata" -type f 2>/dev/null | sed "s|$CFG/|    |"
-    for f in "$CFG"/metadata/overrides/*.metadata.pegasus.txt; do
+    echo "## The game directory (and backups)"
+    find "$CFG/gamedirectory" "$CFG/backup" "$CFG/imported" "$CFG/metadata" -type f 2>/dev/null | sed "s|$CFG/|    |"
+    for f in "$CFG"/gamedirectory/*/metadata.pegasus.txt; do
         [ -f "$f" ] || continue
         echo
-        echo "### $(basename "$f")"
-        sed 's/^/    /' "$f" | head -n 60
+        echo "### $(dirname "$f" | xargs basename)/$(basename "$f")"
+        sed 's/^/    /' "$f" | head -n 50
     done
     if [ -d "$R/scraped" ]; then
         echo
