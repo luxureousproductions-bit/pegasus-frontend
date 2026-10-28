@@ -183,8 +183,9 @@ stop 07-updater
 printf '\n[browse]\nlast=%s\n' "$T/storage/ROMs" >> "$CFG/pegasusx.ini"
 start 08-gamedirs "menu/settings/GameDirectory.qml" 5
 shot 08-gamedirs
-# Add a ROM folder: the picker opens at ROMs (gba, snes); "Use this folder" is below its two entries
-keys Return Down Down Down Return
+# Add a ROM folder: the picker opens on the drives; LB (q) goes to the last folder browsed, ROMs
+# (gba, snes in it); "Use this folder" is below its two entries
+keys Return q Down Down Down Return
 sleep 1
 shot 08-gamedirs-picked
 # untick one of the systems found
