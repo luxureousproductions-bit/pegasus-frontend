@@ -280,6 +280,12 @@ Provider& PlaytimeStats::run(SearchContext& sctx)
     return *this;
 }
 
+PlaytimeStats::~PlaytimeStats()
+{
+    if (m_writer.isRunning())
+        m_writer.waitForFinished();
+}
+
 void PlaytimeStats::onGameLaunched(model::GameFile* const gamefile)
 {
     Q_ASSERT(gamefile);
@@ -313,7 +319,7 @@ void PlaytimeStats::start_processing()
     m_active_tasks.swap(m_pending_tasks);
     m_active_migrations.swap(m_pending_migrations);
 
-    QtConcurrent::run([this]{
+    m_writer = QtConcurrent::run([this]{
         emit startedWriting();
 
         while (!m_active_tasks.empty() || !m_active_migrations.empty()) {

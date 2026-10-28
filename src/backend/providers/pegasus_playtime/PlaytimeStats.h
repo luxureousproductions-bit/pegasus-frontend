@@ -20,6 +20,7 @@
 #include "providers/Provider.h"
 
 #include <QDateTime>
+#include <QFuture>
 #include <QMutex>
 
 
@@ -32,6 +33,7 @@ class PlaytimeStats : public Provider {
 public:
     explicit PlaytimeStats(QString db_path, QObject* parent = nullptr);
     explicit PlaytimeStats(QObject* parent = nullptr);
+    ~PlaytimeStats();
 
     Provider& run(SearchContext&) final;
 
@@ -75,6 +77,10 @@ private:
     std::vector<MigrationQueueEntry> m_active_migrations;
 
     QMutex m_queue_guard;
+    // the writer thread, waited for before this goes away (it emits
+    // finishedWriting from its thread as its last step: the test's spy, and
+    // this object, must still be there then)
+    QFuture<void> m_writer;
 
     void start_processing();
 };
