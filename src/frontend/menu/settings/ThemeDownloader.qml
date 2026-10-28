@@ -106,7 +106,10 @@ FocusScope {
 
     Component.onCompleted: {
         all = store.themes();
+        // the list kept from last time right away, then the gallery online
+        // for new themes and updates (refresh does nothing while one runs)
         store.refresh(false);
+        store.refresh(true);
     }
     Connections {
         target: root.store
@@ -224,9 +227,9 @@ FocusScope {
         anchors.verticalCenter: header.verticalCenter
         z: 3
         text: root.store.loading
-            ? (root.totalCount > 0 ? qsTr("Reading the theme list... %1 of %2").arg(root.loadedCount).arg(root.totalCount) + api.tr
-                                   : qsTr("Reading the theme list...") + api.tr)
-            : qsTr("%1 themes · Pegasus theme gallery").arg(root.all.length) + api.tr
+            ? (root.totalCount > 0 ? qsTr("Checking for new themes and updates... %1 of %2").arg(root.loadedCount).arg(root.totalCount) + api.tr
+                                   : qsTr("Checking for new themes and updates...") + api.tr)
+            : qsTr("%1 themes · Pegasus theme gallery · %2 updates").arg(root.all.length).arg(root.countOf("updates")) + api.tr
         color: "#888"
         font.family: globalFonts.sans
         font.pixelSize: vpx(15)
