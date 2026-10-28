@@ -181,6 +181,14 @@ public:
     /// ES-DE's gamelist and media), in the background: originalGameReady
     /// { found, folder, ownMetadata, gamelist, details, assets, error }
     Q_INVOKABLE void requestOriginalGame(const QString& collection_name, const QString& game_path);
+    /// Pegasus X: a media pack (video snaps, box art...) for one system.
+    /// What a folder holds: { files, kinds: { kind: count }, unknown, error }
+    Q_INVOKABLE QVariantMap scanMediaPack(const QString& folder);
+    /// its files into the system's games by name, in the background
+    /// (mediaPackProgress, mediaPackImported { games, files, unmatched, kept, error });
+    /// `system`: a system file's path, or a collection's name
+    Q_INVOKABLE void importMediaPack(const QString& system, const QString& folder, const QString& default_kind,
+                                     bool copy, bool replace);
     /// sets a system's file aside in backup/<system>/ and forgets its folders
     Q_INVOKABLE QString removeSystem(const QString& key);
     /// the ROM folders watched for new games: [{ folder, system, systems }]
@@ -424,6 +432,8 @@ signals:
     void esdeImportFinished(QVariantMap result);
     void romFolderImportFinished(QVariantMap result);
     void originalGameReady(QString game_path, QVariantMap result);
+    void mediaPackProgress(int done, int total);
+    void mediaPackImported(QVariantMap result);
     void libraryHousekeepingReady(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
     void collectionDetailsReady(QString collection, QVariantMap details);

@@ -1563,7 +1563,7 @@ void Scraper::screenScraper(const QString& md5)
             .value(QStringLiteral("response")).toObject().value(QStringLiteral("jeu")).toObject();
         if (game.isEmpty()) {
             // not on ScreenScraper: the LaunchBox database may still have it
-            if (lbReady() && m_lb->hasSystem(job.system)) {
+            if (lbReady() && m_lb->hasSystem(m_jobs[m_index].system)) {
                 fillMore();
                 return;
             }

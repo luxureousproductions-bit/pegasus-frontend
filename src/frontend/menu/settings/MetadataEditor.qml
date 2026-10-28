@@ -740,10 +740,93 @@ FocusScope {
         return Internal.settings.importArt(path, second ? coll2Name : gameColl(), artDataFolders[plain] || "art", name, collShort);
     }
     function pickDataFolder() {
+        packPick = false;
         filePicker.pickFolders = true;
         filePicker.fileExtensions = [];
         filePicker.openAt(dataDir);
         filePicker.focus = true;
+    }
+    // -- a media pack for the open collection (video snaps, box art... named like the games)
+    property bool packPick: false
+    property bool packWorking: false
+    readonly property var packKinds: [
+        [ "videos", qsTr("Videos") + api.tr ], [ "covers", qsTr("Boxes (2D)") + api.tr ], [ "3dboxes", qsTr("Boxes (3D)") + api.tr ],
+        [ "backcovers", qsTr("Back boxes") + api.tr ], [ "screenshots", qsTr("Screenshots") + api.tr ],
+        [ "titlescreens", qsTr("Title screens") + api.tr ], [ "marquees", qsTr("Logos") + api.tr ],
+        [ "fanart", qsTr("Fan art") + api.tr ], [ "physicalmedia", qsTr("Cartridges and discs") + api.tr ],
+        [ "banners", qsTr("Banners") + api.tr ], [ "manuals", qsTr("Manuals") + api.tr ], [ "miximages", qsTr("Miximages") + api.tr ],
+    ]
+    function packKindName(kind) {
+        for (var i = 0; i < packKinds.length; i++)
+            if (packKinds[i][0] === kind) return packKinds[i][1];
+        return kind;
+    }
+    function pickPack() {
+        if (packWorking)
+            return;
+        packPick = true;
+        filePicker.pickFolders = true;
+        filePicker.fileExtensions = [];
+        filePicker.openAt(Internal.settings.lastBrowseFolder);
+        filePicker.focus = true;
+    }
+    function packScanned(folder) {
+        var scan = Internal.settings.scanMediaPack(folder);
+        if (scan.error) {
+            message = scan.error;
+            return;
+        }
+        var parts = [];
+        for (var k in scan.kinds)
+            parts.push(scan.kinds[k] + " " + packKindName(k).toLowerCase());
+        var found = qsTr("%1 files").arg(scan.files) + api.tr + (parts.length > 0 ? " · " + parts.join(", ") : "");
+        var coll = collName;
+        var go = function(defaultKind) {
+            chooser.openFor(found + ". " + qsTr("Into %1: the files are matched to its games by name.").arg(coll) + api.tr, [
+                { "act": "copy", "text": qsTr("Copy them into Pegasus X's media folder") + api.tr },
+                { "act": "link", "text": qsTr("Use them where they are (keep the pack folder)") + api.tr },
+                { "act": "copyreplace", "text": qsTr("Copy, replacing what the games have") + api.tr },
+            ], function(act) {
+                root.keepPosition(function() { root.packWorking = true; });
+                root.message = qsTr("Importing the media pack...") + api.tr;
+                Internal.settings.importMediaPack(coll, folder, defaultKind, act !== "link", act === "copyreplace");
+            });
+        };
+        if ((scan.unknown || 0) > 0) {
+            var kinds = [];
+            for (var i = 0; i < packKinds.length; i++)
+                if (packKinds[i][0] !== "videos" && packKinds[i][0] !== "manuals")
+                    kinds.push({ "act": packKinds[i][0], "text": packKinds[i][1] });
+            kinds.push({ "act": "", "text": qsTr("Skip them") + api.tr });
+            chooser.openFor(found + ". " + qsTr("%1 pictures are in folders that don't say what they are. They are:").arg(scan.unknown) + api.tr,
+                            kinds, function(act) { Qt.callLater(function() { go(act); }); });
+            return;
+        }
+        go("");
+    }
+    Connections {
+        target: Internal.settings
+        function onMediaPackProgress(done, total) {
+            if (root.packWorking)
+                root.message = qsTr("Importing the media pack... %1 of %2").arg(done).arg(total) + api.tr;
+        }
+        function onMediaPackImported(result) {
+            if (!root.packWorking)
+                return;
+            root.keepPosition(function() { root.packWorking = false; });
+            if (result.error && !(result.files > 0)) {
+                root.message = result.error;
+                return;
+            }
+            root.anySaved = true;
+            root.message = qsTr("%1 files for %2 games added · %3 matched no game · %4 kept as they were. The library is read again when you leave.")
+                .arg(result.files).arg(result.games).arg(result.unmatched).arg(result.kept) + api.tr;
+            if (root.page === "collection" && root.collObj) {
+                var index = list.currentIndex;
+                root.openCollection({ "name": root.collName, "obj": root.collObj, "loaded": true });
+                list.currentIndex = Math.min(index, list.count - 1);
+            }
+        }
     }
 
     function isAndroidCollection(c) {
@@ -1688,6 +1771,9 @@ FocusScope {
                            "value": root.collScraping ? root.collScrapeSub
                                   : missingCount > 0 ? qsTr("%1 games missing art").arg(missingCount) + api.tr : qsTr("all art there") + api.tr,
                            "warn": !root.collScraping && missingCount > 0 });
+                out.push({ "kind": "mediapack", "text": qsTr("Import a media pack...") + api.tr,
+                           "value": root.packWorking ? qsTr("importing...") + api.tr : qsTr("video snaps, box art... matched by name") + api.tr,
+                           "muted": true });
                 out.push({ "kind": "section", "text": qsTr("Show") + api.tr });
                 out.push({ "kind": "missingfilter", "text": qsTr("Games to list") + api.tr,
                            "value": root.missingOnly ? qsTr("Missing art only · %1").arg(missingCount) + api.tr
@@ -1867,6 +1953,8 @@ FocusScope {
                 root.scrapeThisGame();
             else if (row.kind === "scrapecoll")
                 root.scrapeThisCollection();
+            else if (row.kind === "mediapack")
+                root.pickPack();
             else if (row.kind === "origart")
                 root.askOriginal("art");
             else if (row.kind === "origdetails")
@@ -2421,14 +2509,16 @@ FocusScope {
 
         fileNames: []
         fileExtensions: [".png", ".jpg"]
-        infoText: qsTr("Pick the file. It's written relative to the metadata file when it's in the same folder.") + api.tr
+        infoText: root.packPick
+            ? qsTr("Pick the media pack's folder: video snaps, box art, logos... named like the games (region tags don't matter). Sub-folders like \"Video Snaps\" or \"Box - Front\" say what's in them.") + api.tr
+            : qsTr("Pick the file. It's written relative to the metadata file when it's in the same folder.") + api.tr
 
         enabled: focus
         visible: opacity > 0.01
         opacity: focus ? 1.0 : 0.0
         Behavior on opacity { PropertyAnimation { duration: 300 } }
 
-        onCancel: list.focus = true
+        onCancel: { root.packPick = false; list.focus = true; }
         dataFolder: root.dataDir
         onPickFile: {
             if (pickFolders)
@@ -2438,6 +2528,13 @@ FocusScope {
             list.focus = true;
         }
         onPickFolder: {
+            if (root.packPick) {
+                root.packPick = false;
+                pickFolders = false;
+                list.focus = true;
+                root.packScanned(dir_path);
+                return;
+            }
             Internal.settings.dataDir = dir_path;
             // the art goes in its downloaded_media/<system>/<kind>
             root.dataDir = Internal.settings.dataDir;

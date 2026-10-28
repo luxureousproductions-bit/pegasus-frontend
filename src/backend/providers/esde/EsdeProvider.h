@@ -125,6 +125,32 @@ struct OriginalGame {
     QString error;
 };
 OriginalGame original_game(const QString& collection_name, const QString& game_path);
+
+/// Pegasus X: a media pack (video snaps, box art... from the community) for
+/// one system: its files matched to the games by name. What a folder holds:
+/// { files, kinds: { kind: count }, unknown } (kinds are the scraper's folder
+/// names: videos, covers, 3dboxes, backcovers, physicalmedia, screenshots,
+/// titlescreens, fanart, marquees, banners, manuals, miximages)
+struct MediaPackScan {
+    int files = 0;
+    QVariantMap kinds;
+    int unknown = 0;   ///< pictures in folders whose name doesn't say what they are
+    QString error;
+};
+MediaPackScan scan_media_pack(const QString& folder);
+/// Links (or with `copy`, copies into <media_dir>/<system>/<kind>/) the pack's
+/// files into the system file's games. `default_kind`: what the unknown
+/// pictures are (empty: skipped). Only empty slots unless `replace`.
+struct MediaPackResult {
+    int games = 0;      ///< games that got something
+    int files = 0;      ///< files linked or copied
+    int unmatched = 0;  ///< pack files no game was found for
+    int kept = 0;       ///< slots already filled, left alone
+    QString error;
+};
+MediaPackResult import_media_pack(const QString& system_file, const QString& folder, const QString& default_kind,
+                                  bool copy, bool replace, const QString& media_dir,
+                                  const std::function<void(int, int)>& progress);
 /// Reads every remembered ROM folder again, changed or not
 int rescan_rom_folders();
 /// the remembered ROM folders: (folder, system)

@@ -1343,6 +1343,50 @@ void Settings::requestOriginalGame(const QString& collection_name, const QString
 #endif
 }
 
+QVariantMap Settings::scanMediaPack(const QString& folder)
+{
+#ifdef WITH_COMPAT_ESDE
+    const providers::esde::MediaPackScan scan = providers::esde::scan_media_pack(folder);
+    return QVariantMap {
+        { QStringLiteral("files"), scan.files },
+        { QStringLiteral("kinds"), scan.kinds },
+        { QStringLiteral("unknown"), scan.unknown },
+        { QStringLiteral("error"), scan.error },
+    };
+#else
+    Q_UNUSED(folder);
+    return QVariantMap { { QStringLiteral("error"), tr("Not in this build") } };
+#endif
+}
+
+void Settings::importMediaPack(const QString& system, const QString& folder, const QString& default_kind,
+                               bool copy, bool replace)
+{
+#ifdef WITH_COMPAT_ESDE
+    const QString file = QFileInfo(system).isFile() ? system : providers::esde::metadata_location(system, QString()).file;
+    QString media = dataDir();
+    if (media.isEmpty())
+        media = paths::writableConfigDir() + QStringLiteral("/downloaded_media");
+    QtConcurrent::run([this, file, folder, default_kind, copy, replace, media]{
+        const providers::esde::MediaPackResult r = providers::esde::import_media_pack(file, folder, default_kind, copy, replace, media,
+            [this](int done, int total){
+                QMetaObject::invokeMethod(this, [this, done, total]{ emit mediaPackProgress(done, total); }, Qt::QueuedConnection);
+            });
+        const QVariantMap out {
+            { QStringLiteral("games"), r.games },
+            { QStringLiteral("files"), r.files },
+            { QStringLiteral("unmatched"), r.unmatched },
+            { QStringLiteral("kept"), r.kept },
+            { QStringLiteral("error"), r.error },
+        };
+        QMetaObject::invokeMethod(this, [this, out]{ emit mediaPackImported(out); }, Qt::QueuedConnection);
+    });
+#else
+    Q_UNUSED(system); Q_UNUSED(folder); Q_UNUSED(default_kind); Q_UNUSED(copy); Q_UNUSED(replace);
+    emit mediaPackImported(QVariantMap { { QStringLiteral("error"), tr("Not in this build") } });
+#endif
+}
+
 void Settings::reimportSystem(const QString& key)
 {
 #ifdef WITH_COMPAT_ESDE
