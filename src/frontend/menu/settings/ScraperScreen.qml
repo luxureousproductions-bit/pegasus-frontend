@@ -605,6 +605,37 @@ FocusScope {
             return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info"
                 && root.rows[i].kind !== "preview";
         }
+        // quick moves in a long list: LB top, RB bottom, LT/RT 10 rows
+        function jumpTo(end) {
+            var i = end ? count - 1 : 0;
+            while (i >= 0 && i < count && !selectable(i))
+                i += end ? -1 : 1;
+            if (i >= 0 && i < count)
+                currentIndex = i;
+        }
+        function jumpBy(delta) {
+            var step = delta > 0 ? 1 : -1;
+            var i = currentIndex, moved = 0, last = currentIndex;
+            while (moved < Math.abs(delta)) {
+                i += step;
+                if (i < 0 || i >= count)
+                    break;
+                if (selectable(i)) {
+                    last = i;
+                    moved++;
+                }
+            }
+            currentIndex = last;
+        }
+        function pageKeys(event) {
+            if (api.keys.isPrevPage(event)) jumpTo(false);
+            else if (api.keys.isNextPage(event)) jumpTo(true);
+            else if (api.keys.isPageUp(event)) jumpBy(-10);
+            else if (api.keys.isPageDown(event)) jumpBy(10);
+            else return false;
+            event.accepted = true;
+            return true;
+        }
         Keys.onUpPressed: {
             var i = currentIndex - 1;
             while (i >= 0 && !selectable(i))
@@ -622,6 +653,8 @@ FocusScope {
         Keys.onLeftPressed: if (selectable(currentIndex)) root.step(root.rows[currentIndex], -1)
         Keys.onRightPressed: if (selectable(currentIndex)) root.step(root.rows[currentIndex], 1)
         Keys.onPressed: {
+            if (pageKeys(event))
+                return;
             if (api.keys.isAccept(event) && !event.isAutoRepeat && selectable(currentIndex)) {
                 event.accepted = true;
                 root.activate(root.rows[currentIndex]);

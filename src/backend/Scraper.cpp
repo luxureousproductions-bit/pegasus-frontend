@@ -1018,6 +1018,7 @@ void Scraper::offerChoice(const QVariantList& candidates)
         { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
         { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
                                     : m_choice_source == QLatin1String("igdb") ? QStringLiteral("IGDB")
+                                    : m_choice_source == QLatin1String("launchbox") ? QStringLiteral("LaunchBox")
                                     : QStringLiteral("SteamGridDB") },
         { QStringLiteral("candidates"), list },
     };

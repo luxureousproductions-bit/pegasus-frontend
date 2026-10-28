@@ -436,13 +436,25 @@ FocusScope {
         chooser.openFor(qsTr("Scrape \"%1\" from %2").arg(current("title")).arg(sourceName + sourceNote) + api.tr, [
             { "act": "fill", "text": qsTr("Fill what's empty") + api.tr },
             { "act": "replace", "text": qsTr("Replace with what's found") + api.tr },
-            { "act": "source", "text": qsTr("Scrape from: %1  (change)").arg(sourceName) + api.tr },
+            { "act": "source", "text": qsTr("Scrape from: %1 ›").arg(sourceName) + api.tr },
             { "act": "options", "text": qsTr("Scraper options... (content, pictures, accounts)") + api.tr },
         ], function(act) {
             if (act === "source") {
-                var next = sources[(sources.indexOf(s.source) + 1) % sources.length];
-                Internal.settings.setScraperSetting("source", next);
-                Qt.callLater(root.scrapeThisGame);
+                // a list of the sources to pick from; back to this pop-up after
+                var entries = [];
+                for (var i = 0; i < sources.length; i++) {
+                    var src = sources[i];
+                    var note = src === "launchbox" && !lbReady ? qsTr(" (not downloaded yet)") + api.tr
+                             : src === "screenscraper" && !Internal.settings.scraperHasScreenScraper() ? qsTr(" (not in this build yet)") + api.tr : "";
+                    entries.push({ "act": src, "text": (src === s.source ? "●  " : "○  ") + (names[src] || src) + note });
+                }
+                Qt.callLater(function() {
+                    chooser.openFor(qsTr("Scrape from") + api.tr, entries, function(picked) {
+                        if (picked)
+                            Internal.settings.setScraperSetting("source", picked);
+                        Qt.callLater(root.scrapeThisGame);
+                    }, function() { Qt.callLater(root.scrapeThisGame); });
+                });
                 return;
             }
             if (act === "options") {
@@ -1285,6 +1297,8 @@ FocusScope {
                 var st = root.status || {};
                 var nReview = root.reviews.length;
                 out.push({ "kind": "section", "text": qsTr("Your library · %1 games").arg(st.games || 0) + api.tr });
+                out.push({ "kind": "scraper", "text": qsTr("Scraper") + api.tr,
+                           "value": qsTr("sources, content, pictures, accounts ›") + api.tr });
                 out.push({ "kind": "complete", "text": qsTr("Complete my library") + api.tr, "sub": " " });
                 out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
                            "value": nReview === 1 ? qsTr("1 game") + api.tr : qsTr("%1 games").arg(nReview) + api.tr,
@@ -1306,7 +1320,6 @@ FocusScope {
                                "done": !collHidden && c.loaded && missingArt === 0 && c.count > 0 });
                 }
                 out.push({ "kind": "section", "text": qsTr("Options") + api.tr });
-                out.push({ "kind": "scraper", "text": qsTr("Scraper settings...") + api.tr, "value": "" });
                 var hiddenCount = root.hidden.collections.length + root.hidden.games.length;
                 out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
                            "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
@@ -1543,6 +1556,37 @@ FocusScope {
         function selectable(i) {
             return i >= 0 && i < rows.length && rows[i].kind !== "section" && rows[i].kind !== "info";
         }
+        // quick moves in a long list: LB top, RB bottom, LT/RT 10 rows
+        function jumpTo(end) {
+            var i = end ? count - 1 : 0;
+            while (i >= 0 && i < count && !selectable(i))
+                i += end ? -1 : 1;
+            if (i >= 0 && i < count)
+                currentIndex = i;
+        }
+        function jumpBy(delta) {
+            var step = delta > 0 ? 1 : -1;
+            var i = currentIndex, moved = 0, last = currentIndex;
+            while (moved < Math.abs(delta)) {
+                i += step;
+                if (i < 0 || i >= count)
+                    break;
+                if (selectable(i)) {
+                    last = i;
+                    moved++;
+                }
+            }
+            currentIndex = last;
+        }
+        function pageKeys(event) {
+            if (api.keys.isPrevPage(event)) jumpTo(false);
+            else if (api.keys.isNextPage(event)) jumpTo(true);
+            else if (api.keys.isPageUp(event)) jumpBy(-10);
+            else if (api.keys.isPageDown(event)) jumpBy(10);
+            else return false;
+            event.accepted = true;
+            return true;
+        }
         Keys.onUpPressed: {
             var i = currentIndex - 1;
             while (i >= 0 && !selectable(i))
@@ -1673,6 +1717,8 @@ FocusScope {
         }
 
         Keys.onPressed: {
+            if (pageKeys(event))
+                return;
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isAccept(event)) {
@@ -2226,9 +2272,9 @@ FocusScope {
             [ "boxes", qsTr("Boxes") + api.tr, st.box || 0, "" ],
             [ "shots", qsTr("Screenshots and title screens") + api.tr, st.shots || 0, "" ],
             [ "details", qsTr("Descriptions, genre, year") + api.tr, st.details || 0,
-              (st.igdb || st.ss) ? "" : qsTr("needs an IGDB login") + api.tr ],
+              (st.igdb || st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
             [ "fanart", qsTr("Fan art and logos") + api.tr, st.fanart || 0,
-              (st.igdb || st.sgdb || st.ss) ? "" : qsTr("needs IGDB or SteamGridDB") + api.tr ],
+              (st.igdb || st.sgdb || st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
             [ "videos", qsTr("Videos and manuals") + api.tr, st.videos || 0,
               st.ss ? "" : qsTr("needs ScreenScraper") + api.tr ],
         ]
@@ -2242,6 +2288,7 @@ FocusScope {
             }
             var using = [];
             if (st.ss) using.push("ScreenScraper");
+            if (st.launchbox) using.push(qsTr("LaunchBox database") + api.tr);
             if (st.igdb) using.push("IGDB");
             using.push(qsTr("checksums (Hasheous)") + api.tr);
             using.push(qsTr("libretro pictures") + api.tr);
@@ -2272,18 +2319,27 @@ FocusScope {
         property string title: ""
         property var entries: []
         property var callback: null
+        property var cancelCallback: null   // what B does, when given
 
         anchors.fill: parent
         enabled: focus
         visible: focus
         z: 5
 
-        function openFor(text, list_entries, cb) {
+        function openFor(text, list_entries, cb, on_cancel) {
             title = text;
             entries = list_entries;
             callback = cb;
+            cancelCallback = on_cancel || null;
             chooserList.currentIndex = 0;
             focus = true;
+        }
+        function cancel() {
+            var cb = cancelCallback;
+            cancelCallback = null;
+            list.focus = true;
+            if (cb)
+                cb();
         }
         function done(index) {
             var cb = callback;
@@ -2298,7 +2354,7 @@ FocusScope {
                 return;
             if (api.keys.isCancel(event)) {
                 event.accepted = true;
-                list.focus = true;
+                cancel();
             }
             else if (api.keys.isAccept(event)) {
                 event.accepted = true;
@@ -2313,7 +2369,7 @@ FocusScope {
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
-                onClicked: list.focus = true
+                onClicked: chooser.cancel()
             }
         }
         Column {
