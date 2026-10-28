@@ -61,11 +61,14 @@ private:
     std::vector<QueueEntry> m_pending_tasks;
     std::vector<QueueEntry> m_active_tasks;
 
+    // (the paths, not the game file: the library may drop the game before
+    // the migration runs)
     struct MigrationQueueEntry {
-        model::GameFile* const gamefile;
+        QString uri;
+        QString path;
 
-        MigrationQueueEntry(model::GameFile* const gamefile)
-            : gamefile(std::move(gamefile))
+        MigrationQueueEntry(QString uri, QString path)
+            : uri(std::move(uri)), path(std::move(path))
         {}
     };
     std::vector<MigrationQueueEntry> m_pending_migrations;

@@ -192,6 +192,11 @@ Provider& PlaytimeStats::run(SearchContext& sctx)
     if (!QFileInfo::exists(m_db_path))
         return *this;
 
+    // Pegasus X: the database is closed before the migrations below open it
+    // again from another thread (two open at once removed the connection
+    // under the first one, and that crashed at start when an Android game's
+    // play times needed migrating)
+    {
     SqliteDb channel(m_db_path);
     if (!channel.open()) {
         Log::error(display_name(), LOGMSG("Could not open `%1`, play times will not be loaded")
@@ -246,7 +251,7 @@ Provider& PlaytimeStats::run(SearchContext& sctx)
                 game_ptr = sctx.gamefile_by_filepath(path);
                 // schedule a data migration if path is being used for a URI game
                 if (game_ptr && game_ptr->hasUri())
-                    m_pending_migrations.emplace_back(game_ptr);
+                    m_pending_migrations.emplace_back(game_ptr->uri(), ::clean_abs_path(game_ptr->fileinfo()));
             }
             if (game_ptr)
                 update_stats(stat_map_gamefile[game_ptr]);
@@ -264,6 +269,8 @@ Provider& PlaytimeStats::run(SearchContext& sctx)
         model::GameFile* const gamefile = pair.first;
         const Stats& stats = pair.second;
         gamefile->update_playstats(stats.playcount, stats.playtime, stats.last_played);
+    }
+
     }
 
     // process any migrations
@@ -344,12 +351,10 @@ void PlaytimeStats::start_processing()
             }
 
             for (const MigrationQueueEntry& entry : m_active_migrations) {
-                // we don't have a uri to migrate??
-                if (!entry.gamefile->hasUri())
+                if (entry.uri.isEmpty())
                     continue;
-                const QString uri = entry.gamefile->uri();
-
-                const QString path = ::clean_abs_path(entry.gamefile->fileinfo());
+                const QString& uri = entry.uri;
+                const QString& path = entry.path;
                 const int old_path_id = get_path_id(display_name(), path, false);
                 // no path ID to migrate
                 if (old_path_id == -1)
