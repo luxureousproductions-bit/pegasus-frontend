@@ -1385,7 +1385,8 @@ QString Settings::removeSystem(const QString& key)
         return tr("Couldn't move %1").arg(file);
     QDir(QFileInfo(file).absolutePath()).rmdir(QStringLiteral("."));
     Log::info(LOGMSG("Game directory: `%1` set aside in `%2`").arg(file, aside));
-    reloadLibrary();
+    // the library is read again when Game directory is left (more systems
+    // may be removed first), not here
     return {};
 }
 
@@ -1412,11 +1413,9 @@ int Settings::removeRomFolder(const QString& folder, bool remove_games)
     providers::esde::forget_rom_folders(under);
 #endif
     int removed = 0;
-    if (remove_games) {
+    if (remove_games)
         removed = providers::gamedir::remove_folder_games(folder);
-        if (removed > 0)
-            reloadLibrary();
-    }
+    // (the library is read again when Game directory is left)
     return removed;
 }
 

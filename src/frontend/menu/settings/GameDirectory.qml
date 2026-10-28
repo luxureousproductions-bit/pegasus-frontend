@@ -201,7 +201,8 @@ FocusScope {
             if (act !== "remove")
                 return;
             var error = Internal.settings.removeSystem(entry.key);
-            root.message = error !== "" ? error : qsTr("%1 removed from the game directory.").arg(entry.name) + api.tr;
+            root.changed = root.changed || error === "";  // read again on the way out
+            root.message = error !== "" ? error : qsTr("%1 removed: the library is read again when you leave.").arg(entry.name) + api.tr;
             root.keepPosition(root.refresh);
         });
     }
@@ -325,7 +326,7 @@ FocusScope {
                     if (m.gamelist) bits.push(qsTr("gamelist.xml found") + api.tr);
                     if (m.mediaFolder) bits.push(qsTr("media folder found") + api.tr);
                     out.push({ "kind": "match", "text": m.fullName, "entry": m, "value": bits.join(" · "),
-                               "check": !!root.ticked[m.name], "done": !!root.ticked[m.name], "muted": !root.ticked[m.name] });
+                               "check": !!root.ticked[m.name], "muted": !root.ticked[m.name] });
                 }
                 else {
                     out.push({ "kind": "match", "text": m.fullName, "entry": m,
