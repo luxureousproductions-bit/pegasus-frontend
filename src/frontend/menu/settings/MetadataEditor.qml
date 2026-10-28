@@ -81,7 +81,12 @@ FocusScope {
     function refreshStatus() {
         status = Internal.settings.libraryStatus(api.collections);
         reviews = Internal.settings.reviewList();
-        housekeeping = Internal.settings.libraryHousekeeping();
+        // backups and gone games: in the background (it looks for every game's file)
+        Internal.settings.requestLibraryHousekeeping();
+    }
+    Connections {
+        target: Internal.settings
+        function onLibraryHousekeepingReady(result) { root.keepPosition(function() { root.housekeeping = result; }); }
     }
     function cleanUp() {
         var hk = housekeeping || {};
@@ -204,6 +209,174 @@ FocusScope {
         }
         scrapedHere = true;
         message = qsTr("Scraping \"%1\"...").arg(entry.title) + api.tr;
+    }
+
+    // -- Scraping one collection ----------------------------------------------------
+    property bool collScraping: false
+    readonly property string collScrapeSub: (run && run.running)
+        ? qsTr("scraping %1 of %2%3").arg(run.done || 0).arg(run.total || 0).arg(run.current ? " · " + run.current : "") + api.tr
+        : qsTr("scraping...") + api.tr
+    function scrapeThisCollection() {
+        if (run && run.running) {
+            chooser.openFor(qsTr("The scraper is working.") + api.tr, [
+                { "act": "stop", "text": qsTr("Stop it") + api.tr },
+                { "act": "stay", "text": qsTr("Let it finish") + api.tr },
+            ], function(act) { if (act === "stop") Internal.settings.stopScraper(); });
+            return;
+        }
+        var missingCount = 0;
+        for (var i = 0; i < games.length; i++) {
+            if ((missingMap[games[i].path] || []).length > 0)
+                missingCount++;
+        }
+        var s = Internal.settings.scraperSettings();
+        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr,
+                      "igdb": "IGDB", "steamgriddb": "SteamGridDB" };
+        chooser.openFor(qsTr("Scrape %1 (%2 games) from %3. Runs in the background; games it isn't sure about go to Needs your check.")
+                        .arg(collName).arg(games.length).arg(names[s.source] || s.source) + api.tr, [
+            { "act": "missing", "text": qsTr("Only the %1 games missing art or details").arg(missingCount) + api.tr },
+            { "act": "all", "text": qsTr("Every game: fill what's empty") + api.tr },
+            { "act": "replace", "text": qsTr("Every game: replace with what's found") + api.tr },
+        ], function(act) {
+            if (act === "missing" && missingCount === 0) {
+                root.message = qsTr("Nothing is missing here.") + api.tr;
+                return;
+            }
+            var error = Internal.settings.scrapeCollection(api.collections, root.collName, act);
+            if (error !== "") {
+                root.message = error;
+                return;
+            }
+            root.scrapedHere = true;
+            root.keepPosition(function() { root.collScraping = true; });
+            root.message = qsTr("Scraping %1 in the background: you can leave Settings and play.").arg(root.collName) + api.tr;
+        });
+    }
+    Connections {
+        target: Internal.settings
+        function onScraperFinished(state) {
+            if (!root.collScraping)
+                return;
+            root.keepPosition(function() { root.collScraping = false; });
+            if (state.saved > 0)
+                root.anySaved = true;
+            root.message = qsTr("Done: %1 filled, %2 to check in Needs your check.").arg(state.saved || 0)
+                .arg((state.notFound || 0) + (state.failed || 0)) + api.tr;
+            // the collection's rows show what was saved now
+            if (root.page === "collection" && root.collObj) {
+                var index = list.currentIndex;
+                root.openCollection({ "name": root.collName, "obj": root.collObj, "loaded": true });
+                list.currentIndex = Math.min(index, list.count - 1);
+            }
+        }
+    }
+
+    // -- The original details and art (the ROM folder's, before scraping) -----------
+    property bool originalBusy: false
+    property string originalWant: ""   // "art" or "details"
+    function askOriginal(what) {
+        if (originalBusy || !game)
+            return;
+        originalWant = what;
+        keepPosition(function() { root.originalBusy = true; });
+        Internal.settings.requestOriginalGame(gameColl(), game.path);
+    }
+    Connections {
+        target: Internal.settings
+        function onOriginalGameReady(path, result) {
+            if (!root.originalBusy || !root.game || root.game.path !== path)
+                return;
+            root.keepPosition(function() { root.originalBusy = false; });
+            if (!result.found) {
+                root.message = result.error || qsTr("Nothing found for this game in its ROM folder.") + api.tr;
+                return;
+            }
+            var from = [];
+            if (result.ownMetadata) from.push(qsTr("the folder's own metadata file") + api.tr);
+            if (result.gamelist) from.push(qsTr("ES-DE's gamelist") + api.tr);
+            var fromText = from.length > 0 ? from.join(qsTr(" and ") + api.tr) : qsTr("the folder's media") + api.tr;
+            if (root.originalWant === "art")
+                root.offerOriginalArt(result, fromText);
+            else
+                root.offerOriginalDetails(result, fromText);
+        }
+    }
+    // the art kinds the folder has for the game: shown to pick all or one
+    function offerOriginalArt(result, fromText) {
+        var entries = [];
+        var all = {};
+        for (var i = 0; i < artKinds.length; i++) {
+            var kind = artKinds[i];
+            var files = result.assets[kind[3]];
+            if (!files || files.length === 0)
+                continue;
+            // one file of the kind (the boxes: one 2D, one 3D), as readGame does
+            var file = "";
+            for (var j = 0; j < files.length; j++) {
+                if (kind[4] === "3d" && !is3d(files[j])) continue;
+                if (kind[4] === "2d" && is3d(files[j])) continue;
+                file = files[j];
+                break;
+            }
+            if (file === "")
+                continue;
+            var key = kind[0] + "#0";
+            if (current(key) === file)
+                continue;  // already that picture
+            all[key] = file;
+            entries.push({ "act": key, "text": kind[1], "value": fileName(file) });
+        }
+        var keys = Object.keys(all);
+        if (keys.length === 0) {
+            message = qsTr("The ROM folder has no other art for this game (%1).").arg(fromText) + api.tr;
+            return;
+        }
+        entries.unshift({ "act": "*", "text": qsTr("Restore all %1").arg(keys.length) + api.tr });
+        chooser.openFor(qsTr("The original art from %1. Restoring points the game at those pictures again (the scraped ones stay in downloaded_media). Save afterwards.").arg(fromText) + api.tr,
+                        entries, function(act) {
+            var next = Object.assign({}, root.edits);
+            var picked = act === "*" ? keys : [act];
+            for (var k = 0; k < picked.length; k++)
+                next[picked[k]] = all[picked[k]];
+            root.keepPosition(function() { root.edits = next; });
+            root.message = qsTr("%1 pictures restored: Save changes to keep them.").arg(picked.length) + api.tr;
+        });
+    }
+    // the details the folder has: every field with a value, shown to take all or one
+    function offerOriginalDetails(result, fromText) {
+        var entries = [];
+        var all = {};
+        for (var i = 0; i < gameFields.length; i++) {
+            var f = gameFields[i];
+            if (f.key === "launch")
+                continue;
+            var value = result.details[f.key];
+            if (value === undefined || value === null)
+                continue;
+            if (Array.isArray(value)) value = value.slice();
+            else value = String(value);
+            if ((Array.isArray(value) && value.length === 0) || value === "")
+                continue;
+            if (same(value, current(f.key)))
+                continue;
+            all[f.key] = value;
+            entries.push({ "act": f.key, "text": f.label, "value": shown(f, value) });
+        }
+        var keys = Object.keys(all);
+        if (keys.length === 0) {
+            message = qsTr("%1 has nothing different for this game.").arg(fromText) + api.tr;
+            return;
+        }
+        entries.unshift({ "act": "*", "text": qsTr("Import all %1").arg(keys.length) + api.tr });
+        chooser.openFor(qsTr("The details from %1. Importing replaces what the field has now. Save afterwards.").arg(fromText) + api.tr,
+                        entries, function(act) {
+            var next = Object.assign({}, root.edits);
+            var picked = act === "*" ? keys : [act];
+            for (var k = 0; k < picked.length; k++)
+                next[picked[k]] = all[picked[k]];
+            root.keepPosition(function() { root.edits = next; });
+            root.message = qsTr("%1 fields imported: Save changes to keep them.").arg(picked.length) + api.tr;
+        });
     }
 
     // -- Library: hidden games and collections, Android sections -------------------
@@ -1328,11 +1501,14 @@ FocusScope {
                 out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
                            "value": root.dataDir, "muted": false });
                 var hk = root.housekeeping || {};
+                var hkWait = hk.goneGames === undefined;  // still being checked in the background
                 out.push({ "kind": "cleanup", "text": qsTr("Clean up deleted games") + api.tr,
-                           "value": (hk.goneGames || 0) > 0 ? qsTr("%1 games, %2 pictures").arg(hk.goneGames).arg(hk.goneFiles) + api.tr : qsTr("nothing to clean") + api.tr,
+                           "value": hkWait ? qsTr("checking...") + api.tr
+                                  : (hk.goneGames || 0) > 0 ? qsTr("%1 games, %2 pictures").arg(hk.goneGames).arg(hk.goneFiles) + api.tr : qsTr("nothing to clean") + api.tr,
                            "warn": (hk.goneGames || 0) > 0, "muted": (hk.goneGames || 0) === 0 });
                 out.push({ "kind": "backups", "text": qsTr("Clear backups") + api.tr,
-                           "value": (hk.backupFiles || 0) > 0 ? qsTr("%1 files, %2 MB").arg(hk.backupFiles).arg((hk.backupMB || 0).toFixed(1)) + api.tr : qsTr("none") + api.tr,
+                           "value": hkWait ? qsTr("checking...") + api.tr
+                                  : (hk.backupFiles || 0) > 0 ? qsTr("%1 files, %2 MB").arg(hk.backupFiles).arg((hk.backupMB || 0).toFixed(1)) + api.tr : qsTr("none") + api.tr,
                            "muted": (hk.backupFiles || 0) === 0 });
                 return out;
             }
@@ -1428,6 +1604,11 @@ FocusScope {
                 // the game's file, below its title
                 if (root.page === "game" && f.key === "title")
                     out.push({ "kind": "info", "text": qsTr("File") + api.tr, "value": root.fileShown() });
+                // what the ROM folder's gamelist and metadata say, below the rating
+                if (root.page === "game" && f.key === "rating" && !root.isAndroidCollection(root.collObj))
+                    out.push({ "kind": "origdetails", "text": qsTr("Import the details again...") + api.tr,
+                               "value": root.originalBusy ? qsTr("reading...") + api.tr : qsTr("from ES-DE's gamelist or the folder's own metadata") + api.tr,
+                               "muted": true });
             }
 
             if (root.page === "collection") {
@@ -1478,6 +1659,10 @@ FocusScope {
                     }
                 }
                 out.push({ "kind": "addart", "text": qsTr("Add or replace art...") + api.tr, "value": "" });
+                if (!root.isAndroidCollection(root.collObj))
+                    out.push({ "kind": "origart", "text": qsTr("Restore the original art...") + api.tr,
+                               "value": root.originalBusy ? qsTr("reading...") + api.tr : qsTr("the ROM folder's own pictures, before scraping") + api.tr,
+                               "muted": true });
                 out.push({ "kind": "scrapegame", "text": qsTr("Scrape this game...") + api.tr,
                            "value": root.scrapingGame ? qsTr("scraping...") + api.tr : qsTr("with the Scraper's settings") + api.tr,
                            "muted": true });
@@ -1503,6 +1688,11 @@ FocusScope {
                     if ((root.missingMap[root.games[i].path] || []).length > 0)
                         missingCount++;
                 }
+                out.push({ "kind": "section", "text": qsTr("Scraper") + api.tr });
+                out.push({ "kind": "scrapecoll", "text": qsTr("Scrape this collection...") + api.tr,
+                           "value": root.collScraping ? root.collScrapeSub
+                                  : missingCount > 0 ? qsTr("%1 games missing art").arg(missingCount) + api.tr : qsTr("all art there") + api.tr,
+                           "warn": !root.collScraping && missingCount > 0 });
                 out.push({ "kind": "section", "text": qsTr("Show") + api.tr });
                 out.push({ "kind": "missingfilter", "text": qsTr("Games to list") + api.tr,
                            "value": root.missingOnly ? qsTr("Missing art only · %1").arg(missingCount) + api.tr
@@ -1680,6 +1870,12 @@ FocusScope {
             }
             else if (row.kind === "scrapegame")
                 root.scrapeThisGame();
+            else if (row.kind === "scrapecoll")
+                root.scrapeThisCollection();
+            else if (row.kind === "origart")
+                root.askOriginal("art");
+            else if (row.kind === "origdetails")
+                root.askOriginal("details");
             else if (row.kind === "emulist")
                 root.updateEmulatorList();
             else if (row.kind === "cleanup")
@@ -2407,12 +2603,31 @@ FocusScope {
                         width: ListView.view.width
                         height: vpx(48)
                         color: ListView.isCurrentItem ? "#585858" : "transparent"
+                        readonly property bool hasValue: !!modelData.value
                         Text {
-                            anchors.centerIn: parent
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.verticalCenterOffset: parent.hasValue ? -vpx(9) : 0
                             text: modelData.text
                             color: "#eee"
                             font.family: globalFonts.sans
                             font.pixelSize: vpx(18)
+                            width: parent.width - vpx(40)
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            visible: parent.hasValue
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.verticalCenter: parent.verticalCenter
+                            anchors.verticalCenterOffset: vpx(11)
+                            text: modelData.value || ""
+                            color: "#aaa"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(14)
+                            width: parent.width - vpx(40)
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideMiddle
                         }
                         MouseArea {
                             anchors.fill: parent

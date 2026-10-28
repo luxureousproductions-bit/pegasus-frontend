@@ -42,6 +42,7 @@ FocusScope {
     property var picked: ({})        // system name -> true
     property string romFolder: ""
     property var matches: []         // Settings.matchSystems
+    property var ticked: ({})        // found page: system name -> true (the ones to import)
     property string folderFor: ""    // a system without a folder: picking one for it
     property int pickedCount: Object.keys(picked).length
 
@@ -112,23 +113,34 @@ FocusScope {
     function showMatches(folder) {
         romFolder = folder;
         matches = Internal.settings.matchSystems(folder, Object.keys(picked));
+        // every system found is ticked to start with; untick what shouldn't come in
+        var t = {};
+        for (var i = 0; i < matches.length; i++)
+            if (matches[i].games > 0) t[matches[i].name] = true;
+        ticked = t;
         page = "found";
         message = "";
         list.currentIndex = 0;
         list.positionViewAtBeginning();
     }
+    function toggleTicked(name) {
+        var next = Object.assign({}, ticked);
+        if (next[name]) delete next[name]; else next[name] = true;
+        keepPosition(function() { ticked = next; });
+    }
     readonly property int foundCount: {
         var n = 0;
         for (var i = 0; i < matches.length; i++)
-            if (matches[i].games > 0) n++;
+            if (matches[i].games > 0 && ticked[matches[i].name]) n++;
         return n;
     }
     function importFound() {
         var names = [];
         for (var i = 0; i < matches.length; i++)
-            if (matches[i].games > 0) names.push(matches[i].name);
+            if (matches[i].games > 0 && ticked[matches[i].name]) names.push(matches[i].name);
         if (names.length === 0) {
-            message = qsTr("None of the picked systems has a folder here.") + api.tr;
+            message = matches.length === 0 ? qsTr("None of the picked systems has a folder here.") + api.tr
+                                           : qsTr("Tick the systems to import first.") + api.tr;
             return;
         }
         working = true;
@@ -170,6 +182,16 @@ FocusScope {
         working = true;
         message = qsTr("Reading %1's folders again...").arg(entry.name) + api.tr;
         Internal.settings.reimportSystem(entry.key);
+    }
+    function systemMenu(entry) {
+        var where = entry.folders.length > 0 ? entry.folders.join(", ") : qsTr("no ROM folder") + api.tr;
+        chooser.openFor(qsTr("%1 · %2").arg(entry.name).arg(where) + api.tr, [
+            { "act": "rescan", "text": qsTr("Rescan: read its ROM folders again") + api.tr },
+            { "act": "remove", "text": qsTr("Remove from the game directory") + api.tr },
+        ], function(act) {
+            if (act === "rescan") root.reimport(entry);
+            else if (act === "remove") root.remove(entry);
+        });
     }
     function remove(entry) {
         chooser.openFor(qsTr("Remove %1 from the game directory? Its file goes to backup/%2/ (nothing is deleted), and its ROM folders are no longer watched.").arg(entry.name).arg(entry.key) + api.tr, [
@@ -292,7 +314,7 @@ FocusScope {
                 return out;
             }
             // found
-            out.push({ "kind": "section", "text": (root.pickedCount === 0 ? qsTr("ROM folder: %1 · every system found in it") : qsTr("ROM folder: %1")).arg(root.romFolder) + api.tr });
+            out.push({ "kind": "section", "text": qsTr("ROM folder: %1 · A ticks a system").arg(root.romFolder) + api.tr });
             if (root.matches.length === 0)
                 out.push({ "kind": "info", "text": qsTr("No system folders found here (they're named like snes, psx, gba). Pick the folder that has them, or use Add systems and pick each folder.") + api.tr, "value": "" });
             for (i = 0; i < root.matches.length; i++) {
@@ -302,7 +324,8 @@ FocusScope {
                     if (m.ownMetadata) bits.push(qsTr("own metadata file found") + api.tr);
                     if (m.gamelist) bits.push(qsTr("gamelist.xml found") + api.tr);
                     if (m.mediaFolder) bits.push(qsTr("media folder found") + api.tr);
-                    out.push({ "kind": "match", "text": m.fullName, "entry": m, "value": bits.join(" · "), "done": true });
+                    out.push({ "kind": "match", "text": m.fullName, "entry": m, "value": bits.join(" · "),
+                               "check": !!root.ticked[m.name], "done": !!root.ticked[m.name], "muted": !root.ticked[m.name] });
                 }
                 else {
                     out.push({ "kind": "match", "text": m.fullName, "entry": m,
@@ -376,11 +399,11 @@ FocusScope {
             else if (row.kind === "addfolder") root.addRomFolder();
             else if (row.kind === "watched") root.removeWatched(row.folder);
             else if (row.kind === "esde") root.openEsdeImport();
-            else if (row.kind === "system") root.reimport(row.entry);
+            else if (row.kind === "system") root.systemMenu(row.entry);
             else if (row.kind === "rescan") { root.working = true; root.message = qsTr("Reading the watched folders again...") + api.tr; Internal.settings.rescanRomFolders(); }
             else if (row.kind === "next") root.pickRomFolder();
             else if (row.kind === "pick") root.togglePicked(row.name);
-            else if (row.kind === "match") { if (row.entry.games > 0) root.importFound(); else root.pickFolderFor(row.entry.name); }
+            else if (row.kind === "match") { if (row.entry.games > 0) root.toggleTicked(row.entry.name); else root.pickFolderFor(row.entry.name); }
             else if (row.kind === "import") root.importFound();
         }
         Keys.onPressed: {
@@ -410,11 +433,11 @@ FocusScope {
         delegate: Item {
             readonly property bool isSection: modelData.kind === "section"
             readonly property bool isInfo: modelData.kind === "info"
-            readonly property bool isPick: modelData.kind === "pick"
+            readonly property bool isPick: modelData.kind === "pick" || (modelData.kind === "match" && modelData.check !== undefined)
             readonly property bool highlighted: !isSection && !isInfo
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
             width: ListView.view.width
-            height: isSection ? sectionText.height : (isInfo ? infoText.height + vpx(16) : isPick ? vpx(44) : vpx(22) * 2.4)
+            height: isSection ? sectionText.height : (isInfo ? infoText.height + vpx(16) : modelData.kind === "pick" ? vpx(44) : vpx(22) * 2.4)
 
             Text {
                 id: sectionText
@@ -517,9 +540,9 @@ FocusScope {
     Text {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "main" ? qsTr("A open / re-import a system · Y remove a system or a ROM folder · B back") + api.tr
+            : root.page === "main" ? qsTr("A rescan or remove a system · Y remove · B back") + api.tr
             : root.page === "add" ? qsTr("A tick · B back") + api.tr
-            : qsTr("A import / pick a folder · B back") + api.tr
+            : qsTr("A tick a system / pick a folder · Import at the bottom · B back") + api.tr
         height: implicitHeight
         color: "#ddd"
         font.family: globalFonts.sans

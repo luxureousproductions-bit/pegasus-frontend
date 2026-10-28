@@ -177,6 +177,10 @@ public:
     Q_INVOKABLE void importFolderAs(const QString& folder, const QString& system);
     /// reads a system's folders again (background: romFolderImportFinished)
     Q_INVOKABLE void reimportSystem(const QString& key);
+    /// Pegasus X: a game as its ROM folder has it (own metadata, media folders,
+    /// ES-DE's gamelist and media), in the background: originalGameReady
+    /// { found, folder, ownMetadata, gamelist, details, assets, error }
+    Q_INVOKABLE void requestOriginalGame(const QString& collection_name, const QString& game_path);
     /// sets a system's file aside in backup/<system>/ and forgets its folders
     Q_INVOKABLE QString removeSystem(const QString& key);
     /// the ROM folders watched for new games: [{ folder, system, systems }]
@@ -299,6 +303,10 @@ public:
     /// Scrapes one game (Library's game page) with the Scraper settings;
     /// `overwrite`: replace what it has, else only fill what's empty
     Q_INVOKABLE QString scrapeGame(QObject* game, const QString& collection_name, bool overwrite);
+    /// Scrapes one collection with the Scraper's settings: `filter` "missing"
+    /// (games missing details or art), "all" (fill what's empty) or "replace"
+    /// (every game, replacing what's found). Returns an error, or empty
+    Q_INVOKABLE QString scrapeCollection(QObject* collections, const QString& collection_name, const QString& filter);
     /// { running, done, total, current, title, result, ok, saved, notFound, failed, stopReason }
     Q_INVOKABLE QVariantMap scraperState() const;
 
@@ -320,6 +328,9 @@ public:
     /// Pegasus X: backups (backup/<system>/) and games whose files are gone
     /// { backupFiles, backupMB, goneGames, goneFiles, goneTitles }
     Q_INVOKABLE QVariantMap libraryHousekeeping() const;
+    /// the same in the background (it checks every game's file: slow on a
+    /// big card): libraryHousekeepingReady
+    Q_INVOKABLE void requestLibraryHousekeeping();
     Q_INVOKABLE int clearBackups();
     /// sets aside the entries and scraped art of games whose files are gone
     /// (into backup/<system>/cleanup/); the library is read again
@@ -412,6 +423,8 @@ signals:
     void esdeImportProgress(int done, int total, QString system);
     void esdeImportFinished(QVariantMap result);
     void romFolderImportFinished(QVariantMap result);
+    void originalGameReady(QString game_path, QVariantMap result);
+    void libraryHousekeepingReady(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
     void collectionDetailsReady(QString collection, QVariantMap details);
     void emulatorSaved(QString collection, QString gamePath, QString error);
@@ -434,7 +447,7 @@ private:
     QPointer<model::Game> m_single_game;
     ThemeStore* m_theme_store = nullptr;
     Updater* m_updater = nullptr;
-    QString startScraperWith(QObject* collections, bool offline);  ///< scraped alone: updated when done
+    QString startScraperWith(QObject* collections, bool offline, const QVariantMap& overrides = QVariantMap());  ///< scraped alone: updated when done
     QString runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings);
     bool m_library_open = false;
     QVariantList m_emu_cache;

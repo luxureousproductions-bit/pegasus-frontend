@@ -1321,6 +1321,28 @@ void Settings::importFolderAs(const QString& folder, const QString& system)
 #endif
 }
 
+void Settings::requestOriginalGame(const QString& collection_name, const QString& game_path)
+{
+#ifdef WITH_COMPAT_ESDE
+    QtConcurrent::run([this, collection_name, game_path]{
+        const providers::esde::OriginalGame og = providers::esde::original_game(collection_name, game_path);
+        QVariantMap out {
+            { QStringLiteral("found"), og.found },
+            { QStringLiteral("folder"), og.folder },
+            { QStringLiteral("ownMetadata"), og.own_metadata },
+            { QStringLiteral("gamelist"), og.gamelist },
+            { QStringLiteral("details"), og.details },
+            { QStringLiteral("assets"), og.assets },
+            { QStringLiteral("error"), og.error },
+        };
+        QMetaObject::invokeMethod(this, [this, game_path, out]{ emit originalGameReady(game_path, out); }, Qt::QueuedConnection);
+    });
+#else
+    QVariantMap out { { QStringLiteral("found"), false }, { QStringLiteral("error"), tr("Not in this build") } };
+    emit originalGameReady(game_path, out);
+#endif
+}
+
 void Settings::reimportSystem(const QString& key)
 {
 #ifdef WITH_COMPAT_ESDE
@@ -2142,7 +2164,19 @@ QString Settings::startMiximageGenerator(QObject* collections)
     return startScraperWith(collections, true);
 }
 
-QString Settings::startScraperWith(QObject* collections, bool offline)
+QString Settings::scrapeCollection(QObject* collections, const QString& collection_name, const QString& filter)
+{
+    QVariantMap overrides;
+    overrides.insert(QStringLiteral("systems"), QStringList { collection_name });
+    overrides.insert(QStringLiteral("games"), filter == QLatin1String("missing") ? QStringLiteral("missing") : QStringLiteral("all"));
+    overrides.insert(QStringLiteral("overwrite"), filter == QLatin1String("replace"));
+    // one collection: in the background, no questions (unsure games go to Needs your check)
+    overrides.insert(QStringLiteral("interactive"), false);
+    overrides.insert(QStringLiteral("reviewQueue"), true);
+    return startScraperWith(collections, false, overrides);
+}
+
+QString Settings::startScraperWith(QObject* collections, bool offline, const QVariantMap& overrides)
 {
     if (m_scraper && m_scraper->running())
         return tr("The scraper is already running.");
@@ -2150,6 +2184,8 @@ QString Settings::startScraperWith(QObject* collections, bool offline)
     if (!list)
         return tr("No library to scrape.");
     QVariantMap settings = scraperSettings();
+    for (auto it = overrides.cbegin(); it != overrides.cend(); ++it)
+        settings.insert(it.key(), it.value());
     const QStringList systems = settings.value(QStringLiteral("systems")).toStringList();
     const QString filter = offline ? QStringLiteral("all") : settings.value(QStringLiteral("games")).toString();
     if (systems.isEmpty())
@@ -2361,6 +2397,14 @@ QVariantMap Settings::libraryHousekeeping() const
         { QStringLiteral("goneFiles"), gone.files },
         { QStringLiteral("goneTitles"), QVariant(gone.titles.mid(0, 20)) },
     };
+}
+
+void Settings::requestLibraryHousekeeping()
+{
+    QtConcurrent::run([this]{
+        const QVariantMap out = libraryHousekeeping();
+        QMetaObject::invokeMethod(this, [this, out]{ emit libraryHousekeepingReady(out); }, Qt::QueuedConnection);
+    });
 }
 
 int Settings::clearBackups()
