@@ -283,7 +283,7 @@ public:
     Q_INVOKABLE void setScraperSetting(const QString& key, const QVariant& value);
     /// Whether this build has the app's ScreenScraper developer login
     Q_INVOKABLE bool scraperHasScreenScraper() const;
-    /// Asks ScreenScraper and SteamGridDB whether the logins work
+    /// Asks ScreenScraper whether the login works
     /// (scraperAccountsChecked)
     Q_INVOKABLE void checkScraperAccounts();
     /// Scrapes the games the Scraper settings pick (systems and filter);
@@ -323,7 +323,7 @@ public:
     // Pegasus X: Settings > Library's status rows
     /// { games, box, shots, details, fanart, videos, any (games missing what
     /// Complete my library fills by default), review, collections: { name: missing art },
-    /// igdb, sgdb, ss (logins there) }
+    /// ss, launchbox (sources there) }
     Q_INVOKABLE QVariantMap libraryStatus(QObject* collections) const;
     /// Pegasus X: backups (backup/<system>/) and games whose files are gone
     /// { backupFiles, backupMB, goneGames, goneFiles, goneTitles }
@@ -339,10 +339,10 @@ public:
     /// { boxes, shots, details, fanart, videos }; games it isn't sure about go
     /// to Needs your check. Returns an error, or empty when it started
     Q_INVOKABLE QString completeLibrary(QObject* collections, const QVariantMap& what);
-    /// Needs your check: [{ path, title, collection, system, closest, info, score, igdb }]
+    /// Needs your check: [{ path, title, collection, system, closest, info, score, launchbox }]
     Q_INVOKABLE QVariantList reviewList() const;
-    /// a game there: "use" its closest match (IGDB id), or "choose" from the matches
-    Q_INVOKABLE QString reviewScrape(QObject* collections, const QString& path, const QString& mode, int igdb_id);
+    /// a game there: "use" its closest match (LaunchBox id), or "choose" from the matches
+    Q_INVOKABLE QString reviewScrape(QObject* collections, const QString& path, const QString& mode, int launchbox_id);
     /// never scraped again (Complete my library, the Scraper's runs)
     Q_INVOKABLE void setNeverScrape(const QString& path, const QString& title, bool never);
     /// Pegasus X: what the scraper did lately (Library > Scraper > Log)
@@ -401,7 +401,7 @@ signals:
     void currentThemeUpdated();
     /// Pegasus X: the menu closes, back to the theme (eg. "Use it now")
     void closeMenuRequested();
-    /// { ss: text, ssOk, sgdb: text, sgdbOk }
+    /// { ss: text, ssOk }
     void scraperAccountsChecked(QVariantMap result);
     void scraperProgress(QVariantMap state);
     /// { title, collection, searchName, source, candidates: [...] }

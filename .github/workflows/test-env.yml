@@ -7,9 +7,9 @@
 # (not a branch: git fetch origin refs/pegasusx/test-results), and summary.md
 # is the run's summary on GitHub.
 #
-# With the repository secrets IGDB_TEST_CLIENT_ID / IGDB_TEST_CLIENT_SECRET
-# (a Twitch app made for testing) and SGDB_TEST_KEY set, one game is scraped
-# for real, and what the scraper wrote is in the results.
+# One game is scraped for real from libretro's thumbnails and from the
+# LaunchBox database (cached between runs), and what was written is in the
+# results.
 name: Test environment
 on:
   push:
@@ -74,10 +74,6 @@ jobs:
             echo "downloaded ($(du -m lbcache/Metadata.zip 2>/dev/null | cut -f1) MB)"
           fi
       - name: Run
-        env:
-          IGDB_TEST_CLIENT_ID: ${{ secrets.IGDB_TEST_CLIENT_ID }}
-          IGDB_TEST_CLIENT_SECRET: ${{ secrets.IGDB_TEST_CLIENT_SECRET }}
-          SGDB_TEST_KEY: ${{ secrets.SGDB_TEST_KEY }}
         run: |
           xvfb-run -a -s "-screen 0 1280x720x24" bash tests/testenv/run.sh build/src/app/pegasus-fe "$RUNNER_TEMP/px" results
           echo "::notice::$(ls results/*.png | wc -l) screenshots"

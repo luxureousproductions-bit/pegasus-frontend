@@ -41,8 +41,7 @@ FocusScope {
         var next = Object.assign({}, s);
         next[key] = value;
         keepPosition(function() { s = next; });
-        if (key === "ssUser" || key === "ssPassword" || key === "sgdbKey" || key === "ssUse"
-                || key === "igdbClientId" || key === "igdbClientSecret")
+        if (key === "ssUser" || key === "ssPassword" || key === "ssUse")
             checkAccounts();
     }
     function checkAccounts() {
@@ -98,19 +97,10 @@ FocusScope {
 
     // -- What each page lists ----------------------------------------------------
 
-    // IGDB and SteamGridDB are kept out of the list for now (Other settings
-    // > Show every source brings them back)
-    readonly property var sourceChoices: {
-        var out = [
-            { "v": "screenscraper", "t": "ScreenScraper" },
-            { "v": "launchbox", "t": qsTr("LaunchBox database (no login)") + api.tr },
-        ];
-        if (s.showAllSources) {
-            out.push({ "v": "igdb", "t": qsTr("IGDB (best for modern, PC and Android games)") + api.tr });
-            out.push({ "v": "steamgriddb", "t": qsTr("SteamGridDB (art only)") + api.tr });
-        }
-        return out;
-    }
+    readonly property var sourceChoices: [
+        { "v": "screenscraper", "t": "ScreenScraper" },
+        { "v": "launchbox", "t": qsTr("LaunchBox database (no login)") + api.tr },
+    ]
     property var lb: Internal.settings.launchBoxStatus()   // the LaunchBox database
     Connections {
         target: Internal.settings
@@ -175,27 +165,6 @@ FocusScope {
                 qsTr("Free accounts get a set number of games a day; supporting ScreenScraper raises it. The Status row shows how many are left today.") + api.tr,
             ],
             "site": "screenscraper.fr"
-        },
-        "igdb": {
-            "title": qsTr("IGDB login (a Twitch app)") + api.tr,
-            "steps": [
-                qsTr("Log in to twitch.tv and turn on two-factor authentication (Settings › Security). Twitch asks for it before you can make an app.") + api.tr,
-                qsTr("On dev.twitch.tv, open Console › Applications › Register Your Application.") + api.tr,
-                qsTr("Name: anything no one else has used, eg. \"pegasusx-\" and your name. OAuth Redirect URL: https://localhost (tap Add). Category: Application Integration. Client type: Confidential.") + api.tr,
-                qsTr("Open the app you made: copy the Client ID, then tap New Secret and copy the secret (it's shown only once).") + api.tr,
-                qsTr("Enter both here. The Status row says \"Login works\" when Twitch accepts them.") + api.tr,
-            ],
-            "site": "dev.twitch.tv/console"
-        },
-        "sgdb": {
-            "title": qsTr("SteamGridDB API key") + api.tr,
-            "steps": [
-                qsTr("On steamgriddb.com, log in with your Steam account (top right).") + api.tr,
-                qsTr("Open your profile menu › Preferences › API.") + api.tr,
-                qsTr("Tap Generate API Key and copy the key.") + api.tr,
-                qsTr("Enter it here. The Status row says \"Key works\" when SteamGridDB accepts it.") + api.tr,
-            ],
-            "site": "steamgriddb.com/profile/preferences/api"
         },
     })
     readonly property var contentToggles: [
@@ -353,23 +322,6 @@ FocusScope {
             out.push({ "kind": "help", "key": "ss", "text": qsTr("How to get an account") + api.tr, "value": "" });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.ss || ""), "ok": !!accounts.ssOk });
-            if (!s.showAllSources)
-                return out;
-            out.push({ "kind": "section", "text": "IGDB" });
-            out.push({ "kind": "text", "key": "igdbClientId", "secret": true, "text": qsTr("Client ID") + api.tr,
-                       "value": s.igdbClientId !== "" ? "••••" + String(s.igdbClientId).slice(-4) : qsTr("not set") + api.tr, "muted": s.igdbClientId === "" });
-            out.push({ "kind": "text", "key": "igdbClientSecret", "secret": true, "text": qsTr("Client secret") + api.tr,
-                       "value": s.igdbClientSecret !== "" ? "••••••••" : qsTr("not set") + api.tr, "muted": s.igdbClientSecret === "" });
-            out.push({ "kind": "toggle", "key": "igdbFill", "text": qsTr("Fill in what ScreenScraper doesn't have") + api.tr });
-            out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
-                       "value": checking ? qsTr("checking...") + api.tr : (accounts.igdb || ""), "ok": !!accounts.igdbOk });
-            out.push({ "kind": "help", "key": "igdb", "text": qsTr("How to get a Client ID and secret") + api.tr, "value": "" });
-            out.push({ "kind": "section", "text": "SteamGridDB" });
-            out.push({ "kind": "text", "key": "sgdbKey", "secret": true, "text": qsTr("API key") + api.tr,
-                       "value": s.sgdbKey !== "" ? "••••" + String(s.sgdbKey).slice(-4) : qsTr("not set") + api.tr, "muted": s.sgdbKey === "" });
-            out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
-                       "value": checking ? qsTr("checking...") + api.tr : (accounts.sgdb || ""), "ok": !!accounts.sgdbOk });
-            out.push({ "kind": "help", "key": "sgdb", "text": qsTr("How to get an API key") + api.tr, "value": "" });
             return out;
         }
         if (page === "content") {
@@ -444,7 +396,6 @@ FocusScope {
             out.push({ "kind": "toggle", "key": "useMetadataNames", "text": qsTr("Search using metadata names") + api.tr });
             out.push({ "kind": "toggle", "key": "useHasheous", "text": qsTr("Identify games by checksum (Hasheous, free)") + api.tr });
             out.push({ "kind": "toggle", "key": "useLibretro", "text": qsTr("Free boxes and screenshots (libretro)") + api.tr });
-            out.push({ "kind": "toggle", "key": "showAllSources", "text": qsTr("Show every source (IGDB, SteamGridDB)") + api.tr });
             out.push({ "kind": "number", "key": "minMatch", "text": qsTr("How sure a name match must be") + api.tr, "min": 0, "max": 100, "step": 5, "suffix": "%" });
             out.push({ "kind": "toggle", "key": "interactive", "text": qsTr("Interactive mode (pick each match)") + api.tr });
             out.push({ "kind": "toggle", "key": "autoAcceptSingle", "text": qsTr("Auto-accept a single match") + api.tr });

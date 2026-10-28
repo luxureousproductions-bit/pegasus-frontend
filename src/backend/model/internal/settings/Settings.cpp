@@ -1814,12 +1814,6 @@ QVariantMap scraper_defaults()
         { QStringLiteral("ssUser"), QString() },
         { QStringLiteral("ssPassword"), QString() },
         { QStringLiteral("ssUse"), true },
-        { QStringLiteral("sgdbKey"), QString() },
-        // IGDB: your own Twitch app (dev.twitch.tv), and whether it fills in
-        // what the first source didn't have
-        { QStringLiteral("igdbClientId"), QString() },
-        { QStringLiteral("igdbClientSecret"), QString() },
-        { QStringLiteral("igdbFill"), true },
         // what to get
         { QStringLiteral("getNames"), true },
         { QStringLiteral("getRatings"), true },
@@ -1867,7 +1861,6 @@ QVariantMap scraper_defaults()
         { QStringLiteral("useHasheous"), true },
         { QStringLiteral("useLibretro"), true },
         { QStringLiteral("useLaunchBox"), true },
-        { QStringLiteral("showAllSources"), false },
         { QStringLiteral("launchboxFill"), true },
         { QStringLiteral("getBanners"), true },
         { QStringLiteral("getSpines"), true },
@@ -1882,12 +1875,6 @@ QVariantMap scraper_defaults()
         // fan art kept 16:9 (as ScreenScraper's): banners onto a blurred background
         { QStringLiteral("fanartFit"), QStringLiteral("original") },
     };
-}
-
-bool scraper_has_igdb(const QVariantMap& settings)
-{
-    return !settings.value(QStringLiteral("igdbClientId")).toString().trimmed().isEmpty()
-        && !settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed().isEmpty();
 }
 
 QString unmask(const unsigned char* data, int length)
@@ -1919,12 +1906,12 @@ QVariantMap Settings::scraperSettings() const
             it.value() = saved.toString();
     }
     out.insert(QStringLiteral("hasScreenScraper"), scraperHasScreenScraper());
-    // the sources on offer: ScreenScraper and LaunchBox (IGDB and SteamGridDB
-    // only with Show every source); a build without ScreenScraper starts on LaunchBox
+    // the sources on offer: ScreenScraper and LaunchBox (a source from an
+    // older build, IGDB or SteamGridDB, becomes LaunchBox); a build without
+    // ScreenScraper starts on LaunchBox
     const QString source = out.value(QStringLiteral("source")).toString();
-    const bool all = out.value(QStringLiteral("showAllSources")).toBool();
-    const bool hidden = (source == QLatin1String("igdb") || source == QLatin1String("steamgriddb")) && !all;
-    if (hidden || (source == QLatin1String("screenscraper") && !scraperHasScreenScraper() && !file.contains(SCRAPER_GROUP + QStringLiteral("source"))))
+    const bool gone = source != QLatin1String("screenscraper") && source != QLatin1String("launchbox");
+    if (gone || (source == QLatin1String("screenscraper") && !scraperHasScreenScraper() && !file.contains(SCRAPER_GROUP + QStringLiteral("source"))))
         out.insert(QStringLiteral("source"), QStringLiteral("launchbox"));
     return out;
 }
@@ -1949,7 +1936,7 @@ void Settings::checkScraperAccounts()
         m_netman = new QNetworkAccessManager(this);
     const QVariantMap settings = scraperSettings();
     auto* const result = new QVariantMap();
-    auto* const pending = new int(3);
+    auto* const pending = new int(1);
     const auto finish = [this, result, pending]{
         if (--(*pending) > 0)
             return;
@@ -2005,55 +1992,6 @@ void Settings::checkScraperAccounts()
         });
     }
 
-    // IGDB: a token from Twitch with your app's Client ID and secret
-    if (!scraper_has_igdb(settings)) {
-        result->insert(QStringLiteral("igdb"), tr("No Client ID and secret yet"));
-        result->insert(QStringLiteral("igdbOk"), false);
-        finish();
-    }
-    else {
-        QUrlQuery query;
-        query.addQueryItem(QStringLiteral("client_id"), settings.value(QStringLiteral("igdbClientId")).toString().trimmed());
-        query.addQueryItem(QStringLiteral("client_secret"), settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed());
-        query.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("client_credentials"));
-        // the secret in the body, as the scraper does, never in the URL
-        QNetworkRequest request(QUrl(QStringLiteral("https://id.twitch.tv/oauth2/token")));
-        request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
-        QNetworkReply* const reply = m_netman->post(request, query.toString(QUrl::FullyEncoded).toUtf8());
-        connect(reply, &QNetworkReply::finished, this, [reply, result, finish]{
-            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            const bool ok = status == 200 && QJsonDocument::fromJson(reply->readAll()).object().contains(QStringLiteral("access_token"));
-            reply->deleteLater();
-            result->insert(QStringLiteral("igdb"), ok ? tr("Login works")
-                : (status == 400 || status == 401 || status == 403) ? tr("The Client ID or secret isn't accepted")
-                : status == 0 ? tr("No connection") : tr("Twitch answered %1").arg(status));
-            result->insert(QStringLiteral("igdbOk"), ok);
-            finish();
-        });
-    }
-
-    // SteamGridDB: one search with your key
-    const QString key = settings.value(QStringLiteral("sgdbKey")).toString().trimmed();
-    if (key.isEmpty()) {
-        result->insert(QStringLiteral("sgdb"), tr("No API key yet"));
-        result->insert(QStringLiteral("sgdbOk"), false);
-        finish();
-    }
-    else {
-        QNetworkRequest request(QUrl(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/zelda")));
-        request.setRawHeader("Authorization", "Bearer " + key.toUtf8());
-        QNetworkReply* const reply = m_netman->get(request);
-        connect(reply, &QNetworkReply::finished, this, [reply, result, finish]{
-            const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-            reply->deleteLater();
-            const bool ok = status == 200;
-            result->insert(QStringLiteral("sgdb"), ok ? tr("Key works")
-                : status == 401 ? tr("The key isn't accepted")
-                : status == 0 ? tr("No connection") : tr("SteamGridDB answered %1").arg(status));
-            result->insert(QStringLiteral("sgdbOk"), ok);
-            finish();
-        });
-    }
 }
 
 namespace {
@@ -2195,16 +2133,10 @@ QString Settings::startScraperWith(QObject* collections, bool offline, const QVa
     }
     const QString source = settings.value(QStringLiteral("source")).toString();
     const bool has_ss = scraperHasScreenScraper();
-    const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
-    const bool has_igdb = scraper_has_igdb(settings);
-    if (!offline && source == QLatin1String("steamgriddb") && !has_sgdb)
-        return tr("Enter your SteamGridDB API key in Account settings first.");
-    if (!offline && source == QLatin1String("igdb") && !has_igdb)
-        return tr("Enter your IGDB Client ID and secret in Account settings first.");
     const bool has_lb = launchBox().ready();
     if (!offline && source == QLatin1String("launchbox") && !has_lb)
         return tr("Download the LaunchBox database in Account settings first.");
-    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_lb && !has_sgdb && !has_igdb
+    if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_lb
             && !settings.value(QStringLiteral("useLibretro")).toBool())
         return tr("ScreenScraper isn't in this build yet. Download the LaunchBox database in Account settings.");
 
@@ -2279,18 +2211,12 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
         settings.insert(QStringLiteral("autoAcceptSingle"), true);
     }
     const QString source = settings.value(QStringLiteral("source")).toString();
-    const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
-    const bool has_igdb = scraper_has_igdb(settings);
     // (with none: libretro's free boxes and screenshots only)
-    if (!scraperHasScreenScraper() && !launchBox().ready() && !has_sgdb && !has_igdb
+    if (!scraperHasScreenScraper() && !launchBox().ready()
             && !settings.value(QStringLiteral("useLibretro")).toBool())
         return tr("Download the LaunchBox database in Library > Scraper > Account settings first.");
     if (source == QLatin1String("launchbox") && !launchBox().ready())
         return tr("Download the LaunchBox database in Library > Scraper > Account settings first.");
-    if (source == QLatin1String("igdb") && !has_igdb)
-        return tr("Enter your IGDB Client ID and secret in Library > Scraper > Account settings first.");
-    if (source == QLatin1String("steamgriddb") && !has_sgdb)
-        return tr("Enter your SteamGridDB key in Library > Scraper > Account settings first.");
     std::vector<scraper::Job> jobs;
     jobs.push_back(make_scraper_job(*coll, game, scraper::Scraper::system_of(coll->name(), coll->shortName()),
                                     game->filesModel()->entries().front()->path()));
@@ -2375,8 +2301,6 @@ QVariantMap Settings::libraryStatus(QObject* collections) const
     out.insert(QStringLiteral("any"), any);
     out.insert(QStringLiteral("collections"), per_coll);
     out.insert(QStringLiteral("review"), scraper::Scraper::reviewList().size());
-    out.insert(QStringLiteral("igdb"), scraper_has_igdb(settings));
-    out.insert(QStringLiteral("sgdb"), !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty());
     out.insert(QStringLiteral("ss"), scraperHasScreenScraper());
     out.insert(QStringLiteral("launchbox"), launchBox().ready());
     return out;
@@ -2443,8 +2367,6 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
 
     QVariantMap settings = scraperSettings();
     const bool has_ss = scraperHasScreenScraper();
-    const bool has_sgdb = !settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty();
-    const bool has_igdb = scraper_has_igdb(settings);
     // only what's empty, nothing asked: what it isn't sure about waits in Needs your check
     settings.insert(QStringLiteral("overwrite"), false);
     settings.insert(QStringLiteral("interactive"), false);
@@ -2461,12 +2383,8 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
     settings.insert(QStringLiteral("getManuals"), want_videos);
     settings.insert(QStringLiteral("getBackcovers"), false);
     settings.insert(QStringLiteral("getPhysical"), false);
-    // the source picked needs a login that isn't there: the ones that are
-    const QString source = settings.value(QStringLiteral("source")).toString();
-    if ((source == QLatin1String("igdb") && !has_igdb) || (source == QLatin1String("steamgriddb") && !has_sgdb))
-        settings.insert(QStringLiteral("source"), QStringLiteral("screenscraper"));
     const bool has_lb = launchBox().ready();
-    if (!has_ss && !has_lb && !has_sgdb && !has_igdb && !settings.value(QStringLiteral("useLibretro")).toBool())
+    if (!has_ss && !has_lb && !settings.value(QStringLiteral("useLibretro")).toBool())
         return tr("Download the LaunchBox database in Scraper > Account settings first.");
 
     std::vector<scraper::Job> jobs;
@@ -2478,7 +2396,7 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
             continue;
         const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
         // no source for this system: nothing could be found
-        if (!has_ss && !has_sgdb && !has_igdb && !scraper::Scraper::hasFreeArt(system)
+        if (!has_ss && !scraper::Scraper::hasFreeArt(system)
                 && !(has_lb && launchBox().hasSystem(system)))
             continue;
         for (model::Game* const game : coll->gameList()->entries()) {
@@ -2508,7 +2426,7 @@ QVariantList Settings::reviewList() const
     return scraper::Scraper::reviewList();
 }
 
-QString Settings::reviewScrape(QObject* collections, const QString& path, const QString& mode, int igdb_id)
+QString Settings::reviewScrape(QObject* collections, const QString& path, const QString& mode, int launchbox_id)
 {
     if (m_scraper && m_scraper->running())
         return tr("The scraper is already running.");
@@ -2534,17 +2452,13 @@ QString Settings::reviewScrape(QObject* collections, const QString& path, const 
     settings.insert(QStringLiteral("overwrite"), false);
     settings.insert(QStringLiteral("reviewQueue"), true);
     settings.insert(QStringLiteral("interactive"), mode == QLatin1String("choose"));
-    const bool has_igdb = scraper_has_igdb(settings);
-    const QString source = settings.value(QStringLiteral("source")).toString();
-    if (mode == QLatin1String("use") && has_igdb)
-        settings.insert(QStringLiteral("source"), QStringLiteral("igdb"));
-    else if ((source == QLatin1String("igdb") && !has_igdb)
-             || (source == QLatin1String("steamgriddb") && settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty()))
-        settings.insert(QStringLiteral("source"), QStringLiteral("screenscraper"));
+    // "use": the LaunchBox match it found, no questions asked
+    if (mode == QLatin1String("use") && launchbox_id > 0 && launchBox().ready())
+        settings.insert(QStringLiteral("source"), QStringLiteral("launchbox"));
     scraper::Job job = make_scraper_job(*found_coll, found,
         scraper::Scraper::system_of(found_coll->name(), found_coll->shortName()), path);
     if (mode == QLatin1String("use"))
-        job.igdb_id = igdb_id;
+        job.launchbox_id = launchbox_id;
     std::vector<scraper::Job> jobs;
     jobs.push_back(std::move(job));
     m_single_game = found;

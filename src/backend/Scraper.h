@@ -38,8 +38,8 @@ class QNetworkReply;
 
 
 // Pegasus X: the scraper (Settings > Library > Scraper). Game details and
-// art from ScreenScraper, details and art from IGDB (your own Twitch app
-// login), art from SteamGridDB; downloaded into the data
+// art from ScreenScraper and from the LaunchBox database (no login), the
+// free pictures from libretro's thumbnails; downloaded into the data
 // folder and written into your metadata like the Library editor does: only
 // what's empty, unless you turned on Overwrite. One game at a time, so it
 // stays within what your ScreenScraper account allows.
@@ -66,7 +66,7 @@ struct Job {
     bool has_box2d = false;
     bool has_box3d = false;
     QStringList hidden_art;  ///< art removed in Library ("<kind>|<file>")
-    int igdb_id = 0;         ///< the game's IGDB id when you picked it (Needs your check)
+    int launchbox_id = 0;    ///< the LaunchBox game you picked (Needs your check)
 };
 
 /// What a source gave for one game
@@ -108,7 +108,7 @@ public:
 
     // Needs your check (metadata/review.json): games a run wasn't sure about,
     // and the ones you never want scraped
-    /// [{ path, title, collection, system, closest, score, igdb, date }], by title
+    /// [{ path, title, collection, system, closest, score, launchbox, date }], by title
     static QVariantList reviewList();
     static void reviewRemove(const QString& path);
     static void setNeverScrape(const QString& path, const QString& title, bool never);
@@ -155,11 +155,11 @@ private:
     void identify(std::function<void()> then);
     void libretroArt();
     QString m_hash_name;          ///< the game's name by its checksum (Hasheous), eg. "Chrono Trigger (USA)"
-    int m_known_igdb_id = 0;      ///< its IGDB id by its checksum
+    int m_known_lb_id = 0;        ///< the LaunchBox game picked in Needs your check
     bool m_identified = false;
     bool m_libretro_done = false;
     QHash<QString, QStringList> m_libretro_lists;  ///< a system's thumbnail names, per kind (this run)
-    QVariantMap m_review_hint;  ///< the closest match when it wasn't sure enough (closest, score, igdb)
+    QVariantMap m_review_hint;  ///< the closest match when it wasn't sure enough (closest, score, launchbox)
     void reviewAdd(const Job& job);
     QVariantMap m_match;   ///< what the game was matched to (source, id, name)
     QString m_md5;         ///< its file's MD5, when one was made
@@ -192,30 +192,13 @@ private:
     bool m_waiting = false;
     QVariantMap m_choice;
     QJsonArray m_ss_results;                ///< ScreenScraper's games, as found
-    std::vector<int> m_sgdb_ids;            ///< SteamGridDB's games, as found
-    QString m_choice_source;                ///< "ss" / "igdb" / "sgdb"
+    QString m_choice_source;                ///< "ss" / "launchbox"
     bool interactive() const;
     void search(const QString& name);
     void ssSearch(const QString& name);
-    void sgdbSearch(const QString& name);
     void offerChoice(const QVariantList& candidates);
 
-    // IGDB: details and art (cover, screenshot, artwork); the first source, or
-    // after ScreenScraper for what it didn't have
-    QString m_igdb_token;
-    QDateTime m_igdb_expiry;
-    QJsonArray m_igdb_results;              ///< IGDB's games, as found
-    bool m_igdb_done = false;               ///< asked IGDB for this game already
-    bool igdbReady() const;
-    void igdbToken(std::function<void(int status)> done);
-    void igdbPost(const QByteArray& query, std::function<void(int status, const QByteArray& body)> done,
-                  int tries_left, bool retried = false);
-    void igdbFind(const QString& name, std::function<void(int status, const QJsonArray& games)> done);
-    void igdbSearch(const QString& name);
-    void igdbAuto(bool after_other);
-    void parseIgdb(const QJsonObject& game, bool after_other);
-    QVariantMap igdbCandidate(const QJsonObject& game) const;
-    /// after the first source: IGDB for what's missing, then SteamGridDB's art
+    /// after the first source: LaunchBox for what's missing, then libretro's pictures
     void fillMore();
 
     // miximages made here (as ES-DE), after the downloads; the offline
@@ -239,7 +222,6 @@ private:
 
     void screenScraper(const QString& md5);
     void parseScreenScraper(const QJsonObject& game);
-    void steamGridDb(int known_id = 0);
     void downloadNext();
     void storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext);
     void save();

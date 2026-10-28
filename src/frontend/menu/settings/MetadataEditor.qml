@@ -200,9 +200,9 @@ FocusScope {
             message = qsTr("\"%1\" won't be scraped again.").arg(entry.title) + api.tr;
             return;
         }
-        if (mode === "use" && !(entry.igdb > 0))
+        if (mode === "use" && !(entry.launchbox > 0))
             mode = "choose";
-        var error = Internal.settings.reviewScrape(api.collections, entry.path, mode, entry.igdb || 0);
+        var error = Internal.settings.reviewScrape(api.collections, entry.path, mode, entry.launchbox || 0);
         if (error !== "") {
             message = error;
             return;
@@ -230,8 +230,7 @@ FocusScope {
                 missingCount++;
         }
         var s = Internal.settings.scraperSettings();
-        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr,
-                      "igdb": "IGDB", "steamgriddb": "SteamGridDB" };
+        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr };
         chooser.openFor(qsTr("Scrape %1 (%2 games) from %3. Runs in the background; games it isn't sure about go to Needs your check.")
                         .arg(collName).arg(games.length).arg(names[s.source] || s.source) + api.tr, [
             { "act": "missing", "text": qsTr("Only the %1 games missing art or details").arg(missingCount) + api.tr },
@@ -591,17 +590,13 @@ FocusScope {
         if (scrapingGame)
             return;
         var s = Internal.settings.scraperSettings();
-        // the sources on offer: ScreenScraper and LaunchBox (IGDB and
-        // SteamGridDB only with Other settings > Show every source)
+        // the sources on offer: ScreenScraper and LaunchBox
         var sources = ["screenscraper", "launchbox"];
-        if (s.showAllSources)
-            sources = sources.concat(["igdb", "steamgriddb"]);
         if (sources.indexOf(s.source) < 0) {
             Internal.settings.setScraperSetting("source", "launchbox");
             s.source = "launchbox";
         }
-        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr,
-                      "igdb": "IGDB", "steamgriddb": "SteamGridDB" };
+        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr };
         var sourceName = names[s.source] || s.source;
         var lbReady = !!Internal.settings.launchBoxStatus().present;
         var sourceNote = s.source === "launchbox" && !lbReady ? qsTr(" (not downloaded yet: Scraper > Account settings)") + api.tr
@@ -2468,9 +2463,9 @@ FocusScope {
             [ "boxes", qsTr("Boxes") + api.tr, st.box || 0, "" ],
             [ "shots", qsTr("Screenshots and title screens") + api.tr, st.shots || 0, "" ],
             [ "details", qsTr("Descriptions, genre, year") + api.tr, st.details || 0,
-              (st.igdb || st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
+              (st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
             [ "fanart", qsTr("Fan art and logos") + api.tr, st.fanart || 0,
-              (st.igdb || st.sgdb || st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
+              (st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
             [ "videos", qsTr("Videos and manuals") + api.tr, st.videos || 0,
               st.ss ? "" : qsTr("needs ScreenScraper") + api.tr ],
         ]
@@ -2485,10 +2480,8 @@ FocusScope {
             var using = [];
             if (st.ss) using.push("ScreenScraper");
             if (st.launchbox) using.push(qsTr("LaunchBox database") + api.tr);
-            if (st.igdb) using.push("IGDB");
             using.push(qsTr("checksums (Hasheous)") + api.tr);
             using.push(qsTr("libretro pictures") + api.tr);
-            if (st.sgdb) using.push("SteamGridDB");
             out.push({ "text": qsTr("Start") + api.tr, "value": qsTr("Using: %1").arg(using.join(" · ")) + api.tr });
             return out;
         }

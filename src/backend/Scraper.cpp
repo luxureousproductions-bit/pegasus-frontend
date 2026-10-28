@@ -258,101 +258,6 @@ const QHash<QString, int>& screenscraper_systems()
 }
 
 // names people give their collections -> ES-DE's names
-// ES-DE system -> IGDB platform id (nothing found on that platform: searched
-// again on every platform)
-const QHash<QString, int>& igdb_platforms()
-{
-    static const QHash<QString, int> map {
-    { "3do", 50 }, { "amiga", 16 }, { "amiga1200", 16 }, { "amiga600", 16 }, { "amigacd32", 114 },
-    { "amstradcpc", 25 }, { "android", 34 }, { "androidapps", 34 }, { "androidgames", 34 },
-    { "apple2", 75 }, { "apple2gs", 115 }, { "arcade", 52 }, { "atomiswave", 52 }, { "cps", 52 },
-    { "cps1", 52 }, { "cps2", 52 }, { "cps3", 52 }, { "fba", 52 }, { "fbneo", 52 }, { "mame", 52 },
-    { "mame-advmame", 52 }, { "model2", 52 }, { "model3", 52 }, { "naomi", 52 }, { "naomi2", 52 },
-    { "naomigd", 52 }, { "atari2600", 59 }, { "atari5200", 66 }, { "atari7800", 60 },
-    { "atari800", 65 }, { "atarixe", 65 }, { "atarist", 63 }, { "atarijaguar", 62 },
-    { "atarilynx", 61 }, { "c64", 15 }, { "colecovision", 68 }, { "dos", 13 }, { "dreamcast", 23 },
-    { "famicom", 99 }, { "fds", 51 }, { "gamegear", 35 }, { "gb", 33 }, { "gba", 24 }, { "gbc", 22 },
-    { "gc", 21 }, { "genesis", 29 }, { "megadrive", 29 }, { "megadrivejp", 29 }, { "intellivision", 67 },
-    { "macintosh", 14 }, { "mark3", 64 }, { "mastersystem", 64 }, { "megacd", 78 }, { "megacdjp", 78 },
-    { "segacd", 78 }, { "msx", 27 }, { "msx1", 27 }, { "msx2", 53 }, { "n3ds", 37 }, { "n64", 4 },
-    { "n64dd", 416 }, { "nds", 20 }, { "neogeo", 80 }, { "neogeocd", 136 }, { "neogeocdjp", 136 },
-    { "nes", 18 }, { "ngage", 42 }, { "ngp", 119 }, { "ngpc", 120 }, { "odyssey2", 133 },
-    { "videopac", 133 }, { "pc", 6 }, { "windows", 6 }, { "steam", 6 }, { "pc88", 125 },
-    { "pc98", 149 }, { "pcengine", 86 }, { "tg16", 86 }, { "pcenginecd", 150 }, { "tg-cd", 150 },
-    { "pcfx", 274 }, { "ps2", 8 }, { "ps3", 9 }, { "ps4", 48 }, { "psp", 38 }, { "psvita", 46 },
-    { "psx", 7 }, { "saturn", 32 }, { "saturnjp", 32 }, { "sega32x", 30 }, { "sega32xjp", 30 },
-    { "sega32xna", 30 }, { "sfc", 58 }, { "sg-1000", 84 }, { "snes", 19 }, { "snesna", 19 },
-    { "supergrafx", 128 }, { "switch", 130 }, { "vectrex", 70 }, { "vic20", 71 },
-    { "virtualboy", 87 }, { "wii", 5 }, { "wiiu", 41 }, { "wonderswan", 57 },
-    { "wonderswancolor", 123 }, { "x68000", 121 }, { "xbox", 11 }, { "xbox360", 12 },
-    { "xboxone", 49 }, { "zxspectrum", 26 },
-    };
-    return map;
-}
-
-// an IGDB picture's address, in one of its sizes
-QString igdb_image(const QJsonValue& image, const char* size)
-{
-    const QString id = image.toObject().value(QStringLiteral("image_id")).toString();
-    return id.isEmpty() ? QString()
-        : QStringLiteral("https://images.igdb.com/igdb/image/upload/t_%1/%2.jpg").arg(QLatin1String(size), id);
-}
-
-// IGDB game -> its developers / publishers
-QStringList igdb_companies(const QJsonObject& game, const QString& role)
-{
-    QStringList out;
-    for (const QJsonValue& v : game.value(QStringLiteral("involved_companies")).toArray()) {
-        const QJsonObject ic = v.toObject();
-        if (!ic.value(role).toBool())
-            continue;
-        const QString name = ic.value(QStringLiteral("company")).toObject().value(QStringLiteral("name")).toString();
-        if (!name.isEmpty() && !out.contains(name))
-            out.append(name);
-    }
-    return out;
-}
-QStringList igdb_names(const QJsonObject& game, const QString& field)
-{
-    QStringList out;
-    for (const QJsonValue& v : game.value(field).toArray()) {
-        const QString name = v.toObject().value(QStringLiteral("name")).toString();
-        if (!name.isEmpty() && !out.contains(name))
-            out.append(name);
-    }
-    return out;
-}
-// most players on one machine (single player only: 1)
-int igdb_players(const QJsonObject& game)
-{
-    int most = 0;
-    for (const QJsonValue& v : game.value(QStringLiteral("multiplayer_modes")).toArray())
-        most = qMax(most, v.toObject().value(QStringLiteral("offlinemax")).toInt());
-    if (most == 0 && igdb_names(game, QStringLiteral("game_modes")).contains(QStringLiteral("Single player")))
-        most = 1;
-    return most;
-}
-// 0-100: the critics' and users' rating
-int igdb_rating(const QJsonObject& game)
-{
-    for (const char* key : { "total_rating", "aggregated_rating", "rating" }) {
-        const double value = game.value(QLatin1String(key)).toDouble();
-        if (value > 0)
-            return qRound(value);
-    }
-    return 0;
-}
-QDate igdb_release(const QJsonObject& game)
-{
-    const qint64 secs = static_cast<qint64>(game.value(QStringLiteral("first_release_date")).toDouble());
-    return secs != 0 ? QDateTime::fromSecsSinceEpoch(secs, Qt::UTC).date() : QDate();
-}
-QString igdb_description(const QJsonObject& game)
-{
-    const QString summary = game.value(QStringLiteral("summary")).toString().trimmed();
-    return summary.isEmpty() ? game.value(QStringLiteral("storyline")).toString().trimmed() : summary;
-}
-
 const QHash<QString, QString>& common_names()
 {
     static const QHash<QString, QString> map {
@@ -611,7 +516,7 @@ QImage stretch_16_9(const QImage& src)
 QImage fit_16_9(const QImage& src)
 {
     // 16:9 by cropping, never by padding: the middle of a taller picture,
-    // the middle of a wider one (IGDB's artworks are often banner-wide);
+    // the middle of a wider one (fan art is often banner-wide);
     // padding showed as bars above and below
     const double ratio = static_cast<double>(src.width()) / static_cast<double>(src.height());
     const double wanted = 16.0 / 9.0;
@@ -756,14 +661,13 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_backed_up.clear();
     m_running = true;
     m_run++;  // answers still on their way from the last run are ignored
-    note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, IGDB login: %7, SteamGridDB key: %8)")
+    note(LOGMSG("Scraping %1 games into `%2` (source: %3, interactive: %4, overwrite: %5, ScreenScraper login: %6, LaunchBox database: %7)")
         .arg(m_jobs.size()).arg(m_data_dir)
         .arg(m_settings.value(QStringLiteral("source")).toString())
         .arg(interactive() ? QStringLiteral("yes") : QStringLiteral("no"))
         .arg(m_settings.value(QStringLiteral("overwrite")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"))
         .arg(m_dev_id.isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes"))
-        .arg(igdbReady() ? QStringLiteral("yes") : QStringLiteral("missing"))
-        .arg(m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes")));
+        .arg(lbReady() ? QStringLiteral("yes") : QStringLiteral("missing")));
     // which system each collection is looked up as
     QMap<QString, QString> systems;
     for (const Job& job : m_jobs)
@@ -772,7 +676,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
         const bool known = screenscraper_systems().contains(it.value());
         note(LOGMSG("Collection `%1`: system `%2`%3").arg(it.key(),
             it.value().isEmpty() ? QStringLiteral("?") : it.value(),
-            known ? QString() : QStringLiteral(" (not a ScreenScraper system: IGDB/SteamGridDB only)")));
+            known ? QString() : QStringLiteral(" (not a ScreenScraper system: LaunchBox and libretro only)")));
     }
     report();
     next();
@@ -800,8 +704,8 @@ bool Scraper::interactive() const
     return m_settings.value(QStringLiteral("interactive")).toBool();
 }
 
-// the matches for a name: the source's (IGDB or ScreenScraper, with details
-// and art), else IGDB's, else SteamGridDB's (art only)
+// the matches for a name: the source's (ScreenScraper or the LaunchBox
+// database, with details and art), else the other's
 void Scraper::search(const QString& name)
 {
     const Job& job = m_jobs[m_index];
@@ -809,18 +713,10 @@ void Scraper::search(const QString& name)
     const bool ss_ok = source == QLatin1String("screenscraper") && !m_dev_id.isEmpty()
         && screenscraper_systems().contains(job.system);
     const bool lb_ok = lbReady() && m_lb->hasSystem(job.system);
-    if (source == QLatin1String("igdb") && igdbReady())
-        igdbSearch(name);
-    else if (ss_ok)
+    if (ss_ok)
         ssSearch(name);
-    else if (source == QLatin1String("launchbox") && lb_ok)
+    else if (lb_ok)
         lbSearch(name);
-    else if (source != QLatin1String("steamgriddb") && source != QLatin1String("igdb") && lb_ok)
-        lbSearch(name);
-    else if (source != QLatin1String("steamgriddb") && igdbReady())
-        igdbSearch(name);
-    else if (!m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty())
-        sgdbSearch(name);
     else {
         m_not_found++;
         QString why;
@@ -921,70 +817,6 @@ void Scraper::ssSearch(const QString& name)
     });
 }
 
-void Scraper::sgdbSearch(const QString& name)
-{
-    const QByteArray auth = "Bearer " + m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().toUtf8();
-    QUrl url(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/")
-             + QString::fromLatin1(QUrl::toPercentEncoding(name)));
-    get(url, auth, m_settings.value(QStringLiteral("retries")).toInt(), [this, auth](int status, const QByteArray& body){
-        if (m_stop) {
-            next();
-            return;
-        }
-        if (status == 401) {
-            m_stop_reason = tr("SteamGridDB didn't accept the key: check Account settings.");
-            m_stop = true;
-            finishGame(m_stop_reason, false);
-            return;
-        }
-        const QJsonArray found = QJsonDocument::fromJson(body).object().value(QStringLiteral("data")).toArray();
-        m_sgdb_ids.clear();
-        auto* const candidates = new QVariantList();
-        for (const QJsonValue& v : found) {
-            const QJsonObject game = v.toObject();
-            m_sgdb_ids.push_back(game.value(QStringLiteral("id")).toInt());
-            const qint64 released = static_cast<qint64>(game.value(QStringLiteral("release_date")).toDouble());
-            candidates->append(QVariantMap {
-                { QStringLiteral("name"), game.value(QStringLiteral("name")).toString() },
-                { QStringLiteral("info"), released > 0 ? QString::number(QDateTime::fromSecsSinceEpoch(released).date().year()) : QString() },
-                { QStringLiteral("release"), released > 0 ? QDateTime::fromSecsSinceEpoch(released).date().toString(Qt::ISODate) : QString() },
-            });
-        }
-        m_choice_source = QStringLiteral("sgdb");
-        // a cover for the first ones, to tell them apart
-        const int with_thumbs = qMin(6, static_cast<int>(m_sgdb_ids.size()));
-        if (with_thumbs == 0) {
-            offerChoice(*candidates);
-            delete candidates;
-            return;
-        }
-        auto* const pending = new int(with_thumbs);
-        const int run = m_run;
-        for (int i = 0; i < with_thumbs; i++) {
-            const QUrl grid(QStringLiteral("https://www.steamgriddb.com/api/v2/grids/game/%1?dimensions=600x900&types=static&nsfw=false&humor=false&epilepsy=false").arg(m_sgdb_ids[static_cast<size_t>(i)]));
-            get(grid, auth, 0, [this, i, pending, candidates, run](int st, const QByteArray& b){
-                const QJsonArray images = QJsonDocument::fromJson(b).object().value(QStringLiteral("data")).toArray();
-                if (st == 200 && !images.isEmpty()) {
-                    QVariantMap c = (*candidates)[i].toMap();
-                    c.insert(QStringLiteral("thumb"), images.first().toObject().value(QStringLiteral("thumb")).toString());
-                    (*candidates)[i] = c;
-                }
-                if (--(*pending) == 0) {
-                    delete pending;
-                    const QVariantList list = *candidates;
-                    delete candidates;
-                    if (run != m_run)
-                        return;  // a later run took over
-                    if (m_stop)
-                        next();
-                    else
-                        offerChoice(list);
-                }
-            });
-        }
-    });
-}
-
 void Scraper::offerChoice(const QVariantList& candidates)
 {
     // one match and Auto-accept on: no need to ask (scraping one game always asks)
@@ -1017,9 +849,7 @@ void Scraper::offerChoice(const QVariantList& candidates)
         { QStringLiteral("collection"), job.collection },
         { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
         { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
-                                    : m_choice_source == QLatin1String("igdb") ? QStringLiteral("IGDB")
-                                    : m_choice_source == QLatin1String("launchbox") ? QStringLiteral("LaunchBox")
-                                    : QStringLiteral("SteamGridDB") },
+                                    : QStringLiteral("LaunchBox") },
         { QStringLiteral("candidates"), list },
     };
     note(LOGMSG("%1: %2 matches for \"%3\"").arg(m_choice.value(QStringLiteral("source")).toString())
@@ -1114,34 +944,14 @@ void Scraper::choose(int index)
         fillMore();
         return;
     }
-    if (m_choice_source == QLatin1String("launchbox")) {
-        if (index < 0 || index >= static_cast<int>(m_lb_results.size())) {
-            m_waiting = true;
-            skip();
-            return;
-        }
-        m_lb_done = true;
-        parseLaunchBox(m_lb_results[static_cast<size_t>(index)], false);
-        fillMore();
-        return;
-    }
-    if (m_choice_source == QLatin1String("igdb")) {
-        if (index < 0 || index >= m_igdb_results.size()) {
-            m_waiting = true;
-            skip();
-            return;
-        }
-        m_igdb_done = true;
-        parseIgdb(m_igdb_results.at(index).toObject(), false);
-        fillMore();
-        return;
-    }
-    if (index < 0 || index >= static_cast<int>(m_sgdb_ids.size())) {
+    if (index < 0 || index >= static_cast<int>(m_lb_results.size())) {
         m_waiting = true;
         skip();
         return;
     }
-    steamGridDb(m_sgdb_ids[static_cast<size_t>(index)]);
+    m_lb_done = true;
+    parseLaunchBox(m_lb_results[static_cast<size_t>(index)], false);
+    fillMore();
 }
 
 void Scraper::refine(const QString& search_name)
@@ -1205,12 +1015,11 @@ void Scraper::next()
     m_match.clear();
     m_md5.clear();
     m_hash_name.clear();
-    m_known_igdb_id = job.igdb_id;
-    m_identified = job.igdb_id > 0;  // picked by you: no need to ask by checksum
+    m_known_lb_id = job.launchbox_id;
+    m_identified = job.launchbox_id > 0;  // picked by you: no need to ask by checksum
     m_review_hint.clear();
     m_libretro_done = false;
     m_got.clear();
-    m_igdb_done = false;
     m_lb_done = false;
     m_mix_done = false;
     m_mix_error.clear();
@@ -1235,13 +1044,19 @@ void Scraper::next()
         && screenscraper_systems().contains(job.system);
     if (!ss_ok) {
         // who the game is by its checksum first (keyless), then LaunchBox's
-        // database (details and art, no login), or IGDB, then the art sources
-        identify([this, source]{
+        // database (details and art, no login), then libretro's pictures
+        identify([this]{
             const Job& job = m_jobs[m_index];
-            if (source != QLatin1String("igdb") && source != QLatin1String("steamgriddb") && lbReady() && m_lb->hasSystem(job.system))
+            if (m_known_lb_id > 0 && lbReady()) {
+                // the match you picked in Needs your check
+                const LaunchBoxDb::Game game = m_lb->game(job.system, m_known_lb_id);
+                m_lb_done = true;
+                if (game.id > 0)
+                    parseLaunchBox(game, false);
+                fillMore();
+            }
+            else if (lbReady() && m_lb->hasSystem(job.system))
                 lbAuto(false);
-            else if (source != QLatin1String("steamgriddb") && igdbReady())
-                igdbAuto(false);
             else
                 fillMore();
         });
@@ -1281,8 +1096,8 @@ void Scraper::hashThen(std::function<void(const QString&)> then)
     watcher->setFuture(QtConcurrent::run([path, max_bytes, cancel]{ return md5_of(path, max_bytes, cancel); }));
 }
 
-// Hasheous (no key): the game's name and IGDB id by its checksum, so IGDB
-// and the thumbnails are looked up exactly instead of by a guessed name
+// Hasheous (no key): the game's name by its checksum, so LaunchBox and the
+// thumbnails are looked up by its real name instead of a guessed one
 void Scraper::identify(std::function<void()> then)
 {
     if (m_identified || !m_settings.value(QStringLiteral("useHasheous"), true).toBool()) {
@@ -1312,22 +1127,11 @@ void Scraper::identify(std::function<void()> then)
             if (status == 200 && !game.isEmpty()) {
                 m_hash_name = game.value(QStringLiteral("name")).toString().trimmed();
                 QStringList sources;
-                for (const QJsonValue& v : game.value(QStringLiteral("metadata")).toArray()) {
-                    const QJsonObject meta = v.toObject();
-                    const QString source = meta.value(QStringLiteral("source")).toString();
-                    sources.append(source);
-                    if (source.compare(QLatin1String("IGDB"), Qt::CaseInsensitive) != 0)
-                        continue;
-                    const QJsonValue id = meta.contains(QStringLiteral("immutableId"))
-                        ? meta.value(QStringLiteral("immutableId")) : meta.value(QStringLiteral("id"));
-                    const int igdb = id.isString() ? id.toString().toInt() : id.toInt();
-                    if (igdb > 0)
-                        m_known_igdb_id = igdb;
-                }
-                note(LOGMSG("Hasheous: \"%1\" (IGDB %2; sources: %3; fields: %4)")
-                     .arg(m_hash_name).arg(m_known_igdb_id)
-                     .arg(sources.isEmpty() ? QStringLiteral("none") : sources.join(QStringLiteral(", ")))
-                     .arg(game.keys().join(QLatin1Char(','))));
+                for (const QJsonValue& v : game.value(QStringLiteral("metadata")).toArray())
+                    sources.append(v.toObject().value(QStringLiteral("source")).toString());
+                note(LOGMSG("Hasheous: \"%1\" (sources: %2)")
+                     .arg(m_hash_name)
+                     .arg(sources.isEmpty() ? QStringLiteral("none") : sources.join(QStringLiteral(", "))));
                 if (!m_hash_name.isEmpty())
                     setMatch(QStringLiteral("hasheous"), game.value(QStringLiteral("id")).toVariant().toString(), m_hash_name);
             }
@@ -1513,7 +1317,7 @@ void Scraper::recordMatch(const Job& job)
     if (!m_md5.isEmpty())
         entry[QStringLiteral("md5")] = m_md5;
     if (!m_match.isEmpty()) {
-        // one entry per source: an IGDB match doesn't drop the ScreenScraper one
+        // one entry per source: a LaunchBox match doesn't drop the ScreenScraper one
         QJsonObject ids = entry.value(QStringLiteral("ids")).toObject();
         ids[m_match.value(QStringLiteral("source")).toString()] = QJsonObject {
             { QStringLiteral("id"), m_match.value(QStringLiteral("id")).toString() },
@@ -1573,7 +1377,7 @@ void Scraper::reviewAdd(const Job& job)
         entry[QStringLiteral("closest")] = m_review_hint.value(QStringLiteral("closest")).toString();
         entry[QStringLiteral("info")] = m_review_hint.value(QStringLiteral("info")).toString();
         entry[QStringLiteral("score")] = m_review_hint.value(QStringLiteral("score")).toInt();
-        entry[QStringLiteral("igdb")] = m_review_hint.value(QStringLiteral("igdb")).toInt();
+        entry[QStringLiteral("launchbox")] = m_review_hint.value(QStringLiteral("launchbox")).toInt();
     }
     games[job.path] = entry;
     root[QStringLiteral("games")] = games;
@@ -1758,9 +1562,8 @@ void Scraper::screenScraper(const QString& md5)
         const QJsonObject game = QJsonDocument::fromJson(body).object()
             .value(QStringLiteral("response")).toObject().value(QStringLiteral("jeu")).toObject();
         if (game.isEmpty()) {
-            // not on ScreenScraper: IGDB and SteamGridDB may still have it
-            const bool more = igdbReady() || !m_settings.value(QStringLiteral("sgdbKey")).toString().isEmpty();
-            if (more) {
+            // not on ScreenScraper: the LaunchBox database may still have it
+            if (lbReady() && m_lb->hasSystem(job.system)) {
                 fillMore();
                 return;
             }
@@ -1774,7 +1577,7 @@ void Scraper::screenScraper(const QString& md5)
             return;
         }
         parseScreenScraper(game);
-        // what ScreenScraper doesn't have, from IGDB and SteamGridDB
+        // what ScreenScraper doesn't have, from LaunchBox and libretro
         fillMore();
     });
 }
@@ -1874,392 +1677,6 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
         }
     }
 }
-
-// -- IGDB ---------------------------------------------------------------------------
-// The login is your own Twitch app's Client ID and secret (dev.twitch.tv >
-// Console > Register your application): a token from Twitch, then one POST
-// per search to api.igdb.com. Its limit (4 requests a second) is well above
-// what scraping one game at a time asks.
-
-bool Scraper::igdbReady() const
-{
-    return !m_settings.value(QStringLiteral("igdbClientId")).toString().trimmed().isEmpty()
-        && !m_settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed().isEmpty();
-}
-
-void Scraper::igdbToken(std::function<void(int)> done)
-{
-    QUrlQuery query;
-    query.addQueryItem(QStringLiteral("client_id"), m_settings.value(QStringLiteral("igdbClientId")).toString().trimmed());
-    query.addQueryItem(QStringLiteral("client_secret"), m_settings.value(QStringLiteral("igdbClientSecret")).toString().trimmed());
-    query.addQueryItem(QStringLiteral("grant_type"), QStringLiteral("client_credentials"));
-    // the login goes in the body, as Twitch documents it
-    QNetworkRequest request{QUrl(QStringLiteral("https://id.twitch.tv/oauth2/token"))};
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/x-www-form-urlencoded"));
-    request.setTransferTimeout(60000);
-    request.setRawHeader("User-Agent", USER_AGENT);
-    QNetworkReply* const reply = m_net->post(request, query.toString(QUrl::FullyEncoded).toUtf8());
-    connect(reply, &QNetworkReply::finished, this, [this, reply, done]{
-        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QByteArray body = reply->readAll();
-        const QJsonObject answer = QJsonDocument::fromJson(body).object();
-        reply->deleteLater();
-        const QString token = answer.value(QStringLiteral("access_token")).toString();
-        note(LOGMSG("IGDB: Twitch login answered %1%2").arg(status == 0 ? QStringLiteral("nothing (no connection?)") : QString::number(status))
-             .arg(status == 200 && !token.isEmpty() ? QStringLiteral(", token received")
-                  : QStringLiteral(": ") + QString::fromUtf8(body.left(200))));
-        if (status == 200 && !token.isEmpty()) {
-            m_igdb_token = token;
-            // a minute early, so it doesn't run out mid-search
-            m_igdb_expiry = QDateTime::currentDateTimeUtc().addSecs(qMax(60, answer.value(QStringLiteral("expires_in")).toInt() - 60));
-        }
-        done(status == 200 && token.isEmpty() ? 500 : status);
-    });
-}
-
-// status -1: Twitch didn't accept the Client ID / secret
-void Scraper::igdbPost(const QByteArray& query, std::function<void(int, const QByteArray&)> done,
-                       int tries_left, bool retried)
-{
-    if (m_igdb_token.isEmpty() || QDateTime::currentDateTimeUtc() >= m_igdb_expiry) {
-        igdbToken([this, query, done, tries_left, retried](int status){
-            if (status != 200) {
-                done(status == 0 || status >= 500 ? status : -1, {});
-                return;
-            }
-            igdbPost(query, done, tries_left, retried);
-        });
-        return;
-    }
-    QNetworkRequest request(QUrl(QStringLiteral("https://api.igdb.com/v4/games")));
-    request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("text/plain"));
-    request.setRawHeader("Client-ID", m_settings.value(QStringLiteral("igdbClientId")).toString().trimmed().toUtf8());
-    request.setRawHeader("Authorization", "Bearer " + m_igdb_token.toUtf8());
-    request.setRawHeader("User-Agent", USER_AGENT);
-    request.setTransferTimeout(60000);
-    QNetworkReply* const reply = m_net->post(request, query);
-    m_replies.insert(reply);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, query, done, tries_left, retried]{
-        m_replies.remove(reply);
-        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        const QByteArray body = reply->readAll();
-        reply->deleteLater();
-        // the token ran out (or was revoked): a new one, once
-        if (status == 401 && !retried) {
-            m_igdb_token.clear();
-            igdbPost(query, done, tries_left, true);
-            return;
-        }
-        if ((status == 0 || status == 429 || status >= 500) && tries_left > 0 && !m_stop) {
-            const int delay = status == 429 ? 1000 : qMax(1, m_settings.value(QStringLiteral("retryDelay")).toInt()) * 1000;
-            QTimer::singleShot(delay, this, [this, query, done, tries_left, retried]{
-                igdbPost(query, done, tries_left - 1, retried);
-            });
-            return;
-        }
-        countTransport(status);
-        done(status == 401 ? -1 : status, body);
-    });
-}
-
-// the games of a name, on the collection's platform (else on any)
-namespace {
-// IGDB answers errors as a JSON list of {title, status, cause} objects
-QJsonArray igdb_games(int status, const QByteArray& body)
-{
-    return status == 200 ? QJsonDocument::fromJson(body).array() : QJsonArray();
-}
-QString igdb_answer(int status, const QByteArray& body)
-{
-    if (status == 200)
-        return LOGMSG("IGDB: answered 200, %1 games").arg(QJsonDocument::fromJson(body).array().size());
-    const QJsonObject err = QJsonDocument::fromJson(body).array().at(0).toObject();
-    const QString why = err.isEmpty()
-        ? QString::fromUtf8(body.left(200))
-        : err.value(QStringLiteral("title")).toString() + QLatin1String(": ") + err.value(QStringLiteral("cause")).toString();
-    return LOGMSG("IGDB: answered %1, %2").arg(status).arg(why);
-}
-} // namespace
-
-void Scraper::igdbFind(const QString& name, std::function<void(int, const QJsonArray&)> done)
-{
-    const Job& job = m_jobs[m_index];
-    const int platform = igdb_platforms().value(job.system, 0);
-    QString clean = name;
-    clean.remove(QLatin1Char('"'));
-    clean.remove(QLatin1Char('\\'));
-    static const QString fields = QStringLiteral("fields name,summary,storyline,first_release_date,"
-                                   "total_rating,aggregated_rating,rating,genres.name,game_modes.name,"
-                                   "multiplayer_modes.offlinemax,platforms.name,"
-                                   "involved_companies.developer,involved_companies.publisher,"
-                                   "involved_companies.company.name,cover.image_id,screenshots.image_id,"
-                                   "artworks.image_id,artworks.width,artworks.height;");
-    const auto query_for = [clean](int on_platform) {
-        QString q = QStringLiteral("search \"%1\"; ").arg(clean) + fields;
-        if (on_platform > 0)
-            q += QStringLiteral(" where platforms = (%1);").arg(on_platform);
-        q += QStringLiteral(" limit 10;");
-        return q.toUtf8();
-    };
-    const int tries = m_settings.value(QStringLiteral("retries")).toInt();
-    // known by the file's checksum (Hasheous): that game, no guessing
-    if (m_known_igdb_id > 0) {
-        note(LOGMSG("IGDB: game %1 (known by the file's checksum)").arg(m_known_igdb_id));
-        const QByteArray q = (fields + QStringLiteral(" where id = %1; limit 1;").arg(m_known_igdb_id)).toUtf8();
-        igdbPost(q, [this, done, query_for, platform, tries, clean](int status, const QByteArray& body){
-            const QJsonArray games = igdb_games(status, body);
-            note(igdb_answer(status, body));
-            if (status == 200 && games.isEmpty() && !m_stop) {
-                m_known_igdb_id = 0;  // not there after all: by name
-                igdbPost(query_for(platform), [this, done](int st, const QByteArray& b){
-                    note(igdb_answer(st, b));
-                    done(st, igdb_games(st, b));
-                }, tries);
-                return;
-            }
-            done(status, games);
-        }, tries);
-        return;
-    }
-    note(LOGMSG("IGDB: searching \"%1\" (system `%2`, platform %3)").arg(clean, job.system).arg(platform));
-    igdbPost(query_for(platform), [this, platform, query_for, tries, done, clean](int status, const QByteArray& body){
-        // an error comes back as a list too (of error objects), so only a 200 is a list of games
-        const QJsonArray games = igdb_games(status, body);
-        note(igdb_answer(status, body));
-        if (status == 200 && games.isEmpty() && platform > 0 && !m_stop) {
-            note(LOGMSG("IGDB: nothing on that platform, searching \"%1\" on every platform").arg(clean));
-            igdbPost(query_for(0), [this, done](int st, const QByteArray& b){
-                note(igdb_answer(st, b));
-                done(st, igdb_games(st, b));
-            }, tries);
-            return;
-        }
-        done(status, games);
-    }, tries);
-}
-
-QVariantMap Scraper::igdbCandidate(const QJsonObject& game) const
-{
-    const QDate released = igdb_release(game);
-    QStringList info = igdb_names(game, QStringLiteral("platforms")).mid(0, 2);
-    if (released.isValid())
-        info.append(QString::number(released.year()));
-    const int rating = igdb_rating(game);
-    const int players = igdb_players(game);
-    return QVariantMap {
-        { QStringLiteral("name"), game.value(QStringLiteral("name")).toString() },
-        { QStringLiteral("info"), info.join(QStringLiteral(" · ")) },
-        { QStringLiteral("description"), igdb_description(game) },
-        { QStringLiteral("thumb"), igdb_image(game.value(QStringLiteral("cover")), "cover_big") },
-        { QStringLiteral("developer"), igdb_companies(game, QStringLiteral("developer")).join(QStringLiteral(", ")) },
-        { QStringLiteral("publisher"), igdb_companies(game, QStringLiteral("publisher")).join(QStringLiteral(", ")) },
-        { QStringLiteral("genre"), igdb_names(game, QStringLiteral("genres")).join(QStringLiteral(", ")) },
-        { QStringLiteral("players"), players > 0 ? QString::number(players) : QString() },
-        { QStringLiteral("release"), released.isValid() ? released.toString(Qt::ISODate) : QString() },
-        { QStringLiteral("rating"), rating > 0 ? QString::number(rating) + QLatin1Char('%') : QString() },
-    };
-}
-
-void Scraper::igdbSearch(const QString& name)
-{
-    igdbFind(name, [this](int status, const QJsonArray& games){
-        if (m_stop) {
-            next();
-            return;
-        }
-        if (status == -1) {
-            m_stop_reason = tr("IGDB didn't accept the Client ID or secret: check Account settings.");
-            m_stop = true;
-            finishGame(m_stop_reason, false);
-            return;
-        }
-        if (status != 200) {
-            m_failed++;
-            finishGame(status == 0
-                ? tr("IGDB: no connection")
-                : tr("IGDB error %1: see Scraper > Log").arg(status), false);
-            return;
-        }
-        m_igdb_results = games;
-        QVariantList candidates;
-        for (const QJsonValue& v : games)
-            candidates.append(igdbCandidate(v.toObject()));
-        m_choice_source = QStringLiteral("igdb");
-        offerChoice(candidates);
-    });
-}
-
-// without asking: the game of the same name, else IGDB's best match
-void Scraper::igdbAuto(bool after_other)
-{
-    m_igdb_done = true;
-    const Job& job = m_jobs[m_index];
-    const bool by_title = m_settings.value(QStringLiteral("useMetadataNames")).toBool() && !job.title_is_file_name;
-    QString name = by_title ? job.title : job.search_name;
-    if (!m_hash_name.isEmpty() && !by_title)
-        name = search_name_of(m_hash_name + QStringLiteral(".x"), m_hash_name);  // its No-Intro name, tags off
-    if (after_other && m_changes.contains(QStringLiteral("title")))
-        name = m_changes.value(QStringLiteral("title")).toString();  // the name the first source found
-    igdbFind(name, [this, name, after_other](int status, const QJsonArray& games){
-        if (m_stop) {
-            next();
-            return;
-        }
-        if (status == -1 && !after_other) {
-            m_stop_reason = tr("IGDB didn't accept the Client ID or secret: check Account settings.");
-            m_stop = true;
-            finishGame(m_stop_reason, false);
-            return;
-        }
-        if (status != 200)
-            Log::warning(LOG_TAG, LOGMSG("IGDB: %1 for `%2`").arg(status).arg(name));
-        if (status == 200 && !games.isEmpty()) {
-            // the surest match: known by checksum, else the closest name
-            // (on this system's platform if IGDB says so); a weak one is
-            // left alone rather than giving the game another game's art
-            const int platform = igdb_platforms().value(m_jobs[m_index].system, 0);
-            QJsonObject best;
-            int best_score = -1;
-            for (const QJsonValue& v : games) {
-                const QJsonObject g = v.toObject();
-                int score = m_known_igdb_id > 0 && g.value(QStringLiteral("id")).toInt() == m_known_igdb_id
-                    ? 200 : name_score(name, g.value(QStringLiteral("name")).toString());
-                if (!m_hash_name.isEmpty())
-                    score = qMax(score, name_score(m_hash_name, g.value(QStringLiteral("name")).toString()));
-                if (platform > 0) {
-                    for (const QJsonValue& p : g.value(QStringLiteral("platforms")).toArray()) {
-                        if (p.toObject().value(QStringLiteral("id")).toInt() == platform || p.toInt() == platform)
-                            score += 5;
-                    }
-                }
-                if (score > best_score) {
-                    best_score = score;
-                    best = g;
-                }
-            }
-            const int needed = m_settings.value(QStringLiteral("minMatch"), 60).toInt();
-            if (best_score >= needed) {
-                parseIgdb(best, after_other);
-            }
-            else {
-                note(LOGMSG("IGDB: no sure match for \"%1\" (closest \"%2\", %3 of %4 needed)")
-                     .arg(name, best.value(QStringLiteral("name")).toString()).arg(best_score).arg(needed));
-                // for Needs your check: what it would have been
-                QStringList info;
-                const QJsonArray platforms = best.value(QStringLiteral("platforms")).toArray();
-                if (!platforms.isEmpty())
-                    info.append(platforms.first().toObject().value(QStringLiteral("name")).toString());
-                const QDate released = igdb_release(best);
-                if (released.isValid())
-                    info.append(QString::number(released.year()));
-                m_review_hint = QVariantMap {
-                    { QStringLiteral("closest"), best.value(QStringLiteral("name")).toString() },
-                    { QStringLiteral("info"), info.join(QStringLiteral(" · ")) },
-                    { QStringLiteral("score"), qBound(0, best_score, 100) },
-                    { QStringLiteral("igdb"), best.value(QStringLiteral("id")).toInt() },
-                };
-            }
-        }
-        fillMore();
-    });
-}
-
-// IGDB's game into the changes; after another source, only what's still missing
-void Scraper::parseIgdb(const QJsonObject& game, bool after_other)
-{
-    const Job& job = m_jobs[m_index];
-    if (!after_other)
-        setMatch(QStringLiteral("igdb"), QString::number(game.value(QStringLiteral("id")).toInt()),
-                 game.value(QStringLiteral("name")).toString());
-    note(LOGMSG("IGDB: using \"%1\"%2").arg(game.value(QStringLiteral("name")).toString())
-         .arg(after_other ? QStringLiteral(" for what's still missing") : QString()));
-    const bool overwrite = m_settings.value(QStringLiteral("overwrite")).toBool();
-    const auto open_key = [this, overwrite](const char* key, bool has) {
-        return !m_changes.contains(QLatin1String(key)) && (overwrite || !has);
-    };
-
-    if (!after_other && wants(QStringLiteral("getNames")) && (overwrite || job.title_is_file_name)) {
-        const QString name = game.value(QStringLiteral("name")).toString().trimmed();
-        if (!name.isEmpty() && name != job.title)
-            m_changes.insert(QStringLiteral("title"), name);
-    }
-    if (wants(QStringLiteral("getRatings")) && open_key("rating", job.has_rating)) {
-        const int rating = igdb_rating(game);
-        if (rating > 0)
-            m_changes.insert(QStringLiteral("rating"), QString::number(rating) + QLatin1Char('%'));
-    }
-    if (wants(QStringLiteral("getDetails"))) {
-        const QString description = igdb_description(game);
-        if (!description.isEmpty() && open_key("description", job.has_description)) {
-            m_changes.insert(QStringLiteral("description"), description);
-            m_changes.insert(QStringLiteral("summary"), QString());
-        }
-        const QStringList developers = igdb_companies(game, QStringLiteral("developer"));
-        if (!developers.isEmpty() && open_key("developer", job.has_developer))
-            m_changes.insert(QStringLiteral("developer"), developers);
-        const QStringList publishers = igdb_companies(game, QStringLiteral("publisher"));
-        if (!publishers.isEmpty() && open_key("publisher", job.has_publisher))
-            m_changes.insert(QStringLiteral("publisher"), publishers);
-        const int players = igdb_players(game);
-        if (players > 0 && open_key("players", job.has_players))
-            m_changes.insert(QStringLiteral("players"), QString::number(players));
-        const QDate released = igdb_release(game);
-        if (released.isValid() && open_key("release", job.has_release))
-            m_changes.insert(QStringLiteral("release"), released.toString(Qt::ISODate));
-        const QStringList genres = igdb_names(game, QStringLiteral("genres"));
-        if (!genres.isEmpty() && open_key("genre", job.has_genre))
-            m_changes.insert(QStringLiteral("genre"), genres);
-    }
-
-    // the art: the cover, a screenshot, an artwork (as fan art)
-    const auto add = [this, &job](const QString& url, const char* setting, const char* slot,
-                                  const char* folder, const char* kind) {
-        if (url.isEmpty() || !wants(QLatin1String(setting)))
-            return;
-        Media media;
-        media.setting = QLatin1String(setting);
-        media.slot = QLatin1String(slot);
-        media.folder = QLatin1String(folder);
-        media.kind = QLatin1String(kind);
-        media.url = QUrl(url);
-        media.ext = QStringLiteral("jpg");
-        for (const Media& m : m_media) {
-            if (m.slot == media.slot && m.kind == media.kind)
-                return;  // the first source had it
-        }
-        if (media.url.isValid() && slotFree(job, media))
-            m_media.push_back(media);
-    };
-    const size_t media_before = m_media.size();
-    add(igdb_image(game.value(QStringLiteral("cover")), "cover_big_2x"), "getCovers", "assets.box_front", "covers", "2d");
-    add(igdb_image(game.value(QStringLiteral("screenshots")).toArray().at(0), "1080p"), "getScreenshots", "assets.screenshot", "screenshots", "");
-    // the artwork closest to 16:9 (IGDB has them in every shape)
-    QJsonValue best_art;
-    double best_off = 1e9;
-    for (const QJsonValue& v : game.value(QStringLiteral("artworks")).toArray()) {
-        const QJsonObject a = v.toObject();
-        const double w = a.value(QStringLiteral("width")).toDouble();
-        const double h = a.value(QStringLiteral("height")).toDouble();
-        const double off = (w > 0 && h > 0) ? qAbs(w / h - 16.0 / 9.0) : 0.5;
-        if (off < best_off) {
-            best_off = off;
-            best_art = v;
-        }
-    }
-    add(igdb_image(best_art, "1080p"), "getFanart", "assets.background", "fanart", "");
-    QStringList kept;
-    for (auto it = m_changes.cbegin(); it != m_changes.cend(); ++it)
-        kept.append(it.key());
-    note(LOGMSG("IGDB: details to save: %1; pictures to download: %2 (cover %3, screenshots %4, artworks %5)%6")
-         .arg(kept.isEmpty() ? QStringLiteral("none") : kept.join(QStringLiteral(", ")))
-         .arg(m_media.size() - media_before)
-         .arg(game.value(QStringLiteral("cover")).isObject() ? QStringLiteral("yes") : QStringLiteral("no"))
-         .arg(game.value(QStringLiteral("screenshots")).toArray().size())
-         .arg(game.value(QStringLiteral("artworks")).toArray().size())
-         .arg(!overwrite && m_media.size() == media_before ? QStringLiteral(" (Overwrite is off: slots that have a file keep it)") : QString()));
-}
-
-// -- LaunchBox's database ----------------------------------------------------------
 
 bool Scraper::lbReady() const
 {
@@ -2435,12 +1852,6 @@ void Scraper::parseLaunchBox(const LaunchBoxDb::Game& game, bool after_other)
 
 void Scraper::fillMore()
 {
-    const QString source = m_settings.value(QStringLiteral("source")).toString();
-    if (!m_igdb_done && igdbReady() && source != QLatin1String("steamgriddb")
-            && m_settings.value(QStringLiteral("igdbFill"), true).toBool()) {
-        igdbAuto(true);
-        return;
-    }
     if (!m_lb_done && lbReady() && m_settings.value(QStringLiteral("launchboxFill"), true).toBool()
             && m_lb->hasSystem(m_jobs[m_index].system)) {
         lbAuto(true);
@@ -2448,10 +1859,6 @@ void Scraper::fillMore()
     }
     if (!m_libretro_done && m_settings.value(QStringLiteral("useLibretro"), true).toBool()) {
         libretroArt();
-        return;
-    }
-    if (!m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed().isEmpty()) {
-        steamGridDb();
         return;
     }
     if (m_media.empty() && m_changes.isEmpty()) {
@@ -2462,117 +1869,6 @@ void Scraper::fillMore()
     downloadNext();
 }
 
-void Scraper::steamGridDb(int known_id)
-{
-    const QString key = m_settings.value(QStringLiteral("sgdbKey")).toString().trimmed();
-    if (key.isEmpty()) {
-        if (m_media.empty() && m_changes.isEmpty()) {
-            m_not_found++;
-            finishGame(m_dev_id.isEmpty() && m_settings.value(QStringLiteral("source")).toString() == QLatin1String("screenscraper")
-                ? tr("ScreenScraper isn't in this build yet") : tr("not found"), false);
-        }
-        else {
-            downloadNext();
-        }
-        return;
-    }
-    const Job& job = m_jobs[m_index];
-    // only what's still free and not found on ScreenScraper
-    struct Want { const char* path; const char* setting; const char* slot; const char* folder; const char* box; };
-    const std::vector<Want> wants_all {
-        { "grids", "getCovers", "assets.box_front", "covers", "2d" },
-        { "heroes", "getFanart", "assets.background", "fanart", "" },
-        { "logos", "getLogos", "assets.logo", "marquees", "" },
-    };
-    auto* const todo = new std::vector<Want>();
-    for (const Want& w : wants_all) {
-        Media probe;
-        probe.slot = QLatin1String(w.slot);
-        probe.kind = QLatin1String(w.box);
-        bool already = false;
-        for (const Media& m : m_media)
-            already = already || (m.slot == probe.slot && m.kind == probe.kind);
-        if (wants(QLatin1String(w.setting)) && !already && slotFree(job, probe))
-            todo->push_back(w);
-    }
-    if (todo->empty()) {
-        delete todo;
-        downloadNext();
-        return;
-    }
-    const QByteArray auth = "Bearer " + key.toUtf8();
-    const QString name = job.title_is_file_name ? job.search_name : job.title;
-    // the art of a SteamGridDB game: only what's still free
-    const auto fetch_art = [this, todo, auth](const QString& id) {
-        auto* const pending = new int(static_cast<int>(todo->size()));
-        for (const Want& w : *todo) {
-            QString path = QStringLiteral("https://www.steamgriddb.com/api/v2/%1/game/%2").arg(QLatin1String(w.path), id);
-            // still pictures only, nothing NSFW, joke or flashing
-            path += QLatin1String(w.path) == QLatin1String("grids")
-                ? QStringLiteral("?dimensions=600x900&types=static&nsfw=false&humor=false&epilepsy=false")
-                : QStringLiteral("?types=static&nsfw=false&humor=false&epilepsy=false");
-            const Want want = w;
-            get(QUrl(path), auth, 1, [this, want, pending, todo, id](int st, const QByteArray& b){
-                const QJsonArray images = QJsonDocument::fromJson(b).object().value(QStringLiteral("data")).toArray();
-                note(LOGMSG("SteamGridDB: %1 of game %2: answered %3, %4 pictures")
-                    .arg(QLatin1String(want.path), id).arg(st).arg(images.size()));
-                if (st == 200 && !images.isEmpty()) {
-                    Media media;
-                    media.setting = QLatin1String(want.setting);
-                    media.slot = QLatin1String(want.slot);
-                    media.folder = QLatin1String(want.folder);
-                    media.kind = QLatin1String(want.box);
-                    media.url = QUrl(images.first().toObject().value(QStringLiteral("url")).toString());
-                    media.ext = QFileInfo(media.url.path()).suffix();
-                    if (media.url.isValid())
-                        m_media.push_back(media);
-                }
-                if (--(*pending) == 0) {
-                    delete pending;
-                    delete todo;
-                    if (m_media.empty() && m_changes.isEmpty()) {
-                        m_not_found++;
-                        finishGame(tr("no art on SteamGridDB"), false);
-                    }
-                    else {
-                        downloadNext();
-                    }
-                }
-            });
-        }
-    };
-    if (known_id > 0) {
-        fetch_art(QString::number(known_id));
-        return;
-    }
-    QUrl url(QStringLiteral("https://www.steamgriddb.com/api/v2/search/autocomplete/")
-             + QString::fromLatin1(QUrl::toPercentEncoding(name)));
-    get(url, auth, m_settings.value(QStringLiteral("retries")).toInt(), [this, todo, name, fetch_art](int status, const QByteArray& body){
-        const QJsonArray found = QJsonDocument::fromJson(body).object().value(QStringLiteral("data")).toArray();
-        if (m_stop || status != 200 || found.isEmpty()) {
-            delete todo;
-            if (m_media.empty() && m_changes.isEmpty()) {
-                m_not_found++;
-                finishGame(status == 401 ? tr("SteamGridDB didn't accept the key") : tr("not found"), false);
-            }
-            else {
-                downloadNext();
-            }
-            return;
-        }
-        // the exact name if it's there, else SteamGridDB's best match
-        QJsonObject game = found.first().toObject();
-        for (const QJsonValue& v : found) {
-            if (normalized(v.toObject().value(QStringLiteral("name")).toString()) == normalized(name)) {
-                game = v.toObject();
-                break;
-            }
-        }
-        fetch_art(QString::number(game.value(QStringLiteral("id")).toInt()));
-    });
-}
-
-// one file at a time into <data>/<collection>/<folder>/<title>~<time>.<ext>
 void Scraper::downloadNext()
 {
     if (m_stop) {
@@ -2900,7 +2196,6 @@ void Scraper::save()
     const QString from = m_match.value(QStringLiteral("source")).toString();
     if (from == QLatin1String("launchbox")) what.append(QStringLiteral("LaunchBox"));
     else if (from == QLatin1String("screenscraper")) what.append(QStringLiteral("ScreenScraper"));
-    else if (from == QLatin1String("igdb")) what.append(QStringLiteral("IGDB"));
     if (m_changes.contains(QStringLiteral("description")) || m_changes.contains(QStringLiteral("developer")))
         what.append(tr("details"));
     for (const QString& folder : m_got) {

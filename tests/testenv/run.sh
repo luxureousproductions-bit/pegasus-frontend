@@ -106,7 +106,7 @@ fi
 cat > "$CFG/metadata/review.json" <<JSON
 { "version": 1, "games": {
   "$T/MyGames/Nintendo 64/Star Fox 64 (USA).z64": { "title": "Star Fox 64 (USA)", "collection": "Nintendo 64",
-    "system": "n64", "closest": "Star Fox 64 3D", "info": "Nintendo 3DS · 2011", "score": 55, "igdb": 2183 } } }
+    "system": "n64", "closest": "Star Fox 64 3D", "info": "Nintendo 3DS · 2011", "score": 55, "launchbox": 1 } } }
 JSON
 
 # -- 2. the settings ---------------------------------------------------------------
@@ -221,31 +221,6 @@ sleep 1
 shot 10-theme-next
 stop 10-theme
 
-# -- 8. the scraper, for real, when test logins are set (IGDB; SteamGridDB) ---------------------------
-if [ -n "${IGDB_TEST_CLIENT_ID:-}" ] && [ -n "${IGDB_TEST_CLIENT_SECRET:-}" ]; then
-    cat >> "$CFG/pegasusx.ini" <<INI
-
-[scraper]
-source=igdb
-igdbClientId=$IGDB_TEST_CLIENT_ID
-igdbClientSecret=$IGDB_TEST_CLIENT_SECRET
-sgdbKey=${SGDB_TEST_KEY:-}
-overwrite=true
-INI
-    start 11-scrape-igdb "" 60 "PEGASUSX_TEST_SCRAPE=Super Mario World"
-    shot 11-scrape-igdb
-    stop 11-scrape-igdb
-    mkdir -p "$R/scraped"
-    find "$CFG/downloaded_media" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/scraped/files.txt"
-    find "$CFG/downloaded_media" -type f 2>/dev/null | head -n 12 | while read -r f; do
-        cp "$f" "$R/scraped/$(echo "${f#$CFG/downloaded_media/}" | tr '/' '_')"
-    done
-    cp "$CFG"/gamedirectory/snes/metadata.pegasus.txt "$R/scraped/" 2>/dev/null || true
-    # the log, without the login
-    grep -h "Scraper\|\[test\]" "$R/logs/11-scrape-igdb.log" | sed "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g" > "$R/scraped/scraper.log" || true
-    sed -i "s/$IGDB_TEST_CLIENT_ID/<client id>/g; s/$IGDB_TEST_CLIENT_SECRET/<secret>/g; s/${SGDB_TEST_KEY:-NOKEY}/<key>/g" "$R/logs/11-scrape-igdb.log" "$R/logs/11-scrape-igdb.stdout" 2>/dev/null || true
-fi
-
 # -- a scrape without any login: Hasheous + libretro's thumbnails ----------------------------------
 # (the fixture's ROMs are made up, so Hasheous won't know them: libretro finds the art by file name)
 mkdir -p "$CFG"
@@ -255,7 +230,6 @@ p = sys.argv[1]
 c = configparser.RawConfigParser(); c.optionxform = str
 c.read(p)
 if not c.has_section("scraper"): c.add_section("scraper")
-for k in ("igdbClientId", "igdbClientSecret", "sgdbKey"): c.remove_option("scraper", k)
 c.set("scraper", "source", "screenscraper")
 c.set("scraper", "overwrite", "true")
 with open(p, "w") as f: c.write(f, space_around_delimiters=False)
@@ -279,7 +253,6 @@ p = sys.argv[1]
 c = configparser.RawConfigParser(); c.optionxform = str
 c.read(p)
 if not c.has_section("scraper"): c.add_section("scraper")
-for k in ("igdbClientId", "igdbClientSecret", "sgdbKey"): c.remove_option("scraper", k)
 c.set("scraper", "source", "launchbox")
 c.set("scraper", "overwrite", "true")
 c.set("scraper", "useLibretro", "false")
@@ -367,27 +340,6 @@ done
         echo "### $(dirname "$f" | xargs basename)/$(basename "$f")"
         sed 's/^/    /' "$f" | head -n 50
     done
-    if [ -d "$R/scraped" ]; then
-        echo
-        echo "## Scraper (IGDB test login)"
-        sed 's/^/    /' "$R/scraped/scraper.log" | tail -n 40
-        echo
-        echo "    files:"
-        sed 's/^/      /' "$R/scraped/files.txt"
-    else
-        echo
-        echo "## Scraper: no test login (secrets IGDB_TEST_CLIENT_ID / IGDB_TEST_CLIENT_SECRET not set)"
-    fi
 } > "$R/summary.md"
 
-# the image servers the scraper uses: do they answer without / with a User-Agent?
-{
-    for url in "https://images.igdb.com/igdb/image/upload/t_cover_big/co1wyy.jpg" \
-               "https://images.igdb.com/igdb/image/upload/t_thumb/co1wyy.jpg"; do
-        echo "$url"
-        echo "  no UA:        $(curl -s -o /dev/null -w '%{http_code} %{content_type}' -A '' "$url")"
-        echo "  Qt default:   $(curl -s -o /dev/null -w '%{http_code} %{content_type}' -A 'Mozilla/5.0' "$url")"
-        echo "  PegasusX UA:  $(curl -s -o /dev/null -w '%{http_code} %{content_type}' -A 'PegasusX/1.0 (Pegasus frontend)' "$url")"
-    done
-} > "$R/image-servers.txt" 2>&1
 echo "done"
