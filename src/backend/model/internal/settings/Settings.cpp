@@ -1377,6 +1377,27 @@ QVariantList Settings::watchedRomFolders() const
     return out;
 }
 
+int Settings::removeRomFolder(const QString& folder, bool remove_games)
+{
+    const QString prefix = QDir::cleanPath(folder) + QLatin1Char('/');
+#ifdef WITH_COMPAT_ESDE
+    QStringList under;
+    for (const auto& entry : providers::esde::watched_rom_folders()) {
+        const QString clean = QDir::cleanPath(entry.first) + QLatin1Char('/');
+        if (clean == prefix || clean.startsWith(prefix))
+            under.append(entry.first);
+    }
+    providers::esde::forget_rom_folders(under);
+#endif
+    int removed = 0;
+    if (remove_games) {
+        removed = providers::gamedir::remove_folder_games(folder);
+        if (removed > 0)
+            reloadLibrary();
+    }
+    return removed;
+}
+
 void Settings::rescanRomFolders()
 {
 #ifdef WITH_COMPAT_ESDE

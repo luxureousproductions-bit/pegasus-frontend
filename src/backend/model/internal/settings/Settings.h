@@ -183,6 +183,10 @@ public:
     Q_INVOKABLE QVariantList watchedRomFolders() const;
     /// reads every watched folder again (background: romFolderImportFinished)
     Q_INVOKABLE void rescanRomFolders();
+    /// a ROM folder (and the system folders in it) no longer watched; with
+    /// `remove_games`, its games leave the game directory (set aside in
+    /// backup/). Returns how many games left
+    Q_INVOKABLE int removeRomFolder(const QString& folder, bool remove_games);
 
     // Pegasus X: emulators
     Q_INVOKABLE QVariantList emulatorCollections() const;

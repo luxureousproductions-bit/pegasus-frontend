@@ -405,6 +405,80 @@ Cleanup clean_up(const QString& media_dir, bool dry)
     return out;
 }
 
+int remove_folder_games(const QString& folder)
+{
+    const QString prefix = QDir::cleanPath(folder) % QLatin1Char('/');
+    int removed = 0;
+    for (const QString& path : metafiles()) {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
+            continue;
+        const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+        file.close();
+        const QDir base(QFileInfo(path).absolutePath());
+        // the blocks, and whether each game's files are all under the folder
+        QStringList kept;
+        int block_first = -1;
+        bool block_game = false, block_under = false, block_any = false;
+        int here = 0;
+        const auto flush = [&](int upto) {
+            if (block_first < 0)
+                return;
+            if (block_game && block_any && block_under)
+                here++;
+            else
+                for (int i = block_first; i < upto; i++) kept.append(lines.at(i));
+        };
+        for (int i = 0; i < lines.size(); i++) {
+            const QString& line = lines.at(i);
+            const bool game = line.startsWith(QLatin1String("game:"));
+            if (game || line.startsWith(QLatin1String("collection:"))) {
+                flush(i);
+                block_first = i;
+                block_game = game;
+                block_under = true;
+                block_any = false;
+                continue;
+            }
+            if (block_first < 0) {
+                // the header: this folder's own lines go
+                const bool mine = (line.startsWith(QLatin1String("# folder: ")) && QDir::cleanPath(line.mid(10).trimmed()) % QLatin1Char('/') == prefix)
+                               || (line.startsWith(QLatin1String("# own metadata: ")) && QDir::cleanPath(line.mid(16).trimmed()) % QLatin1Char('/') == prefix);
+                if (!mine)
+                    kept.append(line);
+                continue;
+            }
+            if (!block_game)
+                continue;
+            QStringList files;
+            if (line.startsWith(QLatin1String("file:")))
+                files.append(line.mid(5).trimmed());
+            else if (line.startsWith(QLatin1String("files:"))) {
+                for (int j = i + 1; j < lines.size() && lines.at(j).startsWith(QLatin1Char(' ')); j++)
+                    files.append(lines.at(j).trimmed());
+            }
+            for (const QString& f : files) {
+                block_any = true;
+                const bool uri = f.contains(QLatin1String("://")) || f.startsWith(QLatin1String("android:"));
+                const QString abs = uri ? f : QDir::cleanPath(QFileInfo(base, f).absoluteFilePath());
+                if (uri || !abs.startsWith(prefix))
+                    block_under = false;
+            }
+        }
+        flush(lines.size());
+        if (here == 0)
+            continue;
+        backup(path, QStringLiteral("remove"));
+        while (!kept.isEmpty() && kept.last().trimmed().isEmpty())
+            kept.removeLast();
+        if (write_all(path, kept.join(QLatin1Char('\n')) % QLatin1Char('\n'))) {
+            removed += here;
+            Log::info(LOG_TAG, LOGMSG("`%1`: %2 games of `%3` removed").arg(path).arg(here).arg(folder));
+        }
+    }
+    return removed;
+}
+
 bool migrated()
 {
     return QFileInfo::exists(dir() % QStringLiteral("/.migrated"));

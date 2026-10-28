@@ -79,6 +79,27 @@ FocusScope {
         if (next[name]) delete next[name]; else next[name] = true;
         keepPosition(function() { picked = next; });
     }
+    // a whole ROM folder: every system found in it (no picking)
+    function addRomFolder() {
+        picked = {};
+        folderFor = "";
+        filePicker.openAt(Internal.settings.lastBrowseFolder);
+        filePicker.focus = true;
+    }
+    function removeWatched(folder) {
+        chooser.openFor(qsTr("Remove %1? Its games leave the game directory (their entries are set aside in backup/, nothing on the card is touched) and it's no longer watched.").arg(folder) + api.tr, [
+            { "act": "remove", "text": qsTr("Remove the folder") + api.tr },
+            { "act": "forget", "text": qsTr("Only stop watching it (keep the games)") + api.tr },
+            { "act": "stay", "text": qsTr("Keep it") + api.tr },
+        ], function(act) {
+            if (act === "stay")
+                return;
+            var n = Internal.settings.removeRomFolder(folder, act === "remove");
+            root.changed = root.changed || act === "remove";
+            root.message = act === "remove" ? qsTr("%1 games set aside.").arg(n) + api.tr : qsTr("No longer watched.") + api.tr;
+            root.keepPosition(root.refresh);
+        });
+    }
     function pickRomFolder() {
         if (pickedCount === 0) {
             message = qsTr("Tick the systems first.") + api.tr;
@@ -169,9 +190,9 @@ FocusScope {
             return;
         }
         if (page === "found") {
-            page = "add";
+            page = pickedCount > 0 ? "add" : "main";
             message = "";
-            list.currentIndex = 0;
+            list_top();
             return;
         }
         if (page === "add" && !addOnly) {
@@ -222,7 +243,8 @@ FocusScope {
                 for (i = 0; i < root.systems.length; i++)
                     total += root.systems[i].games;
                 out.push({ "kind": "section", "text": qsTr("PegasusX/gamedirectory · %1 systems · %2 games").arg(root.systems.length).arg(total) + api.tr });
-                out.push({ "kind": "add", "text": qsTr("Add systems...") + api.tr, "value": qsTr("pick systems, then the ROM folder ›") + api.tr });
+                out.push({ "kind": "addfolder", "text": qsTr("Add a ROM folder...") + api.tr, "value": qsTr("every system found in it ›") + api.tr });
+                out.push({ "kind": "add", "text": qsTr("Add systems...") + api.tr, "value": qsTr("pick systems, then their ROM folder ›") + api.tr });
                 out.push({ "kind": "esde", "text": qsTr("Import gamelist...") + api.tr, "value": qsTr("ES-DE: details, art, emulators") + api.tr,
                            "muted": !Internal.settings.esdeImportSupported });
                 out.push({ "kind": "section", "text": qsTr("Systems") + api.tr });
@@ -247,7 +269,8 @@ FocusScope {
                 }
                 var parents = Object.keys(byFolder).sort();
                 for (i = 0; i < parents.length; i++)
-                    out.push({ "kind": "watched", "text": parents[i], "value": (byFolder[parents[i]] === 1 ? qsTr("1 system") : qsTr("%1 systems").arg(byFolder[parents[i]])) + api.tr });
+                    out.push({ "kind": "watched", "text": parents[i], "folder": parents[i],
+                               "value": (byFolder[parents[i]] === 1 ? qsTr("1 system") : qsTr("%1 systems").arg(byFolder[parents[i]])) + api.tr });
                 if (parents.length > 0)
                     out.push({ "kind": "rescan", "text": qsTr("Read them again now") + api.tr, "value": root.working ? qsTr("working...") + api.tr : "" });
                 else
@@ -269,7 +292,9 @@ FocusScope {
                 return out;
             }
             // found
-            out.push({ "kind": "section", "text": qsTr("ROM folder: %1").arg(root.romFolder) + api.tr });
+            out.push({ "kind": "section", "text": (root.pickedCount === 0 ? qsTr("ROM folder: %1 · every system found in it") : qsTr("ROM folder: %1")).arg(root.romFolder) + api.tr });
+            if (root.matches.length === 0)
+                out.push({ "kind": "info", "text": qsTr("No system folders found here (they're named like snes, psx, gba). Pick the folder that has them, or use Add systems and pick each folder.") + api.tr, "value": "" });
             for (i = 0; i < root.matches.length; i++) {
                 var m = root.matches[i];
                 if (m.games > 0) {
@@ -317,6 +342,8 @@ FocusScope {
                 return;
             var row = rows[index];
             if (row.kind === "add") root.openAdd();
+            else if (row.kind === "addfolder") root.addRomFolder();
+            else if (row.kind === "watched") root.removeWatched(row.folder);
             else if (row.kind === "esde") root.openEsdeImport();
             else if (row.kind === "system") root.reimport(row.entry);
             else if (row.kind === "rescan") { root.working = true; root.message = qsTr("Reading the watched folders again...") + api.tr; Internal.settings.rescanRomFolders(); }
@@ -342,6 +369,8 @@ FocusScope {
                 var row = selectable(currentIndex) ? rows[currentIndex] : null;
                 if (row && row.kind === "system")
                     root.remove(row.entry);
+                else if (row && row.kind === "watched")
+                    root.removeWatched(row.folder);
             }
         }
 
@@ -455,7 +484,7 @@ FocusScope {
     Text {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "main" ? qsTr("A re-import a system / open · Y remove a system from the directory · B back") + api.tr
+            : root.page === "main" ? qsTr("A open / re-import a system · Y remove a system or a ROM folder · B back") + api.tr
             : root.page === "add" ? qsTr("A tick · B back") + api.tr
             : qsTr("A import / pick a folder · B back") + api.tr
         height: implicitHeight

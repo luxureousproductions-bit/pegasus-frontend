@@ -69,6 +69,10 @@ int clear_backups();
 /// backup/<system>/cleanup/. { games, files } found (`dry`: only counted)
 struct Cleanup { int games = 0; int files = 0; QStringList titles; QString error; };
 Cleanup clean_up(const QString& media_dir, bool dry);
+/// The games of a ROM folder (files under it) out of every system file,
+/// after a copy in backup/<system>/ (their scraped art stays); the folder's
+/// header lines go too. Returns how many games left.
+int remove_folder_games(const QString& folder);
 
 /// Was the library made the old way (imports, overrides, ROM folders as
 /// game directories) and the game directory not made yet?
