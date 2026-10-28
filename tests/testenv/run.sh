@@ -179,16 +179,28 @@ stop 06-themes
 start 07-updater "menu/settings/UpdateDialog.qml" 8
 shot 07-updater
 stop 07-updater
+# the file picker opens at the last folder browsed: the ROMs folder (snes, gba in it)
+printf '\n[browse]\nlast=%s\n' "$T/storage/ROMs" >> "$CFG/pegasusx.ini"
 start 08-gamedirs "menu/settings/GameDirectory.qml" 5
 shot 08-gamedirs
-keys Return
+# Add a ROM folder: the picker opens at ROMs (gba, snes); "Use this folder" is below its two entries
+keys Return Down Down Down Return
+sleep 1
+shot 08-gamedirs-picked
+# untick one of the systems found
+keys Down Return
+shot 08-gamedirs-ticked
+keys Escape
+sleep 1
+# Add systems: the list to tick
+keys Down Return
 sleep 1
 shot 08-gamedirs-add
-keys Down Down Return Down Return
-shot 08-gamedirs-picked
-keys Up Up Up Return
+keys Escape
 sleep 1
-shot 08-gamedirs-folder
+# A on a system: rescan or remove
+keys Down Down Down Down Return
+shot 08-gamedirs-system
 stop 08-gamedirs
 start 09-esde-import "menu/settings/EsdeImport.qml" 6
 shot 09-esde-import
