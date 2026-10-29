@@ -1,6 +1,8 @@
 # Pegasus X: compiles the desktop builds (Linux, Windows) of a branch and runs
 # the tests on Linux, so changes made for Android are known to still build
-# elsewhere. Nothing is packaged or published.
+# elsewhere. The Windows build is zipped (pegasus-x-windows.zip: unzip and
+# run pegasus-fe.exe) as the run's artifact and on the pegasus-x-latest
+# release next to the APKs.
 name: Compile check - Linux, Windows
 on:
   push:
@@ -44,6 +46,8 @@ jobs:
 
   windows:
     runs-on: windows-2022
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with: {submodules: 'recursive', fetch-depth: 0}
@@ -51,7 +55,7 @@ jobs:
         with:
           version: '5.15.2'
           arch: 'win64_mingw81'
-          tools: 'tools_mingw,qt.tools.win64_mingw810'
+          tools: 'tools_mingw,qt.tools.win64_mingw810 tools_openssl_x64'
       - name: Build
         shell: bash
         run: |
@@ -67,3 +71,32 @@ jobs:
           grep -E "error:|Error [0-9]|undefined reference" build.log | head -n 15 | while IFS= read -r line; do
             echo "::error::${line}"
           done
+      # Pegasus X: the program with the Qt it needs next to it (windeployqt),
+      # OpenSSL for https (the scraper, the theme gallery, the updater)
+      - name: Package (Pegasus X)
+        shell: bash
+        run: |
+          export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
+          EXE=$(ls build/src/app/release/pegasus-fe.exe build/src/app/pegasus-fe.exe 2>/dev/null | head -n 1)
+          [ -n "$EXE" ] || { echo "::error::pegasus-fe.exe not found"; find build -name "pegasus-fe*.exe"; exit 1; }
+          mkdir -p dist/pegasus-x
+          cp "$EXE" dist/pegasus-x/
+          windeployqt --release --compiler-runtime --no-translations --qmldir src/frontend dist/pegasus-x/pegasus-fe.exe
+          SSL="$IQTA_TOOLS/OpenSSL/Win_x64/bin"
+          cp "$SSL/libcrypto-1_1-x64.dll" "$SSL/libssl-1_1-x64.dll" dist/pegasus-x/ \
+            || echo "::warning::OpenSSL DLLs not found in $SSL: https won't work in this build"
+          cp LICENSE.md README.md dist/pegasus-x/
+          cd dist && 7z a -r pegasus-x-windows.zip pegasus-x >/dev/null
+          echo "::notice::pegasus-x-windows.zip: $(du -m pegasus-x-windows.zip | cut -f1) MB"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pegasus-x-windows
+          path: dist/pegasus-x-windows.zip
+      - name: Attach to the latest-build release
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/pegasus-x'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload pegasus-x-latest dist/pegasus-x-windows.zip --clobber \
+            || echo "::warning::Couldn't attach the zip to the pegasus-x-latest release (it's the run's artifact)"
