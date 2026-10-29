@@ -44,7 +44,6 @@ FocusScope {
     property var matches: []         // Settings.matchSystems
     property var ticked: ({})        // found page: system name -> true (the ones to import)
     property string folderFor: ""    // a system without a folder: picking one for it
-    property var packFor: null       // a system: picking a media pack folder for it
     property int pickedCount: Object.keys(picked).length
 
     anchors.fill: parent
@@ -188,84 +187,11 @@ FocusScope {
         var where = entry.folders.length > 0 ? entry.folders.join(", ") : qsTr("no ROM folder") + api.tr;
         chooser.openFor(qsTr("%1 · %2").arg(entry.name).arg(where) + api.tr, [
             { "act": "rescan", "text": qsTr("Rescan: read its ROM folders again") + api.tr },
-            { "act": "pack", "text": qsTr("Import a media pack (videos, art)...") + api.tr },
             { "act": "remove", "text": qsTr("Remove from the game directory") + api.tr },
         ], function(act) {
             if (act === "rescan") root.reimport(entry);
-            else if (act === "pack") root.pickPack(entry);
             else if (act === "remove") root.remove(entry);
         });
-    }
-    // -- a media pack: a folder of video snaps / box art / ... named like the games
-    function pickPack(entry) {
-        packFor = entry;
-        folderFor = "";
-        filePicker.openAt(Internal.settings.lastBrowseFolder);
-        filePicker.focus = true;
-    }
-    readonly property var packKinds: [
-        [ "videos", qsTr("Videos") + api.tr ], [ "covers", qsTr("Boxes (2D)") + api.tr ], [ "3dboxes", qsTr("Boxes (3D)") + api.tr ],
-        [ "backcovers", qsTr("Back boxes") + api.tr ], [ "screenshots", qsTr("Screenshots") + api.tr ],
-        [ "titlescreens", qsTr("Title screens") + api.tr ], [ "marquees", qsTr("Logos") + api.tr ],
-        [ "fanart", qsTr("Fan art") + api.tr ], [ "physicalmedia", qsTr("Cartridges and discs") + api.tr ],
-        [ "banners", qsTr("Banners") + api.tr ], [ "manuals", qsTr("Manuals") + api.tr ], [ "miximages", qsTr("Miximages") + api.tr ],
-    ]
-    function packKindName(kind) {
-        for (var i = 0; i < packKinds.length; i++)
-            if (packKinds[i][0] === kind) return packKinds[i][1];
-        return kind;
-    }
-    function packScanned(entry, folder) {
-        var scan = Internal.settings.scanMediaPack(folder);
-        if (scan.error) {
-            message = scan.error;
-            return;
-        }
-        var parts = [];
-        for (var k in scan.kinds)
-            parts.push(scan.kinds[k] + " " + packKindName(k).toLowerCase());
-        var found = qsTr("%1: %2 files").arg(root.shortFolder(folder)).arg(scan.files) + api.tr
-                  + (parts.length > 0 ? " · " + parts.join(", ") : "");
-        var go = function(defaultKind) {
-            chooser.openFor(found + ". " + qsTr("Into %1: the files are matched to its games by name.").arg(entry.name) + api.tr, [
-                { "act": "copy", "text": qsTr("Copy them into Pegasus X's media folder") + api.tr },
-                { "act": "link", "text": qsTr("Use them where they are (keep the pack folder)") + api.tr },
-                { "act": "copyreplace", "text": qsTr("Copy, replacing what the games have") + api.tr },
-            ], function(act) {
-                root.working = true;
-                root.message = qsTr("Importing the media pack...") + api.tr;
-                Internal.settings.importMediaPack(entry.file, folder, defaultKind, act !== "link", act === "copyreplace");
-            });
-        };
-        if ((scan.unknown || 0) > 0) {
-            // pictures in folders that don't say what they are: asked
-            var kinds = [];
-            for (var i = 0; i < packKinds.length; i++)
-                if (packKinds[i][0] !== "videos" && packKinds[i][0] !== "manuals")
-                    kinds.push({ "act": packKinds[i][0], "text": packKinds[i][1] });
-            kinds.push({ "act": "", "text": qsTr("Skip them") + api.tr });
-            chooser.openFor(found + ". " + qsTr("%1 pictures are in folders that don't say what they are. They are:").arg(scan.unknown) + api.tr,
-                            kinds, function(act) { Qt.callLater(function() { go(act); }); });
-            return;
-        }
-        go("");
-    }
-    Connections {
-        target: Internal.settings
-        function onMediaPackProgress(done, total) {
-            root.message = qsTr("Importing the media pack... %1 of %2").arg(done).arg(total) + api.tr;
-        }
-        function onMediaPackImported(result) {
-            root.working = false;
-            if (result.error && !(result.files > 0)) {
-                root.message = result.error;
-                return;
-            }
-            root.changed = true;
-            root.message = qsTr("%1 files for %2 games added · %3 files matched no game · %4 kept as they were.")
-                .arg(result.files).arg(result.games).arg(result.unmatched).arg(result.kept) + api.tr
-                + (result.error ? " " + result.error : "");
-        }
     }
     function remove(entry) {
         chooser.openFor(qsTr("Remove %1 from the game directory? Its file goes to backup/%2/ (nothing is deleted), and its ROM folders are no longer watched.").arg(entry.name).arg(entry.key) + api.tr, [
@@ -640,21 +566,13 @@ FocusScope {
         pickFolders: true
         allowNewFolder: false
         fileExtensions: []
-        infoText: root.packFor
-            ? qsTr("Pick the media pack's folder for %1: video snaps, box art, logos... named like the games (region tags don't matter). Sub-folders like \"Video Snaps\" or \"Box - Front\" say what's in them.").arg(root.packFor.name) + api.tr
-            : root.folderFor !== ""
+        infoText: root.folderFor !== ""
             ? qsTr("Pick the folder the %1 games are in.").arg(root.folderFor) + api.tr
             : qsTr("Pick the folder your ROMs are in: the one with the systems' folders inside (snes, psx, ...), or one system's folder.") + api.tr
-        onCancel: { focus = false; list.focus = true; root.packFor = null; }
+        onCancel: { focus = false; list.focus = true; }
         onPickFolder: {
             focus = false;
             list.focus = true;
-            if (root.packFor) {
-                var entry = root.packFor;
-                root.packFor = null;
-                root.packScanned(entry, dir_path);
-                return;
-            }
             if (root.folderFor !== "") {
                 root.working = true;
                 root.message = qsTr("Reading %1 as %2...").arg(dir_path).arg(root.folderFor) + api.tr;

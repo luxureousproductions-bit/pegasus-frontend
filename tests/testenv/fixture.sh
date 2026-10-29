@@ -70,16 +70,6 @@ rom "$S/ROMs/gba/Metroid Fusion (USA).gba"
 rom "$T/MyGames/Nintendo 64/Mario Kart 64 (USA).z64"
 rom "$T/MyGames/Nintendo 64/Star Fox 64 (USA).z64"
 # its own art, ES-DE's folder names (some spelled differently), the same name for every kind
-# a community media pack for the N64 games (names with other region tags, a
-# wheel folder, one picture in a folder that doesn't say what it is)
-P="$T/Downloads/N64 pack"
-mkdir -p "$P/Video Snaps" "$P/Box - Front" "$P/wheel" "$P/misc"
-rom "$P/Video Snaps/Mario Kart 64 (USA).mp4"
-rom "$P/Video Snaps/Star Fox 64 (Europe).mp4"
-rom "$P/Video Snaps/Some Other Game (USA).mp4"
-pic "$P/Box - Front/Mario Kart 64 (USA).png" 300x420 "#8b2252" "MK64 pack box"
-pic "$P/wheel/Star Fox 64 (USA).png" 400x160 "#225288" "SF64 wheel"
-pic "$P/misc/Mario Kart 64.png" 320x240 "#528822" "MK64 misc"
 N="$T/MyGames/Nintendo 64/media"
 pic "$N/covers/Mario Kart 64 (USA).png" 400x280 "#c33" "MK64 cover"
 pic "$N/3D Boxes/Mario Kart 64 (USA).png" 420x300 "#933" "MK64 3D box"

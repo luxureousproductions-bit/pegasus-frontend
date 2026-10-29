@@ -199,34 +199,10 @@ sleep 1
 shot 08-gamedirs-add
 keys Escape
 sleep 1
-# A on a system: rescan, a media pack, or remove
+# A on a system: rescan or remove
 keys Down Down Down Down Return
 shot 08-gamedirs-system
-keys Escape
 stop 08-gamedirs
-
-# -- 6b. a media pack into Nintendo 64 (the system menu > Import a media pack) ----------------
-printf '\n[browse]\nlast=%s\n' "$T/Downloads/N64 pack" >> "$CFG/pegasusx.ini"
-start 08-mediapack "menu/settings/GameDirectory.qml" 5
-# the 4th system is Nintendo 64; its menu's 2nd row is the media pack
-keys Down Down Down Down Down Down Return Down Return
-sleep 1
-# the picker opens on the drives; LB (q) goes to the last folder browsed, the pack; "Use this folder" below its 4 entries
-keys q Down Down Down Down Down Return
-sleep 2
-shot 08-mediapack-unknown
-# the picture in "misc" is a screenshot (4th kind), then copy them in
-keys Down Down Down Return
-sleep 1
-shot 08-mediapack-how
-keys Return
-sleep 3
-shot 08-mediapack-done
-stop 08-mediapack
-mkdir -p "$R/mediapack"
-find "$CFG/downloaded_media/n64" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/mediapack/files.txt" || true
-grep -h "Media pack" "$R/logs/08-mediapack.log" > "$R/mediapack/log.txt" || true
-cp "$CFG"/gamedirectory/n64/metadata.pegasus.txt "$R/mediapack/" 2>/dev/null || true
 start 09-esde-import "menu/settings/EsdeImport.qml" 6
 shot 09-esde-import
 keys Return; sleep 1; shot 09-esde-import-page
@@ -364,12 +340,6 @@ done
         echo "### $(dirname "$f" | xargs basename)/$(basename "$f")"
         sed 's/^/    /' "$f" | head -n 50
     done
-    if [ -d "$R/mediapack" ]; then
-        echo
-        echo "## Media pack (Nintendo 64)"
-        sed 's/^/    /' "$R/mediapack/log.txt"
-        sed 's/^/    /' "$R/mediapack/files.txt"
-    fi
 } > "$R/summary.md"
 
 echo "done"
