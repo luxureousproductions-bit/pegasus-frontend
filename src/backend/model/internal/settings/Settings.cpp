@@ -2545,7 +2545,12 @@ void Settings::raStop()
 
 QVariantMap Settings::gameExtraFields(const QString& collection_name, const QString& game_path, const QString& prefix) const
 {
+#ifdef WITH_COMPAT_ESDE
     return providers::esde::game_extra_fields(collection_name, game_path, prefix);
+#else
+    Q_UNUSED(collection_name); Q_UNUSED(game_path); Q_UNUSED(prefix);
+    return {};
+#endif
 }
 
 void Settings::raForgetLists()
@@ -2713,8 +2718,8 @@ void Settings::raAfterGame(model::Game* game)
         if (!keep)
             return;
         // the fresh numbers, from the file just written
-        const QVariantMap found = providers::esde::game_extra_fields(keep->collectionsModel()->entries().front()->name(),
-                                                                     keep->filesModel()->entries().front()->path(), QStringLiteral("x-ra-"));
+        const QVariantMap found = gameExtraFields(keep->collectionsModel()->entries().front()->name(),
+                                                  keep->filesModel()->entries().front()->path(), QStringLiteral("x-ra-"));
         for (auto it = found.cbegin(); it != found.cend(); ++it)
             keep->extraMapMut().insert(it.key().mid(2), it.value());
     });

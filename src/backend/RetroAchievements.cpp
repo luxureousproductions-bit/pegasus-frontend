@@ -18,7 +18,9 @@
 
 #include "Log.h"
 #include "Paths.h"
+#ifdef WITH_COMPAT_ESDE
 #include "providers/esde/EsdeProvider.h"
+#endif
 #include "utils/ZipReader.h"
 
 #include "rc_hash.h"
@@ -550,6 +552,10 @@ void RetroAchievements::writeAll()
 {
     m_stage = tr("writing");
     report();
+#ifndef WITH_COMPAT_ESDE
+    m_result.error = tr("Not in this build");
+    return;
+#else
     QHash<QString, std::vector<providers::esde::GameEdit>> per_collection;
     for (const Match& m : m_matches) {
         if (m.unsupported && m.ra_id <= 0)
@@ -586,6 +592,7 @@ void RetroAchievements::writeAll()
         if (!error.isEmpty() && m_result.error.isEmpty())
             m_result.error = error;
     }
+#endif
 }
 
 } // namespace scraper
