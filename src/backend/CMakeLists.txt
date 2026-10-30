@@ -62,6 +62,7 @@ target_link_libraries(pegasus-backend PUBLIC
     Qt::Sql
     Qt::Svg
     SortFilterProxyModel
+    rcheevos-hash
 )
 
 include(PegasusCommonProps)

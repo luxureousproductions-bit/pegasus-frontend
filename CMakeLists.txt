@@ -36,6 +36,7 @@ if(PEGASUS_ENABLE_APNG)
     add_subdirectory(thirdparty/apng)
 endif()
 add_subdirectory(thirdparty/SortFilterProxyModel)
+add_subdirectory(thirdparty/rcheevos)
 add_subdirectory(assets)
 add_subdirectory(src)
 
