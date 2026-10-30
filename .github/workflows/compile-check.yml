@@ -82,24 +82,35 @@ jobs:
           done
       # Pegasus X: the program with the Qt it needs next to it (windeployqt),
       # OpenSSL for https (the scraper, the theme gallery, the updater)
-      # (windeployqt from PowerShell with Qt's own bin first in PATH: run from
-      # bash it couldn't find the platform plugin)
+      # (windeployqt can't find the platform plugin in this install, so the Qt
+      # parts are copied by hand: the DLLs the app and themes use, the plugins,
+      # the QML modules, the MinGW runtime)
       - name: Deploy Qt (Pegasus X)
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Recurse build -Filter pegasus-fe.exe | Select-Object -First 1
           if (-not $exe) { Write-Host "::error::pegasus-fe.exe not found"; exit 1 }
-          New-Item -ItemType Directory -Force dist\pegasus-x | Out-Null
-          Copy-Item $exe.FullName dist\pegasus-x\
-          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:IQTA_TOOLS\mingw810_64\bin;$env:PATH"
-          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --compiler-runtime --no-translations --qmldir src\frontend dist\pegasus-x\pegasus-fe.exe 2>&1 | Tee-Object wdq.log | Out-Null
-          if ($LASTEXITCODE -ne 0) {
-            $err = (Select-String -Path wdq.log -Pattern "error|unable|cannot|not found|fail" -CaseSensitive:$false | Select-Object -First 5 | ForEach-Object { $_.Line }) -join " "
-            Write-Host "::error::windeployqt failed: $err"
-            Write-Host "::warning::QT_ROOT_DIR=$env:QT_ROOT_DIR platforms: $(Test-Path "$env:QT_ROOT_DIR\plugins\platforms\qwindows.dll")"
-            exit 1
+          $out = "dist\pegasus-x"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item $exe.FullName $out\
+          $qt = $env:QT_ROOT_DIR
+          $dlls = @("Qt5Core","Qt5Gui","Qt5Network","Qt5Qml","Qt5QmlModels","Qt5QmlWorkerScript","Qt5Quick","Qt5QuickShapes",
+                    "Qt5QuickParticles","Qt5QuickTemplates2","Qt5QuickControls2","Qt5Sql","Qt5Gamepad","Qt5Multimedia",
+                    "Qt5MultimediaQuick","Qt5Svg","Qt5Concurrent","Qt5Widgets","Qt5QuickWidgets","Qt5OpenGL",
+                    "libgcc_s_seh-1","libstdc++-6","libwinpthread-1","libEGL","libGLESv2","opengl32sw","d3dcompiler_47")
+          foreach ($d in $dlls) { if (Test-Path "$qt\bin\$d.dll") { Copy-Item "$qt\bin\$d.dll" $out\ } else { Write-Host "::warning::no $d.dll" } }
+          foreach ($p in @("platforms","imageformats","sqldrivers","gamepads","mediaservice","audio","playlistformats","iconengines","styles")) {
+            if (Test-Path "$qt\plugins\$p") {
+              New-Item -ItemType Directory -Force "$out\$p" | Out-Null
+              Get-ChildItem "$qt\plugins\$p" -Filter *.dll | Where-Object { $_.Name -notmatch "d\.dll$" } | Copy-Item -Destination "$out\$p\"
+            } else { Write-Host "::warning::no plugins\$p" }
           }
-          Write-Host "::notice::deployed: $((Get-ChildItem dist\pegasus-x -Recurse -File).Count) files"
+          foreach ($m in @("QtQuick","QtQuick.2","QtQml","QtGraphicalEffects","QtMultimedia","Qt","QtGamepad","QtQuick.Timeline")) {
+            if (Test-Path "$qt\qml\$m") { Copy-Item -Recurse "$qt\qml\$m" "$out\$m" } else { Write-Host "::warning::no qml\$m" }
+          }
+          # debug copies and .pdb files of the QML modules: not shipped
+          Get-ChildItem $out -Recurse -File | Where-Object { $_.Name -match "d\.dll$|\.pdb$|\.prl$" } | Remove-Item
+          Write-Host "::notice::deployed: $((Get-ChildItem $out -Recurse -File).Count) files"
       - name: Package (Pegasus X)
         shell: bash
         run: |
