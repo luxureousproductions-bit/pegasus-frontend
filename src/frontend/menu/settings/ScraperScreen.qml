@@ -99,7 +99,7 @@ FocusScope {
 
     readonly property var sourceChoices: [
         { "v": "screenscraper", "t": "ScreenScraper" },
-        { "v": "launchbox", "t": qsTr("LaunchBox database (no login)") + api.tr },
+        { "v": "launchbox", "t": "LaunchboxDB" },
     ]
     property var lb: Internal.settings.launchBoxStatus()   // the LaunchBox database
     Connections {
@@ -107,8 +107,8 @@ FocusScope {
         function onLaunchBoxProgress(status) { root.lb = status; }
         function onLaunchBoxFinished(status) {
             root.keepPosition(function() { root.lb = status; });
-            root.message = status.error ? qsTr("LaunchBox database: %1").arg(status.error) + api.tr
-                                        : qsTr("LaunchBox database ready: %1 games on %2 platforms").arg(status.games).arg(Object.keys(status.platforms || {}).length) + api.tr;
+            root.message = status.error ? qsTr("LaunchboxDB: %1").arg(status.error) + api.tr
+                                        : qsTr("LaunchboxDB ready: %1 games on %2 platforms").arg(status.games).arg(Object.keys(status.platforms || {}).length) + api.tr;
         }
     }
     readonly property string lbSummary: {
@@ -307,7 +307,7 @@ FocusScope {
             return out;
         }
         if (page === "accounts") {
-            out.push({ "kind": "section", "text": qsTr("LaunchBox database (no login needed)") + api.tr });
+            out.push({ "kind": "section", "text": "LaunchboxDB" });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr, "value": lbSummary, "ok": !!(lb && lb.present) });
             out.push({ "kind": "lbupdate", "text": (lb && lb.working) ? qsTr("Stop") + api.tr
                        : (lb && lb.present) ? qsTr("Update the database") + api.tr : qsTr("Download the database") + api.tr,
@@ -746,6 +746,16 @@ FocusScope {
                 }
             }
 
+            // a line between sections (above every section title but the first)
+            Rectangle {
+                visible: parent.isSection && index > 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: sectionText.font.pixelSize * 0.7
+                height: Math.max(1, vpx(1))
+                color: "#3a3a3a"
+            }
             Text {
                 id: sectionText
                 visible: parent.isSection

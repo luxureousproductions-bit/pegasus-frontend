@@ -24,6 +24,7 @@
 #include "Providers.h"
 #include "utils/QmlHelpers.h"
 
+#include <QHash>
 #include <QObject>
 #include <QPointer>
 #include <vector>
@@ -479,6 +480,9 @@ private:
     scraper::RetroAchievements& ra();
     QString raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection);
     QPointer<model::Game> m_single_game;
+    QHash<QString, QPointer<model::Game>> m_scrape_games;  ///< the games of the run, by path (updated in place when saved)
+    int m_scrape_unapplied = 0;                            ///< saved games no longer loaded (a read is needed)
+    QHash<QString, QPointer<model::Game>> m_ra_games;
     ThemeStore* m_theme_store = nullptr;
     Updater* m_updater = nullptr;
     QString startScraperWith(QObject* collections, bool offline, const QVariantMap& overrides = QVariantMap());  ///< scraped alone: updated when done

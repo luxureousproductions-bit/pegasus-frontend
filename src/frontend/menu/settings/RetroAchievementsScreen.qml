@@ -81,7 +81,7 @@ FocusScope {
             root.run = Internal.settings.raState();
             root.keepPosition(function() { root.running = false; });
             root.refreshStatus();
-            root.changed = root.changed || (result.matched > 0 || result.notFound > 0 || result.progress > 0);
+            // (the loaded games took their fields in place: no library read needed)
             root.lastRun = result.error && !(result.matched > 0)
                 ? result.error
                 : qsTr("Done: %1 found (%2 with achievements), %3 not on RetroAchievements, %4 couldn't be checked, progress for %5")
@@ -301,6 +301,16 @@ FocusScope {
                   : isInfo ? (modelData.value ? Math.max(vpx(44), infoValue.implicitHeight + vpx(16)) : rowLabel.implicitHeight + vpx(16))
                   : hasSub ? vpx(22) * 3.4 : vpx(22) * 2.4
 
+            // a line between sections (above every section title but the first)
+            Rectangle {
+                visible: parent.isSection && index > 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: sectionText.font.pixelSize * 0.7
+                height: Math.max(1, vpx(1))
+                color: "#3a3a3a"
+            }
             Text {
                 id: sectionText
                 visible: parent.isSection

@@ -122,6 +122,8 @@ signals:
     /// { running, done, total, current, title, result, ok, saved, notFound, failed }
     void progress(QVariantMap state);
     void finished(QVariantMap state);
+    /// a game was saved: what changed (the loaded game takes it in place)
+    void gameSaved(QString path, QVariantMap changes);
     /// { title, collection, searchName, source, candidates: [{ name, info,
     /// description, thumb, developer, publisher, genre, players, release, rating }] }
     void choiceNeeded(QVariantMap choice);

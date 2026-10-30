@@ -258,7 +258,7 @@ void RetroAchievements::start(std::vector<Job> jobs, const QString& user, const 
         }
         m_stage = tr("your progress");
         report();
-        fetchProgress([this]{ writeAll(); finish(); });
+        fetchProgress([this]{ writeAll([this]{ finish(); }); });
         return;
     }
 
@@ -391,8 +391,7 @@ void RetroAchievements::hashAndMatch()
         }
         m_done = m_total;
         if (m_stop) {
-            writeAll();
-            finish();
+            writeAll([this]{ finish(); });
             return;
         }
         m_stage = tr("the icons");
@@ -400,7 +399,7 @@ void RetroAchievements::hashAndMatch()
         downloadIcons(0, [this]{
             m_stage = tr("your progress");
             report();
-            fetchProgress([this]{ writeAll(); finish(); });
+            fetchProgress([this]{ writeAll([this]{ finish(); }); });
         });
     });
     m_hash_watcher->setFuture(QtConcurrent::run([jobs, stop, progress_count]{
@@ -548,12 +547,16 @@ void RetroAchievements::fetchProgress(std::function<void()> then)
 }
 
 // what was found, into each game's entry (x-ra-* fields), per collection
-void RetroAchievements::writeAll()
+// what was found, into each game's entry (x-ra-* fields), per collection,
+// off the main thread; then gameWritten for each game (the loaded game is
+// updated in place with it, no library read)
+void RetroAchievements::writeAll(std::function<void()> then)
 {
     m_stage = tr("writing");
     report();
 #ifndef WITH_COMPAT_ESDE
     m_result.error = tr("Not in this build");
+    then();
     return;
 #else
     QHash<QString, std::vector<providers::esde::GameEdit>> per_collection;
@@ -587,11 +590,36 @@ void RetroAchievements::writeAll()
         edit.changes = changes;
         per_collection[m.job.collection].push_back(std::move(edit));
     }
-    for (auto it = per_collection.begin(); it != per_collection.end(); ++it) {
-        const QString error = providers::esde::save_games_metadata(it.key(), it.value(), true);
+    if (per_collection.isEmpty()) {
+        then();
+        return;
+    }
+    const int run = m_run;
+    auto* const watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, per_collection, run, then]{
+        const QString error = watcher->result();
+        watcher->deleteLater();
+        if (run != m_run)
+            return;
         if (!error.isEmpty() && m_result.error.isEmpty())
             m_result.error = error;
-    }
+        if (error.isEmpty()) {
+            for (auto it = per_collection.cbegin(); it != per_collection.cend(); ++it) {
+                for (const providers::esde::GameEdit& edit : it.value())
+                    emit gameWritten(edit.path, edit.changes);
+            }
+        }
+        then();
+    });
+    watcher->setFuture(QtConcurrent::run([per_collection]{
+        QString error;
+        for (auto it = per_collection.cbegin(); it != per_collection.cend(); ++it) {
+            const QString e = providers::esde::save_games_metadata(it.key(), it.value(), true);
+            if (!e.isEmpty() && error.isEmpty())
+                error = e;
+        }
+        return error;
+    }));
 #endif
 }
 

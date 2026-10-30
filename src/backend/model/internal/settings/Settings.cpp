@@ -2157,10 +2157,10 @@ QString Settings::startScraperWith(QObject* collections, bool offline, const QVa
     const bool has_ss = scraperHasScreenScraper();
     const bool has_lb = launchBox().ready();
     if (!offline && source == QLatin1String("launchbox") && !has_lb)
-        return tr("Download the LaunchBox database in Account settings first.");
+        return tr("Download LaunchboxDB in Account settings first.");
     if (!offline && source == QLatin1String("screenscraper") && !has_ss && !has_lb
             && !settings.value(QStringLiteral("useLibretro")).toBool())
-        return tr("ScreenScraper isn't in this build yet. Download the LaunchBox database in Account settings.");
+        return tr("ScreenScraper isn't in this build yet. Download LaunchboxDB in Account settings.");
 
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
@@ -2196,6 +2196,7 @@ QString Settings::startScraperWith(QObject* collections, bool offline, const QVa
             seen.insert(path);
 
             jobs.push_back(make_scraper_job(*coll, game, system, path));
+            m_scrape_games.insert(path, game);
         }
     }
     if (jobs.empty())
@@ -2236,12 +2237,13 @@ QString Settings::scrapeGame(QObject* game_obj, const QString& collection_name, 
     // (with none: libretro's free boxes and screenshots only)
     if (!scraperHasScreenScraper() && !launchBox().ready()
             && !settings.value(QStringLiteral("useLibretro")).toBool())
-        return tr("Download the LaunchBox database in Library > Scraper > Account settings first.");
+        return tr("Download LaunchboxDB in Library > Scraper > Account settings first.");
     if (source == QLatin1String("launchbox") && !launchBox().ready())
-        return tr("Download the LaunchBox database in Library > Scraper > Account settings first.");
+        return tr("Download LaunchboxDB in Library > Scraper > Account settings first.");
     std::vector<scraper::Job> jobs;
     jobs.push_back(make_scraper_job(*coll, game, scraper::Scraper::system_of(coll->name(), coll->shortName()),
                                     game->filesModel()->entries().front()->path()));
+    m_scrape_games.insert(game->filesModel()->entries().front()->path(), game);
     m_single_game = game;  // what it saves shows at once (apply_scraped)
     const QString error = runScraper(std::move(jobs), settings);
     if (!error.isEmpty())
@@ -2407,7 +2409,7 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
     settings.insert(QStringLiteral("getPhysical"), false);
     const bool has_lb = launchBox().ready();
     if (!has_ss && !has_lb && !settings.value(QStringLiteral("useLibretro")).toBool())
-        return tr("Download the LaunchBox database in Scraper > Account settings first.");
+        return tr("Download LaunchboxDB in Scraper > Account settings first.");
 
     std::vector<scraper::Job> jobs;
     QSet<QString> seen;
@@ -2435,6 +2437,7 @@ QString Settings::completeLibrary(QObject* collections, const QVariantMap& what)
                 continue;
             seen.insert(path);
             jobs.push_back(make_scraper_job(*coll, game, system, path));
+            m_scrape_games.insert(path, game);
         }
     }
     if (jobs.empty())
@@ -2479,6 +2482,7 @@ QString Settings::reviewScrape(QObject* collections, const QString& path, const 
         settings.insert(QStringLiteral("source"), QStringLiteral("launchbox"));
     scraper::Job job = make_scraper_job(*found_coll, found,
         scraper::Scraper::system_of(found_coll->name(), found_coll->shortName()), path);
+    m_scrape_games.insert(path, found);
     if (mode == QLatin1String("use"))
         job.launchbox_id = launchbox_id;
     std::vector<scraper::Job> jobs;
@@ -2514,16 +2518,17 @@ scraper::RetroAchievements& Settings::ra()
         m_ra = new scraper::RetroAchievements(this);
         connect(m_ra, &scraper::RetroAchievements::progress, this, &Settings::raProgress);
         connect(m_ra, &scraper::RetroAchievements::loginChecked, this, &Settings::raLoginChecked);
+        // every game written: the loaded game takes its x-ra-* fields in
+        // place (themes see game.extra["ra-id"]... at once, no library read)
+        connect(m_ra, &scraper::RetroAchievements::gameWritten, this, [this](const QString& path, const QVariantMap& changes){
+            const QPointer<model::Game> game = m_ra_games.value(path);
+            if (game)
+                apply_scraped(*game, changes);
+        });
         connect(m_ra, &scraper::RetroAchievements::finished, this, [this](QVariantMap result){
-            emit raFinished(result);
-            // the fields are in the files: the library shows them after a
-            // read, right away unless Library is open (it reads on leaving)
-            const bool wrote = result.value(QStringLiteral("matched")).toInt() > 0 || result.value(QStringLiteral("notFound")).toInt() > 0
-                || result.value(QStringLiteral("progress")).toInt() > 0;
-            const bool quiet = m_ra_quiet;
             m_ra_quiet = false;
-            if (wrote && !m_library_open && !quiet)
-                reloadLibrary();
+            m_ra_games.clear();
+            emit raFinished(result);
         });
     }
     return *m_ra;
@@ -2623,6 +2628,7 @@ QString Settings::raStart(QObject* collections, bool only_new, bool progress_onl
         if (only_new && checked)
             return;
         seen.insert(path);
+        m_ra_games.insert(path, game);
         scraper::RetroAchievements::Job job;
         job.path = path;
         job.title = game->title();
@@ -2728,27 +2734,10 @@ void Settings::raAfterGame(model::Game* game)
     const model::Collection* coll = game->collectionsModel()->entries().empty() ? nullptr : game->collectionsModel()->entries().front();
     if (!coll)
         return;
-    // the library isn't read again for this: the game's loaded fields are
-    // updated when it finishes
-    QPointer<model::Game> keep(game);
-    auto* const once = new QMetaObject::Connection();
-    *once = connect(&ra(), &scraper::RetroAchievements::finished, this, [this, keep, once](const QVariantMap&){
-        disconnect(*once);
-        delete once;
-        if (!keep)
-            return;
-        // the fresh numbers, from the file just written
-        const QVariantMap found = gameExtraFields(keep->collectionsModel()->entries().front()->name(),
-                                                  keep->filesModel()->entries().front()->path(), QStringLiteral("x-ra-"));
-        for (auto it = found.cbegin(); it != found.cend(); ++it)
-            keep->extraMapMut().insert(it.key().mid(2), it.value());
-    });
-    m_ra_quiet = true;  // the game's fields are updated in place, no library read
-    if (!raStart(nullptr, false, true, game, coll->name()).isEmpty()) {
+    // the game's loaded fields are updated in place when it's written (gameWritten)
+    m_ra_quiet = true;
+    if (!raStart(nullptr, false, true, game, coll->name()).isEmpty())
         m_ra_quiet = false;
-        disconnect(*once);
-        delete once;
-    }
 }
 
 scraper::LaunchBoxDb& Settings::launchBox() const
@@ -2797,19 +2786,26 @@ QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap
         m_scraper = new scraper::Scraper(this);
         m_scraper->setLaunchBox(&launchBox());
         connect(m_scraper, &scraper::Scraper::progress, this, &Settings::scraperProgress);
+        // every game saved: the loaded game takes the changes in place, so
+        // themes show them at once and the library isn't read again
+        connect(m_scraper, &scraper::Scraper::gameSaved, this, [this](const QString& path, const QVariantMap& changes){
+            const QPointer<model::Game> game = m_scrape_games.value(path);
+            if (game)
+                apply_scraped(*game, changes);
+            else
+                m_scrape_unapplied++;
+        });
         connect(m_scraper, &scraper::Scraper::choiceNeeded, this, &Settings::scraperNeedsChoice);
         connect(m_scraper, &scraper::Scraper::thumbReady, this, &Settings::scraperThumb);
         connect(m_scraper, &scraper::Scraper::finished, this, [this](QVariantMap state){
-            // one game: the game shows what was saved right away (Library's
-            // page reads it again), without reading the library again
-            if (m_single_game && state.value(QStringLiteral("saved")).toInt() > 0)
-                apply_scraped(*m_single_game, state.value(QStringLiteral("changes")).toMap());
             m_single_game.clear();
             emit scraperFinished(state);
-            // the library shows it: right away, unless Library is open (it
-            // reads the library again when you leave it)
-            if (!m_library_open && state.value(QStringLiteral("saved")).toInt() > 0)
+            // the loaded games took what was saved as it went (gameSaved);
+            // only a game that isn't loaded any more needs a read
+            if (m_scrape_unapplied > 0 && !m_library_open)
                 reloadLibrary();
+            m_scrape_unapplied = 0;
+            m_scrape_games.clear();
         });
     }
     m_scraper->start(std::move(jobs), settings,

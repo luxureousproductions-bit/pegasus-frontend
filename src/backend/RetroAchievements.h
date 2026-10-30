@@ -90,6 +90,8 @@ signals:
     void progress(QVariantMap state);
     void finished(QVariantMap result);
     void loginChecked(QVariantMap result);
+    /// a game's entry was written: its x-ra-* fields (the loaded game can take them)
+    void gameWritten(QString path, QVariantMap changes);
 
 private:
     struct Match {
@@ -130,7 +132,7 @@ private:
     void hashAndMatch();
     void downloadIcons(size_t index, std::function<void()> then);
     void fetchProgress(std::function<void()> then);
-    void writeAll();
+    void writeAll(std::function<void()> then);
     void get(const QUrl& url, std::function<void(int, const QByteArray&)> done);
     QUrl apiUrl(const QString& endpoint, const QList<QPair<QString, QString>>& params) const;
 };

@@ -440,6 +440,16 @@ FocusScope {
             width: ListView.view.width
             height: isSection ? sectionText.height : (isInfo ? infoText.height + vpx(16) : modelData.kind === "pick" ? vpx(44) : vpx(22) * 2.4)
 
+            // a line between sections (above every section title but the first)
+            Rectangle {
+                visible: parent.isSection && index > 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: sectionText.font.pixelSize * 0.7
+                height: Math.max(1, vpx(1))
+                color: "#3a3a3a"
+            }
             Text {
                 id: sectionText
                 visible: parent.isSection

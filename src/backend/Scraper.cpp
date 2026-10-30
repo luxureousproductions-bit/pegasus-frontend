@@ -725,7 +725,7 @@ void Scraper::search(const QString& name)
         else if (source == QLatin1String("screenscraper"))
             why = tr("ScreenScraper doesn't know the system `%1`").arg(job.system);
         else if (source == QLatin1String("launchbox") && !lbReady())
-            why = tr("the LaunchBox database isn't downloaded yet (Scraper > Account settings)");
+            why = tr("LaunchboxDB isn't downloaded yet (Scraper > Account settings)");
         else if (source == QLatin1String("launchbox"))
             why = tr("LaunchBox has no platform for the system `%1`").arg(job.system);
         else
@@ -849,7 +849,7 @@ void Scraper::offerChoice(const QVariantList& candidates)
         { QStringLiteral("collection"), job.collection },
         { QStringLiteral("searchName"), job.title_is_file_name ? job.search_name : job.title },
         { QStringLiteral("source"), m_choice_source == QLatin1String("ss") ? QStringLiteral("ScreenScraper")
-                                    : QStringLiteral("LaunchBox") },
+                                    : QStringLiteral("LaunchboxDB") },
         { QStringLiteral("candidates"), list },
     };
     note(LOGMSG("%1: %2 matches for \"%3\"").arg(m_choice.value(QStringLiteral("source")).toString())
@@ -2191,10 +2191,11 @@ void Scraper::save()
     m_saved++;
     m_last_changes = m_changes;
     recordMatch(job);
+    emit gameSaved(job.path, m_changes);
     QStringList what;
     // which source the game came from
     const QString from = m_match.value(QStringLiteral("source")).toString();
-    if (from == QLatin1String("launchbox")) what.append(QStringLiteral("LaunchBox"));
+    if (from == QLatin1String("launchbox")) what.append(QStringLiteral("LaunchboxDB"));
     else if (from == QLatin1String("screenscraper")) what.append(QStringLiteral("ScreenScraper"));
     if (m_changes.contains(QStringLiteral("description")) || m_changes.contains(QStringLiteral("developer")))
         what.append(tr("details"));

@@ -20,6 +20,7 @@ import "gamedireditor"
 import "qrc:/qmlutils" as PegasusUtils
 import QtQuick 2.6
 import QtQuick.Window 2.2
+import QtMultimedia 5.9
 
 
 // Pegasus X: edit the details, art and files of collections and games, saved
@@ -183,7 +184,7 @@ FocusScope {
         }
         completeRunning = true;
         lastRun = "";
-        scrapedHere = true;
+        // (the loaded games take what the scraper saves in place: no read on leaving)
         message = qsTr("Working in the background: you can leave Settings and play.") + api.tr;
     }
     function openReview() {
@@ -207,7 +208,7 @@ FocusScope {
             message = error;
             return;
         }
-        scrapedHere = true;
+        // (the loaded games take what the scraper saves in place: no read on leaving)
         message = qsTr("Scraping \"%1\"...").arg(entry.title) + api.tr;
     }
 
@@ -273,11 +274,11 @@ FocusScope {
         }
         var missingCount = 0;
         for (var i = 0; i < games.length; i++) {
-            if ((missingMap[games[i].path] || []).length > 0)
+            if (missingArt(missingMap[games[i].path] || []))
                 missingCount++;
         }
         var s = Internal.settings.scraperSettings();
-        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr };
+        var names = { "screenscraper": "ScreenScraper", "launchbox": "LaunchboxDB" };
         chooser.openFor(qsTr("Scrape %1 (%2 games) from %3. Runs in the background; games it isn't sure about go to Needs your check.")
                         .arg(collName).arg(games.length).arg(names[s.source] || s.source) + api.tr, [
             { "act": "missing", "text": qsTr("Only the %1 games missing art or details").arg(missingCount) + api.tr },
@@ -293,7 +294,7 @@ FocusScope {
                 root.message = error;
                 return;
             }
-            root.scrapedHere = true;
+            // (the loaded games take what the scraper saves in place: no read on leaving)
             root.keepPosition(function() { root.collScraping = true; });
             root.message = qsTr("Scraping %1 in the background: you can leave Settings and play.").arg(root.collName) + api.tr;
         });
@@ -643,7 +644,7 @@ FocusScope {
             Internal.settings.setScraperSetting("source", "launchbox");
             s.source = "launchbox";
         }
-        var names = { "screenscraper": "ScreenScraper", "launchbox": qsTr("LaunchBox database") + api.tr };
+        var names = { "screenscraper": "ScreenScraper", "launchbox": "LaunchboxDB" };
         var sourceName = names[s.source] || s.source;
         var lbReady = !!Internal.settings.launchBoxStatus().present;
         var sourceNote = s.source === "launchbox" && !lbReady ? qsTr(" (not downloaded yet: Scraper > Account settings)") + api.tr
@@ -690,7 +691,7 @@ FocusScope {
         target: Internal.settings
         function onScraperFinished(state) {
             if (state.saved > 0)
-                root.scrapedHere = true;
+                // (the loaded games take what the scraper saves in place: no read on leaving)
             if (!root.scrapingGame)
                 return;
             root.keepPosition(function() { root.scrapingGame = false; });
@@ -872,24 +873,37 @@ FocusScope {
     // -- Missing art: games without a box, logo, screenshot or video --------------
     property bool missingOnly: false
     property var missingMap: ({})    // game path -> ["box", "logo", ...]
+    // what a game misses: "box" and "screenshot" count as missing art (as
+    // Settings > Library counts it), "video" apart; "logo" is only listed
     function missingOf(obj) {
         var a = obj ? obj.assets : null;
         if (!a)
             return [];
         var out = [];
-        if (a.boxFrontList.length === 0) out.push(qsTr("box") + api.tr);
-        if (a.logoList.length === 0) out.push(qsTr("logo") + api.tr);
-        if (a.screenshotList.length === 0) out.push(qsTr("screenshot") + api.tr);
-        if (a.videoList.length === 0) out.push(qsTr("video") + api.tr);
+        var real = function(list) {
+            for (var i = 0; i < list.length; i++)
+                if (String(list[i]).indexOf("image://") !== 0) return true;
+            return false;
+        };
+        if (!real(a.boxFrontList)) out.push("box");
+        if (a.logoList.length === 0) out.push("logo");
+        if (a.screenshotList.length === 0) out.push("screenshot");
+        if (a.videoList.length === 0) out.push("video");
         return out;
+    }
+    function missingArt(list) { return list.indexOf("box") >= 0 || list.indexOf("screenshot") >= 0; }
+    function missingVideo(list) { return list.indexOf("video") >= 0; }
+    function missingText(list) {
+        var names = { "box": qsTr("box") + api.tr, "logo": qsTr("logo") + api.tr, "screenshot": qsTr("screenshot") + api.tr, "video": qsTr("video") + api.tr };
+        return list.map(function(k) { return names[k] || k; }).join(" · ");
     }
     // the open game, with what you picked (before the library is read again)
     function missingNow() {
         var out = [];
-        if (!hasArt("art:box2d") && !hasArt("art:box3d")) out.push(qsTr("box") + api.tr);
-        if (!hasArt("art:logo")) out.push(qsTr("logo") + api.tr);
-        if (!hasArt("art:screenshot")) out.push(qsTr("screenshot") + api.tr);
-        if (!hasArt("art:video")) out.push(qsTr("video") + api.tr);
+        if (!hasArt("art:box2d") && !hasArt("art:box3d")) out.push("box");
+        if (!hasArt("art:logo")) out.push("logo");
+        if (!hasArt("art:screenshot")) out.push("screenshot");
+        if (!hasArt("art:video")) out.push("video");
         return out;
     }
 
@@ -1754,33 +1768,35 @@ FocusScope {
                         { "kind": "Application", "text": qsTr("Apps") + api.tr, "rows": [] },
                         { "kind": "Emulator", "text": qsTr("Emulators") + api.tr, "rows": [] } ]
                     : [ { "kind": "", "text": qsTr("Games") + api.tr, "rows": [] } ];
-                var missingCount = 0;
+                var missingCount = 0, missingVideos = 0;
                 for (i = 0; i < root.games.length; i++) {
-                    if ((root.missingMap[root.games[i].path] || []).length > 0)
-                        missingCount++;
+                    var mm = root.missingMap[root.games[i].path] || [];
+                    if (root.missingArt(mm)) missingCount++;
+                    if (root.missingVideo(mm)) missingVideos++;
                 }
+                var missingLine = (missingCount > 0 ? qsTr("%1 missing art").arg(missingCount) + api.tr : qsTr("all art there") + api.tr)
+                                + " · " + (missingVideos > 0 ? qsTr("%1 missing video").arg(missingVideos) + api.tr : qsTr("all videos there") + api.tr);
                 out.push({ "kind": "section", "text": qsTr("Scraper") + api.tr });
                 out.push({ "kind": "scrapecoll", "text": qsTr("Scrape this collection...") + api.tr,
-                           "value": root.collScraping ? root.collScrapeSub
-                                  : missingCount > 0 ? qsTr("%1 games missing art").arg(missingCount) + api.tr : qsTr("all art there") + api.tr,
+                           "value": root.collScraping ? root.collScrapeSub : missingLine,
                            "warn": !root.collScraping && missingCount > 0 });
                 out.push({ "kind": "section", "text": qsTr("Show") + api.tr });
                 out.push({ "kind": "missingfilter", "text": qsTr("Games to list") + api.tr,
-                           "value": root.missingOnly ? qsTr("Missing art only · %1").arg(missingCount) + api.tr
-                                                     : qsTr("All · %1 missing art").arg(missingCount) + api.tr });
+                           "value": root.missingOnly ? qsTr("Missing art or video only · %1").arg(missingCount + missingVideos) + api.tr
+                                                     : qsTr("All · %1").arg(missingLine) + api.tr });
                 var known = {};
                 for (i = 0; i < root.games.length; i++) {
                     var g = root.games[i];
                     known[g.key] = true;
                     var gMissing = root.missingMap[g.path] || [];
-                    if (root.missingOnly && gMissing.length === 0)
+                    if (root.missingOnly && !root.missingArt(gMissing) && !root.missingVideo(gMissing))
                         continue;
                     var title = root.savedTitles[g.path] || g.title;
                     var gameHidden = root.isGameHidden(g.key);
                     var row = { "kind": "game", "text": android ? title + "  (" + root.sourceLabel(g.source) + ")" : title,
                                 "game": g, "hidden": gameHidden,
                                 "value": gameHidden ? qsTr("Hidden") + api.tr
-                                       : root.missingOnly ? qsTr("no %1").arg(gMissing.join(" · ")) + api.tr
+                                       : root.missingOnly ? qsTr("no %1").arg(root.missingText(gMissing)) + api.tr
                                        : (root.savedTitles[g.path] !== undefined ? qsTr("edited · ") + api.tr : "")
                                          + (android ? qsTr("Shown") + api.tr : root.sourceLabel(g.source)),
                                 "done": root.savedTitles[g.path] !== undefined };
@@ -2022,6 +2038,16 @@ FocusScope {
             width: ListView.view.width
             height: isSection ? sectionText.height : (isInfo ? vpx(44) : isSave ? vpx(64) : hasSub ? vpx(22) * 3.4 : vpx(22) * 2.4)
 
+            // a line between sections (above every section title but the first)
+            Rectangle {
+                visible: parent.isSection && index > 0
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.top: parent.top
+                anchors.topMargin: sectionText.font.pixelSize * 0.7
+                height: Math.max(1, vpx(1))
+                color: "#3a3a3a"
+            }
             Text {
                 id: sectionText
                 visible: parent.isSection
@@ -2213,6 +2239,9 @@ FocusScope {
         readonly property string file: shown.file || ""
         readonly property bool isVideo: /\.(mp4|webm|mkv|avi|mov)$/i.test(file)
         readonly property bool isDoc: /\.(pdf|cbz|cbr)$/i.test(file)
+        // a PDF's first page (Android renders it: image://pdf/<page>/<path>)
+        readonly property bool isPdf: /\.pdf$/i.test(file) && Qt.platform.os === "android"
+        readonly property string pdfCover: isPdf ? "image://pdf/0/" + encodeURIComponent(file) : ""
         // every picture of the open game, as rows of the list
         readonly property var thumbs: {
             var out = [];
@@ -2251,7 +2280,7 @@ FocusScope {
                 id: bigImage
                 anchors.fill: parent
                 anchors.margins: vpx(14)
-                source: (artPreview.isVideo || artPreview.isDoc) ? "" : root.toUrl(artPreview.file)
+                source: artPreview.isPdf ? artPreview.pdfCover : (artPreview.isVideo || artPreview.isDoc) ? "" : root.toUrl(artPreview.file)
                 cache: false  // a re-scraped file keeps its name: show the new one
                 sourceSize.width: vpx(700)
                 fillMode: Image.PreserveAspectFit
@@ -2260,11 +2289,26 @@ FocusScope {
                 opacity: status === Image.Ready ? 1 : 0
                 Behavior on opacity { NumberAnimation { duration: 180 } }
             }
-            // a video or a manual: a tile with what it is
+            // a video: the clip itself, quietly, over and over
+            Video {
+                id: previewVideo
+                anchors.fill: parent
+                anchors.margins: vpx(14)
+                visible: artPreview.isVideo && artPreview.split
+                source: visible ? root.toUrl(artPreview.file) : ""
+                autoPlay: true
+                loops: MediaPlayer.Infinite
+                muted: true
+                fillMode: VideoOutput.PreserveAspectFit
+                onVisibleChanged: if (!visible) stop()
+            }
+            // a manual that can't be shown, or nothing: a tile with what it is
             Column {
                 anchors.centerIn: parent
                 spacing: vpx(10)
-                visible: artPreview.isVideo || artPreview.isDoc || artPreview.file === "" || bigImage.status === Image.Error
+                visible: (artPreview.isDoc && !(artPreview.isPdf && bigImage.status === Image.Ready))
+                         || artPreview.file === "" || (!artPreview.isVideo && !artPreview.isPdf && bigImage.status === Image.Error)
+                         || (artPreview.isPdf && bigImage.status === Image.Error)
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: vpx(84)
@@ -2274,7 +2318,7 @@ FocusScope {
                     border.width: vpx(3)
                     Text {
                         anchors.centerIn: parent
-                        text: artPreview.isVideo ? "▶" : artPreview.isDoc ? "PDF" : artPreview.file === "" ? "—" : "?"
+                        text: artPreview.isDoc ? (/\.pdf$/i.test(artPreview.file) ? "PDF" : "CBZ") : artPreview.file === "" ? "—" : "?"
                         color: artPreview.file === "" ? "#555" : "#5cc"
                         font.family: globalFonts.sans
                         font.pixelSize: artPreview.isDoc ? vpx(22) : vpx(34)
@@ -2283,8 +2327,7 @@ FocusScope {
                 }
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: artPreview.isVideo ? qsTr("Video") + api.tr
-                        : artPreview.isDoc ? qsTr("Manual") + api.tr
+                    text: artPreview.isDoc ? qsTr("Manual") + api.tr
                         : artPreview.file === "" ? qsTr("No picture") + api.tr
                         : qsTr("Can't show this file") + api.tr
                     color: "#888"
@@ -2541,9 +2584,9 @@ FocusScope {
             [ "boxes", qsTr("Boxes") + api.tr, st.box || 0, "" ],
             [ "shots", qsTr("Screenshots and title screens") + api.tr, st.shots || 0, "" ],
             [ "details", qsTr("Descriptions, genre, year") + api.tr, st.details || 0,
-              (st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
+              (st.ss || st.launchbox) ? "" : qsTr("needs LaunchboxDB (Scraper > Account settings)") + api.tr ],
             [ "fanart", qsTr("Fan art and logos") + api.tr, st.fanart || 0,
-              (st.ss || st.launchbox) ? "" : qsTr("needs the LaunchBox database (Scraper > Account settings)") + api.tr ],
+              (st.ss || st.launchbox) ? "" : qsTr("needs LaunchboxDB (Scraper > Account settings)") + api.tr ],
             [ "videos", qsTr("Videos and manuals") + api.tr, st.videos || 0,
               st.ss ? "" : qsTr("needs ScreenScraper") + api.tr ],
         ]
@@ -2557,7 +2600,7 @@ FocusScope {
             }
             var using = [];
             if (st.ss) using.push("ScreenScraper");
-            if (st.launchbox) using.push(qsTr("LaunchBox database") + api.tr);
+            if (st.launchbox) using.push("LaunchboxDB");
             using.push(qsTr("checksums (Hasheous)") + api.tr);
             using.push(qsTr("libretro pictures") + api.tr);
             out.push({ "text": qsTr("Start") + api.tr, "value": qsTr("Using: %1").arg(using.join(" · ")) + api.tr });
