@@ -82,28 +82,35 @@ jobs:
           done
       # Pegasus X: the program with the Qt it needs next to it (windeployqt),
       # OpenSSL for https (the scraper, the theme gallery, the updater)
+      # (windeployqt from PowerShell with Qt's own bin first in PATH: run from
+      # bash it couldn't find the platform plugin)
+      - name: Deploy Qt (Pegasus X)
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Recurse build -Filter pegasus-fe.exe | Select-Object -First 1
+          if (-not $exe) { Write-Host "::error::pegasus-fe.exe not found"; exit 1 }
+          New-Item -ItemType Directory -Force dist\pegasus-x | Out-Null
+          Copy-Item $exe.FullName dist\pegasus-x\
+          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:IQTA_TOOLS\mingw810_64\bin;$env:PATH"
+          & "$env:QT_ROOT_DIR\bin\windeployqt.exe" --release --compiler-runtime --no-translations --qmldir src\frontend dist\pegasus-x\pegasus-fe.exe 2>&1 | Tee-Object wdq.log | Out-Null
+          if ($LASTEXITCODE -ne 0) {
+            $err = (Select-String -Path wdq.log -Pattern "error|unable|cannot|not found|fail" -CaseSensitive:$false | Select-Object -First 5 | ForEach-Object { $_.Line }) -join " "
+            Write-Host "::error::windeployqt failed: $err"
+            Write-Host "::warning::QT_ROOT_DIR=$env:QT_ROOT_DIR platforms: $(Test-Path "$env:QT_ROOT_DIR\plugins\platforms\qwindows.dll")"
+            exit 1
+          }
+          Write-Host "::notice::deployed: $((Get-ChildItem dist\pegasus-x -Recurse -File).Count) files"
       - name: Package (Pegasus X)
         shell: bash
         run: |
-          export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
-          say() { echo "::error::$*"; }
-          EXE=$(find build -name "pegasus-fe.exe" | head -n 1)
-          [ -n "$EXE" ] || { say "pegasus-fe.exe not found: $(find build -name '*.exe' | tr '\n' ' ')"; exit 1; }
-          echo "::notice::exe: $EXE"
-          mkdir -p dist/pegasus-x
-          cp "$EXE" dist/pegasus-x/
-          WDQ=$(command -v windeployqt || find "$QT_ROOT_DIR" "$RUNNER_WORKSPACE/Qt" -name "windeployqt.exe" 2>/dev/null | head -n 1)
-          [ -n "$WDQ" ] || { say "windeployqt not found (QT_ROOT_DIR=$QT_ROOT_DIR)"; exit 1; }
-          "$WDQ" --release --compiler-runtime --no-translations --qmldir src/frontend dist/pegasus-x/pegasus-fe.exe > wdq.log 2>&1 \
-            || { say "windeployqt failed: $(grep -i "error\|unable\|cannot\|not found\|fail" wdq.log | head -n 5 | tr '\n' ' ')"; echo "::warning::windeployqt tail: $(tail -n 3 wdq.log | tr '\n' ' ')"; exit 1; }
           for f in libssl-3-x64.dll libcrypto-3-x64.dll libssl-1_1-x64.dll libcrypto-1_1-x64.dll; do
             src=$(find ssl -iname "$f" 2>/dev/null | head -n 1)
             [ -n "$src" ] && cp "$src" dist/pegasus-x/
           done
           ls dist/pegasus-x/libssl* >/dev/null 2>&1 || echo "::warning::no OpenSSL DLLs: https won't work in this build"
           cp LICENSE.md README.md dist/pegasus-x/
-          (cd dist && 7z a -r pegasus-x-windows.zip pegasus-x > /dev/null) || { say "7z failed"; exit 1; }
-          echo "::notice::pegasus-x-windows.zip: $(du -m dist/pegasus-x-windows.zip | cut -f1) MB, $(ls dist/pegasus-x | wc -l) files"
+          (cd dist && 7z a -r pegasus-x-windows.zip pegasus-x > /dev/null) || { echo "::error::7z failed"; exit 1; }
+          echo "::notice::pegasus-x-windows.zip: $(du -m dist/pegasus-x-windows.zip | cut -f1) MB"
       - uses: actions/upload-artifact@v4
         with:
           name: pegasus-x-windows
