@@ -95,7 +95,7 @@ jobs:
           WDQ=$(command -v windeployqt || find "$QT_ROOT_DIR" "$RUNNER_WORKSPACE/Qt" -name "windeployqt.exe" 2>/dev/null | head -n 1)
           [ -n "$WDQ" ] || { say "windeployqt not found (QT_ROOT_DIR=$QT_ROOT_DIR)"; exit 1; }
           "$WDQ" --release --compiler-runtime --no-translations --qmldir src/frontend dist/pegasus-x/pegasus-fe.exe > wdq.log 2>&1 \
-            || { say "windeployqt failed: $(tail -n 5 wdq.log | tr '\n' ' ')"; exit 1; }
+            || { say "windeployqt failed: $(grep -i "error\|unable\|cannot\|not found\|fail" wdq.log | head -n 5 | tr '\n' ' ')"; echo "::warning::windeployqt tail: $(tail -n 3 wdq.log | tr '\n' ' ')"; exit 1; }
           for f in libssl-3-x64.dll libcrypto-3-x64.dll libssl-1_1-x64.dll libcrypto-1_1-x64.dll; do
             src=$(find ssl -iname "$f" 2>/dev/null | head -n 1)
             [ -n "$src" ] && cp "$src" dist/pegasus-x/
