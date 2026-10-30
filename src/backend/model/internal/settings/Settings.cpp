@@ -1727,12 +1727,27 @@ QVariantMap Settings::metadataLocation(const QString& collection_name, const QSt
 #endif
 }
 
+namespace {
+void apply_scraped(model::Game& game, const QVariantMap& changes);
+} // namespace
+
 QString Settings::saveGameMetadata(const QString& collection_name, const QString& game_path,
-                                   const QString& game_title, const QVariantMap& changes)
+                                   const QString& game_title, const QVariantMap& changes, QObject* game_obj)
 {
 #ifdef WITH_COMPAT_ESDE
-    return providers::esde::save_game_metadata(collection_name, game_path, game_title, changes);
+    const QString error = providers::esde::save_game_metadata(collection_name, game_path, game_title, changes);
+    // the loaded game shows it right away, in every theme, without a read
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    if (error.isEmpty() && game) {
+        apply_scraped(*game, changes);
+        // art you removed: off the loaded game too
+        const QStringList hidden = changes.value(QStringLiteral("x-pegasusx-hidden-art")).toStringList();
+        if (!hidden.isEmpty())
+            game->assetsMut().remove_listed(hidden);
+    }
+    return error;
 #else
+    Q_UNUSED(game_obj);
     Q_UNUSED(collection_name);
     Q_UNUSED(game_path);
     Q_UNUSED(game_title);
@@ -2037,7 +2052,12 @@ void apply_scraped(model::Game& game, const QVariantMap& changes)
             game.setPlayerCount(it.value().toInt());
         else if (key == QLatin1String("rating"))
             game.setRating(it.value().toString().remove(QLatin1Char('%')).toFloat() / 100.f);
+        else if (key.startsWith(QLatin1String("x-")))
+            game.extraMapMut().insert(key.mid(2), it.value().toStringList().isEmpty() ? QVariant(QStringList { it.value().toString() }) : it.value());
     }
+    // themes bound to the game read it again
+    game.assetsMut().notifyChanged();
+    game.notifyDataChanged();
 }
 
 // one game for the scraper, with what it has now

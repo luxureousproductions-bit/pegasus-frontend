@@ -212,8 +212,6 @@ FocusScope {
     }
 
     // -- RetroAchievements ----------------------------------------------------------
-    property var raStatus: Internal.settings.raStatus(api.collections)
-    property var raRun: Internal.settings.raState()
     property bool raChecking: false
     property var raExtra: null   // the open game's x-ra-* fields after a check here (its file's, not the loaded ones)
     // a game's x-ra-* field as loaded (extra["ra-id"] is a list of one)
@@ -240,10 +238,7 @@ FocusScope {
     }
     Connections {
         target: Internal.settings
-        function onRaProgress(state) { root.raRun = state; }
         function onRaFinished(result) {
-            root.raRun = Internal.settings.raState();
-            root.keepPosition(function() { root.raStatus = Internal.settings.raStatus(api.collections); });
             if (!root.raChecking)
                 return;
             root.keepPosition(function() { root.raChecking = false; });
@@ -1384,7 +1379,8 @@ FocusScope {
             return true;
         var error = "";
         if (page === "game") {
-            error = Internal.settings.saveGameMetadata(gameColl(), game.path || game.key, current("title"), toChanges());
+            // the loaded game is changed in place too: themes show it at once, no read needed
+            error = Internal.settings.saveGameMetadata(gameColl(), game.path || game.key, current("title"), toChanges(), game.obj);
         }
         else {
             var mainChanges = collectionChanges("");
@@ -1447,8 +1443,10 @@ FocusScope {
                 }
             }
         });
-        anySaved = true;
-        message = qsTr("Saved in %1. Every theme shows it once you leave Edit metadata.").arg(where.split("/").slice(-2).join("/")) + api.tr;
+        if (page !== "game")
+            anySaved = true;  // a collection's name or emulator: the library is read again on the way out
+        message = (page === "game" ? qsTr("Saved in %1. Themes show it right away.") : qsTr("Saved in %1. Every theme shows it once you leave Edit metadata."))
+            .arg(where.split("/").slice(-2).join("/")) + api.tr;
         loc = Internal.settings.metadataLocation(gameColl(), page === "game" ? (game.path || game.key) : "");
         return true;
     }
@@ -1520,12 +1518,7 @@ FocusScope {
                 out.push({ "kind": "section", "text": qsTr("Your library · %1 games").arg(st.games || 0) + api.tr });
                 out.push({ "kind": "scraper", "text": qsTr("Scraper") + api.tr,
                            "value": qsTr("sources, content, pictures, accounts ›") + api.tr });
-                var ra = root.raStatus || {};
-                out.push({ "kind": "ra", "text": qsTr("RetroAchievements") + api.tr,
-                           "value": (root.raRun && root.raRun.running) ? qsTr("working: %1 ›").arg(root.raRun.stage || "") + api.tr
-                                  : (ra.withAchievements || 0) > 0 ? qsTr("%1 games with achievements · %2 of %3 earned ›").arg(ra.withAchievements).arg(ra.earned || 0).arg(ra.total || 0) + api.tr
-                                  : qsTr("match your games by hash ›") + api.tr,
-                           "done": (ra.withAchievements || 0) > 0 });
+
                 out.push({ "kind": "complete", "text": qsTr("Complete my library") + api.tr, "sub": " " });
                 out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
                            "value": nReview === 1 ? qsTr("1 game") + api.tr : qsTr("%1 games").arg(nReview) + api.tr,
@@ -1945,10 +1938,6 @@ FocusScope {
             else if (row.kind === "scraper") {
                 scraperLoader.active = true;
                 scraperLoader.focus = true;
-            }
-            else if (row.kind === "ra") {
-                raLoader.active = true;
-                raLoader.focus = true;
             }
             else if (row.kind === "racheck")
                 root.raCheckThisGame();
@@ -3232,27 +3221,6 @@ FocusScope {
             Qt.callLater(function() { scraperLoader.active = false; });
         }
     }
-    // Pegasus X: Settings > Library > RetroAchievements
-    Loader {
-        id: raLoader
-        anchors.fill: parent
-        z: 7
-        active: false
-        enabled: focus
-        visible: active && focus
-        source: "RetroAchievementsScreen.qml"
-        onLoaded: item.focus = true
-        onFocusChanged: if (item && focus) item.focus = true
-    }
-    Connections {
-        target: raLoader.item
-        function onClose() {
-            list.focus = true;
-            root.keepPosition(function() { root.raStatus = Internal.settings.raStatus(api.collections); });
-            Qt.callLater(function() { raLoader.active = false; });
-        }
-    }
-
     // -- The scraper's matches to pick from (interactive mode, one game) -----------
 
     ScraperChoice {

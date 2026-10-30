@@ -34,6 +34,7 @@ FocusScope {
     signal openUpdater
     signal openRootFolder
     signal openMetadataEditor
+    signal openRetroAchievements
     signal openAndroidSafSettings
     signal openProviderSettings
     signal reloadRequested
@@ -72,17 +73,17 @@ FocusScope {
 
     readonly property list<SettingsEntry> optionList: [
         SettingsEntry {
-            label: QT_TR_NOOP("Check for updates...")
-            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openUpdater
-            section: "pegasusx"
-        },
-        SettingsEntry {
             label: QT_TR_NOOP("Pegasus X folder...")
             desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openRootFolder
+            section: "pegasusx"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Check for updates...")
+            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openUpdater
             section: "pegasusx"
         },
         SettingsEntry {
@@ -156,6 +157,14 @@ FocusScope {
             desc: QT_TR_NOOP("Your collections and games: edit their details, art and emulators, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openMetadataEditor
+            section: "gaming"
+            enabled: Internal.settings.esdeImportSupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("RetroAchievements...")
+            desc: QT_TR_NOOP("Your games found on RetroAchievements by their ROM's hash, and your progress on them. Themes read the result (game.extra[\"ra-id\"]...).")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openRetroAchievements
             section: "gaming"
             enabled: Internal.settings.esdeImportSupported
         },

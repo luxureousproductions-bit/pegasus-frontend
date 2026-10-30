@@ -33,7 +33,8 @@ FocusScope {
 
     property var s: Internal.settings.raSettings()
     property var status: ({})       // Settings.raStatus
-    property var run: Internal.settings.raState()
+    property var run: Internal.settings.raState()       // the live progress (the match row's second line reads it)
+    property bool running: !!run.running                   // what the rows depend on: changes twice a run, not every tick
     property var login: ({})        // { ok, text }
     property bool checking: false
     property string message: ""
@@ -71,9 +72,15 @@ FocusScope {
             root.checking = false;
             root.keepPosition(function() { root.login = result; });
         }
-        function onRaProgress(state) { root.run = state; }
+        function onRaProgress(state) {
+            root.run = state;
+            if (!!state.running !== root.running)
+                root.keepPosition(function() { root.running = !!state.running; });
+        }
         function onRaFinished(result) {
             root.run = Internal.settings.raState();
+            root.keepPosition(function() { root.running = false; });
+            root.refreshStatus();
             root.changed = root.changed || (result.matched > 0 || result.notFound > 0 || result.progress > 0);
             root.lastRun = result.error && !(result.matched > 0)
                 ? result.error
@@ -85,7 +92,7 @@ FocusScope {
     }
 
     function match(onlyNew) {
-        if (run.running) {
+        if (running) {
             Internal.settings.raStop();
             message = qsTr("Stopping...") + api.tr;
             return;
@@ -99,13 +106,13 @@ FocusScope {
         message = qsTr("Working in the background: you can leave Settings and play.") + api.tr;
     }
     function refreshProgress() {
-        if (run.running)
+        if (running)
             return;
         var error = Internal.settings.raRefreshProgress(api.collections);
         message = error !== "" ? error : qsTr("Fetching your progress...") + api.tr;
     }
     function updateLists() {
-        if (run.running)
+        if (running)
             return;
         chooser.openFor(qsTr("Download the game lists again? They're kept a week; a new list picks up games added to RetroAchievements since.") + api.tr, [
             { "act": "yes", "text": qsTr("Download them again") + api.tr },
@@ -138,10 +145,10 @@ FocusScope {
         var out = [];
         var st = status || {};
         out.push({ "kind": "section", "text": qsTr("Your games") + api.tr });
-        out.push({ "kind": "match", "text": run.running ? qsTr("Stop") + api.tr : qsTr("Match my games") + api.tr,
-                   "sub": matchSub, "value": run.running ? "" : (st.checked > 0 && st.checked < st.games
+        out.push({ "kind": "match", "text": running ? qsTr("Stop") + api.tr : qsTr("Match my games") + api.tr,
+                   "sub": " ", "value": running ? "" : (st.checked > 0 && st.checked < st.games
                         ? qsTr("%1 new ›").arg(st.games - st.checked) + api.tr : qsTr("%1 games ›").arg(st.games || 0) + api.tr) });
-        if (st.checked > 0 && st.checked < st.games && !run.running)
+        if (st.checked > 0 && st.checked < st.games && !running)
             out.push({ "kind": "matchall", "text": qsTr("Check every game again") + api.tr, "value": qsTr("%1 games").arg(st.games) + api.tr });
         out.push({ "kind": "info", "text": qsTr("Matched") + api.tr,
                    "value": (st.checked || 0) === 0 ? qsTr("nothing checked yet") + api.tr
@@ -204,7 +211,7 @@ FocusScope {
     }
     ScreenHeader {
         id: header
-        text: qsTr("Library > RetroAchievements") + api.tr
+        text: qsTr("Settings > RetroAchievements") + api.tr
         z: 2
     }
 
@@ -284,6 +291,8 @@ FocusScope {
         delegate: Item {
             readonly property bool isSection: modelData.kind === "section"
             readonly property bool isInfo: modelData.kind === "info"
+            // the match row's second line is live (progress), read here, not in the rows
+            readonly property string subText: modelData.kind === "match" ? root.matchSub : (modelData.sub || "")
             readonly property bool hasSub: !!modelData.sub
             readonly property bool highlighted: !isSection && !isInfo
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
@@ -329,7 +338,7 @@ FocusScope {
             }
             Text {
                 visible: parent.hasSub
-                text: modelData.sub || ""
+                text: parent.subText
                 color: "#999"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(15)

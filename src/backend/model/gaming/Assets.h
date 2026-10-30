@@ -37,8 +37,8 @@ public:
 #define GEN(qmlname, enumname) \
     const QString& qmlname() const { return getFirst(AssetType::enumname); } \
     const QStringList& qmlname##List() const { return get(AssetType::enumname); } \
-    Q_PROPERTY(QString qmlname READ qmlname CONSTANT) \
-    Q_PROPERTY(QStringList qmlname##List READ qmlname##List CONSTANT) \
+    Q_PROPERTY(QString qmlname READ qmlname NOTIFY changed) \
+    Q_PROPERTY(QStringList qmlname##List READ qmlname##List NOTIFY changed) \
 
     GEN(boxFront, BOX_FRONT)
     GEN(boxBack, BOX_BACK)
@@ -67,8 +67,8 @@ public:
 
     // deprecated fallacks
     // TODO: remove
-    Q_PROPERTY(QStringList screenshots READ screenshotList CONSTANT)
-    Q_PROPERTY(QStringList videos READ videoList CONSTANT)
+    Q_PROPERTY(QStringList screenshots READ screenshotList NOTIFY changed)
+    Q_PROPERTY(QStringList videos READ videoList NOTIFY changed)
 
 public:
     explicit Assets(QObject* parent);
@@ -90,6 +90,13 @@ public:
     void set_files(AssetType key, const QStringList& paths);
     /// Pegasus X: one kind's files (Overrides.cpp lays files on top of them)
     const QStringList& get(AssetType) const;
+    /// Pegasus X: after changing the lists of a loaded game in place
+    void notifyChanged() { emit changed(); }
+
+signals:
+    /// Pegasus X: the art changed after loading (Library's edits, the
+    /// scraper): themes read it again
+    void changed();
 
 private:
     const QString& getFirst(AssetType) const;

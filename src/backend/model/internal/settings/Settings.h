@@ -263,7 +263,7 @@ public:
     Q_INVOKABLE QVariantMap metadataLocation(const QString& collection_name, const QString& game_path) const;
     /// Writes changed fields (see EsdeProvider.h); returns an error, or empty
     Q_INVOKABLE QString saveGameMetadata(const QString& collection_name, const QString& game_path,
-                                         const QString& game_title, const QVariantMap& changes);
+                                         const QString& game_title, const QVariantMap& changes, QObject* game = nullptr);
     Q_INVOKABLE QString saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes);
     /// { shortname, extensions, launch, defaultLabel, defaultCommand } of a collection
     Q_INVOKABLE QVariantMap collectionDetails(const QString& collection_name) const;

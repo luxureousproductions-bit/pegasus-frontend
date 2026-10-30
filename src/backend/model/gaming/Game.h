@@ -135,8 +135,8 @@ public:
 #define STRLIST(singular, field) \
     QString singular##Str() const; \
     QStringList& singular##List() { return m_data.field; } \
-    Q_PROPERTY(QString singular READ singular##Str CONSTANT) \
-    Q_PROPERTY(QStringList singular##List READ singular##ListConst CONSTANT)
+    Q_PROPERTY(QString singular READ singular##Str NOTIFY dataChanged) \
+    Q_PROPERTY(QStringList singular##List READ singular##ListConst NOTIFY dataChanged)
 
     STRLIST(developer, developers)
     STRLIST(publisher, publishers)
@@ -145,19 +145,19 @@ public:
 #undef GEN
 
 
-    Q_PROPERTY(QString title READ title CONSTANT)
-    Q_PROPERTY(QString sortTitle READ sortBy CONSTANT)
-    Q_PROPERTY(QString sortBy READ sortBy CONSTANT)
-    Q_PROPERTY(QString summary READ summary CONSTANT)
-    Q_PROPERTY(QString description READ description CONSTANT)
+    Q_PROPERTY(QString title READ title NOTIFY dataChanged)
+    Q_PROPERTY(QString sortTitle READ sortBy NOTIFY dataChanged)
+    Q_PROPERTY(QString sortBy READ sortBy NOTIFY dataChanged)
+    Q_PROPERTY(QString summary READ summary NOTIFY dataChanged)
+    Q_PROPERTY(QString description READ description NOTIFY dataChanged)
     Q_PROPERTY(QString slug READ slug CONSTANT)
-    Q_PROPERTY(QDate release READ releaseDate CONSTANT)
-    Q_PROPERTY(int players READ playerCount CONSTANT)
-    Q_PROPERTY(float rating READ rating CONSTANT)
+    Q_PROPERTY(QDate release READ releaseDate NOTIFY dataChanged)
+    Q_PROPERTY(int players READ playerCount NOTIFY dataChanged)
+    Q_PROPERTY(float rating READ rating NOTIFY dataChanged)
 
-    Q_PROPERTY(int releaseYear READ releaseYear CONSTANT)
-    Q_PROPERTY(int releaseMonth READ releaseMonth CONSTANT)
-    Q_PROPERTY(int releaseDay READ releaseDay CONSTANT)
+    Q_PROPERTY(int releaseYear READ releaseYear NOTIFY dataChanged)
+    Q_PROPERTY(int releaseMonth READ releaseMonth NOTIFY dataChanged)
+    Q_PROPERTY(int releaseDay READ releaseDay NOTIFY dataChanged)
 
     Q_PROPERTY(int playCount READ playCount NOTIFY playStatsChanged)
     Q_PROPERTY(int playTime READ playTime NOTIFY playStatsChanged)
@@ -165,9 +165,11 @@ public:
     Q_PROPERTY(bool favorite READ isFavorite WRITE setFavorite NOTIFY favoriteChanged)
     Q_PROPERTY(bool missing READ isMissing WRITE setMissing NOTIFY missingChanged)
 
-    Q_PROPERTY(QVariantMap extra READ extraMap CONSTANT)
+    Q_PROPERTY(QVariantMap extra READ extraMap NOTIFY dataChanged)
     const QVariantMap& extraMap() const { return m_extra; }
     QVariantMap& extraMapMut() { return m_extra; }
+    /// Pegasus X: after changing the loaded game's details in place
+    void notifyDataChanged() { emit dataChanged(); }
 
 
     bool hasSlug() const { return !m_data.slug.isEmpty(); }
@@ -200,6 +202,9 @@ signals:
     void favoriteChanged();
     void playStatsChanged();
     void missingChanged();
+    /// Pegasus X: the details or extra fields changed after loading (Library's
+    /// edits, the scraper, RetroAchievements): themes read them again
+    void dataChanged();
 
 private slots:
     void onEntryPlayStatsChanged();

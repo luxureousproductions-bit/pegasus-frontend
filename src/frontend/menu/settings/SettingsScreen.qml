@@ -65,6 +65,7 @@ FocusScope {
         onOpenUpdater: root.openModal("UpdateDialog.qml")
         onOpenRootFolder: root.openModal("RootFolderSetup.qml")
         onOpenMetadataEditor: root.openScreen("MetadataEditor.qml")
+        onOpenRetroAchievements: root.openScreen("RetroAchievementsScreen.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
         onReloadRequested: Internal.settings.reloadAllGames()
