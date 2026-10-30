@@ -56,18 +56,15 @@ jobs:
           version: '5.15.2'
           arch: 'win64_mingw81'
           tools: 'tools_mingw,qt.tools.win64_mingw810'
-      # Pegasus X: OpenSSL 1.1 for https (Qt 5.15 loads libssl-1_1-x64.dll),
-      # from Qt's tools; the names on offer are listed when it isn't found
+      # Pegasus X: OpenSSL for https. Qt's tools only offer OpenSSL 3 now
+      # (tools_opensslv3_x64); Qt 5.15.2's loader also tries libssl-3-x64.dll
       - name: OpenSSL (Pegasus X)
         continue-on-error: true
         shell: bash
         run: |
           pip install -q aqtinstall
-          aqt list-tool windows desktop 2>/dev/null | tr ' ' '\n' | grep -i ssl | while read -r t; do echo "::notice::Qt tool: $t"; done
-          aqt install-tool windows desktop tools_openssl_x64 -O ssl \
-            || aqt install-tool windows desktop tools_openssl_x64 qt.tools.openssl.win_x64 -O ssl \
-            || echo "::warning::tools_openssl_x64 isn't available"
-          find ssl -name "libssl*.dll" -o -name "libcrypto*.dll" | while read -r f; do echo "::notice::OpenSSL: $f"; done
+          aqt install-tool windows desktop tools_opensslv3_x64 -O ssl || echo "::warning::tools_opensslv3_x64 couldn't be installed"
+          find ssl -iname "libssl*.dll" -o -iname "libcrypto*.dll" | while read -r f; do echo "::notice::OpenSSL: $f"; done
       - name: Build
         shell: bash
         run: |
@@ -89,18 +86,24 @@ jobs:
         shell: bash
         run: |
           export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
-          EXE=$(ls build/src/app/release/pegasus-fe.exe build/src/app/pegasus-fe.exe 2>/dev/null | head -n 1)
-          [ -n "$EXE" ] || { echo "::error::pegasus-fe.exe not found"; find build -name "pegasus-fe*.exe"; exit 1; }
+          say() { echo "::error::$*"; }
+          EXE=$(find build -name "pegasus-fe.exe" | head -n 1)
+          [ -n "$EXE" ] || { say "pegasus-fe.exe not found: $(find build -name '*.exe' | tr '\n' ' ')"; exit 1; }
+          echo "::notice::exe: $EXE"
           mkdir -p dist/pegasus-x
           cp "$EXE" dist/pegasus-x/
-          windeployqt --release --compiler-runtime --no-translations --qmldir src/frontend dist/pegasus-x/pegasus-fe.exe
-          CRYPTO=$(find ssl -name "libcrypto-1_1-x64.dll" 2>/dev/null | head -n 1)
-          SSL=$(find ssl -name "libssl-1_1-x64.dll" 2>/dev/null | head -n 1)
-          if [ -n "$CRYPTO" ] && [ -n "$SSL" ]; then cp "$CRYPTO" "$SSL" dist/pegasus-x/;
-          else echo "::warning::OpenSSL 1.1 DLLs not found: https won't work in this build"; fi
+          WDQ=$(command -v windeployqt || find "$QT_ROOT_DIR" "$RUNNER_WORKSPACE/Qt" -name "windeployqt.exe" 2>/dev/null | head -n 1)
+          [ -n "$WDQ" ] || { say "windeployqt not found (QT_ROOT_DIR=$QT_ROOT_DIR)"; exit 1; }
+          "$WDQ" --release --compiler-runtime --no-translations --qmldir src/frontend dist/pegasus-x/pegasus-fe.exe > wdq.log 2>&1 \
+            || { say "windeployqt failed: $(tail -n 5 wdq.log | tr '\n' ' ')"; exit 1; }
+          for f in libssl-3-x64.dll libcrypto-3-x64.dll libssl-1_1-x64.dll libcrypto-1_1-x64.dll; do
+            src=$(find ssl -iname "$f" 2>/dev/null | head -n 1)
+            [ -n "$src" ] && cp "$src" dist/pegasus-x/
+          done
+          ls dist/pegasus-x/libssl* >/dev/null 2>&1 || echo "::warning::no OpenSSL DLLs: https won't work in this build"
           cp LICENSE.md README.md dist/pegasus-x/
-          cd dist && 7z a -r pegasus-x-windows.zip pegasus-x >/dev/null
-          echo "::notice::pegasus-x-windows.zip: $(du -m pegasus-x-windows.zip | cut -f1) MB"
+          (cd dist && 7z a -r pegasus-x-windows.zip pegasus-x > /dev/null) || { say "7z failed"; exit 1; }
+          echo "::notice::pegasus-x-windows.zip: $(du -m dist/pegasus-x-windows.zip | cut -f1) MB, $(ls dist/pegasus-x | wc -l) files"
       - uses: actions/upload-artifact@v4
         with:
           name: pegasus-x-windows
