@@ -55,7 +55,19 @@ jobs:
         with:
           version: '5.15.2'
           arch: 'win64_mingw81'
-          tools: 'tools_mingw,qt.tools.win64_mingw810 tools_openssl_x64'
+          tools: 'tools_mingw,qt.tools.win64_mingw810'
+      # Pegasus X: OpenSSL 1.1 for https (Qt 5.15 loads libssl-1_1-x64.dll),
+      # from Qt's tools; the names on offer are listed when it isn't found
+      - name: OpenSSL (Pegasus X)
+        continue-on-error: true
+        shell: bash
+        run: |
+          pip install -q aqtinstall
+          aqt list-tool windows desktop 2>/dev/null | tr ' ' '\n' | grep -i ssl | while read -r t; do echo "::notice::Qt tool: $t"; done
+          aqt install-tool windows desktop tools_openssl_x64 -O ssl \
+            || aqt install-tool windows desktop tools_openssl_x64 qt.tools.openssl.win_x64 -O ssl \
+            || echo "::warning::tools_openssl_x64 isn't available"
+          find ssl -name "libssl*.dll" -o -name "libcrypto*.dll" | while read -r f; do echo "::notice::OpenSSL: $f"; done
       - name: Build
         shell: bash
         run: |
@@ -82,9 +94,10 @@ jobs:
           mkdir -p dist/pegasus-x
           cp "$EXE" dist/pegasus-x/
           windeployqt --release --compiler-runtime --no-translations --qmldir src/frontend dist/pegasus-x/pegasus-fe.exe
-          SSL="$IQTA_TOOLS/OpenSSL/Win_x64/bin"
-          cp "$SSL/libcrypto-1_1-x64.dll" "$SSL/libssl-1_1-x64.dll" dist/pegasus-x/ \
-            || echo "::warning::OpenSSL DLLs not found in $SSL: https won't work in this build"
+          CRYPTO=$(find ssl -name "libcrypto-1_1-x64.dll" 2>/dev/null | head -n 1)
+          SSL=$(find ssl -name "libssl-1_1-x64.dll" 2>/dev/null | head -n 1)
+          if [ -n "$CRYPTO" ] && [ -n "$SSL" ]; then cp "$CRYPTO" "$SSL" dist/pegasus-x/;
+          else echo "::warning::OpenSSL 1.1 DLLs not found: https won't work in this build"; fi
           cp LICENSE.md README.md dist/pegasus-x/
           cd dist && 7z a -r pegasus-x-windows.zip pegasus-x >/dev/null
           echo "::notice::pegasus-x-windows.zip: $(du -m pegasus-x-windows.zip | cut -f1) MB"
