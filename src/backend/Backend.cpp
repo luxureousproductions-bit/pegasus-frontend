@@ -211,6 +211,11 @@ Backend::Backend(const CliArgs& args)
                      m_api_public, &model::ApiObject::onGameProcessFinished);
     QObject::connect(m_api_public, &model::ApiObject::gameFileFinished,
                      m_providerman, &ProviderManager::onGameFinished);
+    // Pegasus X: the game's RetroAchievements progress again, when set so
+    QObject::connect(m_api_public, &model::ApiObject::gameFileFinished,
+                     [this](model::GameFile* const file){
+                         m_api_private->settingsPtr()->raAfterGame(file ? file->parentGame() : nullptr);
+                     });
 
     QObject::connect(m_launcher, &ProcessLauncher::processFinished,
                      [this](){ onProcessFinished(); });

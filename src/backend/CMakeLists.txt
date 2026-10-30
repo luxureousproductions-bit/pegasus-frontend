@@ -32,6 +32,8 @@ add_library(pegasus-backend
     Scraper.h
     LaunchBoxDb.cpp
     LaunchBoxDb.h
+    RetroAchievements.cpp
+    RetroAchievements.h
     ScraperKeys.h
 )
 

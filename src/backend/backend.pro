@@ -26,6 +26,7 @@ SOURCES += \
     Updater.cpp \
     Scraper.cpp \
     LaunchBoxDb.cpp \
+    RetroAchievements.cpp \
 
 HEADERS += \
     Backend.h \
@@ -42,6 +43,7 @@ HEADERS += \
     Updater.h \
     Scraper.h \
     LaunchBoxDb.h \
+    RetroAchievements.h \
     ScraperKeys.h \
 
 include(imggen/imggen.pri)

@@ -34,7 +34,7 @@ class QNetworkAccessManager;
 namespace model { class Game; }
 class ThemeStore;
 class Updater;
-namespace scraper { class Scraper; struct Job; class LaunchBoxDb; }
+namespace scraper { class Scraper; struct Job; class LaunchBoxDb; class RetroAchievements; }
 
 namespace model {
 
@@ -320,6 +320,33 @@ public:
     /// the test environment: read the LaunchBox database in before the test scrape
     Q_INVOKABLE bool testLaunchBox() const { return qEnvironmentVariable("PEGASUSX_TEST_LAUNCHBOX") == QLatin1String("1"); }
 
+    // Pegasus X: RetroAchievements (Settings > Library > RetroAchievements)
+    /// { user, key, icons, autoRefresh }
+    Q_INVOKABLE QVariantMap raSettings() const;
+    Q_INVOKABLE void setRaSetting(const QString& key, const QVariant& value);
+    /// raLoginChecked({ ok, text })
+    Q_INVOKABLE void raCheckLogin();
+    /// matches every game (or with `only_new`, the ones not checked yet):
+    /// raProgress, then raFinished { matched, withAchievements, notFound,
+    /// unsupported, progress, error }. Returns an error, or empty
+    Q_INVOKABLE QString raMatch(QObject* collections, bool only_new);
+    /// your progress on the matched games again (raProgress, raFinished)
+    Q_INVOKABLE QString raRefreshProgress(QObject* collections);
+    /// one game, hashed and looked up again
+    Q_INVOKABLE QString raCheckGame(QObject* game, const QString& collection_name);
+    Q_INVOKABLE void raStop();
+    /// the cached game lists removed (downloaded again on the next match)
+    Q_INVOKABLE void raForgetLists();
+    /// a game's entries starting with `prefix` as in its file now (key -> values)
+    Q_INVOKABLE QVariantMap gameExtraFields(const QString& collection_name, const QString& game_path, const QString& prefix) const;
+    /// { running, stage, done, total }
+    Q_INVOKABLE QVariantMap raState() const;
+    /// of the library as loaded: { games, checked, matched, withAchievements,
+    /// notFound, unsupported, earned, total, lists, listsDate }
+    Q_INVOKABLE QVariantMap raStatus(QObject* collections) const;
+    /// a game just played: its progress again, in the background (Auto refresh)
+    void raAfterGame(model::Game* game);
+
     // Pegasus X: Settings > Library's status rows
     /// { games, box, shots, details, fanart, videos, any (games missing what
     /// Complete my library fills by default), review, collections: { name: missing art },
@@ -424,6 +451,9 @@ signals:
     void esdeImportFinished(QVariantMap result);
     void romFolderImportFinished(QVariantMap result);
     void originalGameReady(QString game_path, QVariantMap result);
+    void raProgress(QVariantMap state);
+    void raFinished(QVariantMap result);
+    void raLoginChecked(QVariantMap result);
     void libraryHousekeepingReady(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
     void collectionDetailsReady(QString collection, QVariantMap details);
@@ -444,6 +474,10 @@ private:
     scraper::Scraper* m_scraper = nullptr;
     mutable scraper::LaunchBoxDb* m_launchbox = nullptr;
     scraper::LaunchBoxDb& launchBox() const;
+    scraper::RetroAchievements* m_ra = nullptr;
+    bool m_ra_quiet = false;  ///< a run after a game: no library read when it's done
+    scraper::RetroAchievements& ra();
+    QString raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection);
     QPointer<model::Game> m_single_game;
     ThemeStore* m_theme_store = nullptr;
     Updater* m_updater = nullptr;

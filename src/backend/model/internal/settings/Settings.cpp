@@ -38,6 +38,7 @@
 #include "providers/Overrides.h"
 #include "ScraperKeys.h"
 #include "LaunchBoxDb.h"
+#include "RetroAchievements.h"
 #include "providers/GameDirectory.h"
 #include "Scraper.h"
 #include "ThemeStore.h"
@@ -59,6 +60,7 @@
 #include <QJsonObject>
 #include <QUrlQuery>
 #include <QDateTime>
+#include <QPointer>
 #include <QSettings>
 #include <QSaveFile>
 #include <QFile>
@@ -2471,6 +2473,257 @@ QString Settings::reviewScrape(QObject* collections, const QString& path, const 
 void Settings::setNeverScrape(const QString& path, const QString& title, bool never)
 {
     scraper::Scraper::setNeverScrape(path, title, never);
+}
+
+// -- Pegasus X: RetroAchievements ------------------------------------------------
+
+namespace {
+const QString RA_GROUP = QStringLiteral("retroachievements/");
+// a game's x-ra-* fields as loaded (extra["ra-id"]...): "" when not there
+QString ra_extra(const model::Game& game, const char* key)
+{
+    const QVariant v = game.extraMap().value(QLatin1String(key));
+    const QStringList list = v.toStringList();
+    return list.isEmpty() ? v.toString() : list.first();
+}
+} // namespace
+
+scraper::RetroAchievements& Settings::ra()
+{
+    if (!m_ra) {
+        m_ra = new scraper::RetroAchievements(this);
+        connect(m_ra, &scraper::RetroAchievements::progress, this, &Settings::raProgress);
+        connect(m_ra, &scraper::RetroAchievements::loginChecked, this, &Settings::raLoginChecked);
+        connect(m_ra, &scraper::RetroAchievements::finished, this, [this](QVariantMap result){
+            emit raFinished(result);
+            // the fields are in the files: the library shows them after a
+            // read, right away unless Library is open (it reads on leaving)
+            const bool wrote = result.value(QStringLiteral("matched")).toInt() > 0 || result.value(QStringLiteral("notFound")).toInt() > 0
+                || result.value(QStringLiteral("progress")).toInt() > 0;
+            const bool quiet = m_ra_quiet;
+            m_ra_quiet = false;
+            if (wrote && !m_library_open && !quiet)
+                reloadLibrary();
+        });
+    }
+    return *m_ra;
+}
+
+QVariantMap Settings::raSettings() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    return QVariantMap {
+        { QStringLiteral("user"), file.value(RA_GROUP + QStringLiteral("user")).toString() },
+        { QStringLiteral("key"), file.value(RA_GROUP + QStringLiteral("key")).toString() },
+        { QStringLiteral("icons"), file.value(RA_GROUP + QStringLiteral("icons"), true).toBool() },
+        { QStringLiteral("autoRefresh"), file.value(RA_GROUP + QStringLiteral("autoRefresh"), true).toBool() },
+    };
+}
+
+void Settings::setRaSetting(const QString& key, const QVariant& value)
+{
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(RA_GROUP + key, value);
+}
+
+void Settings::raCheckLogin()
+{
+    const QVariantMap s = raSettings();
+    ra().checkLogin(s.value(QStringLiteral("user")).toString(), s.value(QStringLiteral("key")).toString());
+}
+
+QVariantMap Settings::raState() const
+{
+    return m_ra ? m_ra->state() : QVariantMap { { QStringLiteral("running"), false } };
+}
+
+void Settings::raStop()
+{
+    if (m_ra)
+        m_ra->stop();
+}
+
+QVariantMap Settings::gameExtraFields(const QString& collection_name, const QString& game_path, const QString& prefix) const
+{
+    return providers::esde::game_extra_fields(collection_name, game_path, prefix);
+}
+
+void Settings::raForgetLists()
+{
+    QDir dir(scraper::RetroAchievements::dir());
+    for (const QString& name : dir.entryList({ QStringLiteral("console-*.json") }, QDir::Files))
+        dir.remove(name);
+}
+
+QString Settings::raMatch(QObject* collections, bool only_new)
+{
+    return raStart(collections, only_new, false, nullptr, QString());
+}
+
+QString Settings::raRefreshProgress(QObject* collections)
+{
+    return raStart(collections, false, true, nullptr, QString());
+}
+
+QString Settings::raCheckGame(QObject* game_obj, const QString& collection_name)
+{
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    if (!game)
+        return tr("No game to check.");
+    return raStart(nullptr, false, false, game, collection_name);
+}
+
+QString Settings::raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection)
+{
+    if (m_ra && m_ra->running())
+        return tr("RetroAchievements is still working.");
+    const QVariantMap s = raSettings();
+    const QString user = s.value(QStringLiteral("user")).toString().trimmed();
+    const QString key = s.value(QStringLiteral("key")).toString().trimmed();
+    if (user.isEmpty() || key.isEmpty())
+        return tr("Enter your RetroAchievements username and web API key first.");
+    std::vector<scraper::RetroAchievements::Job> jobs;
+    QSet<QString> seen;
+    const auto add = [&](const model::Collection& coll, model::Game* game) {
+        const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+        if (files.empty())
+            return;
+        const QString path = files.front()->path();
+        if (path.startsWith(QLatin1String("android:")) || seen.contains(path))
+            return;
+        const int ra_id = ra_extra(*game, "ra-id").toInt();
+        const bool checked = !ra_extra(*game, "ra-id").isEmpty();
+        if (progress_only && ra_id <= 0)
+            return;
+        if (only_new && checked)
+            return;
+        seen.insert(path);
+        scraper::RetroAchievements::Job job;
+        job.path = path;
+        job.title = game->title();
+        job.collection = coll.name();
+        job.system = scraper::Scraper::system_of(coll.name(), coll.shortName());
+        job.ra_id = progress_only ? ra_id : 0;
+        jobs.push_back(std::move(job));
+    };
+    if (one_game) {
+        const model::Collection* coll = nullptr;
+        for (model::Collection* const c : one_game->collectionsModel()->entries()) {
+            if (c->name() == one_collection || !coll)
+                coll = c;
+        }
+        if (!coll)
+            return tr("No game to check.");
+        add(*coll, one_game);
+    }
+    else {
+        const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+        if (!list)
+            return tr("No library.");
+        for (int i = 0; i < list->count(); i++) {
+            auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+            if (!coll)
+                continue;
+            for (model::Game* const game : coll->gameList()->entries())
+                add(*coll, game);
+        }
+    }
+    if (jobs.empty())
+        return progress_only ? tr("No matched games yet: Match my games first.")
+             : only_new ? tr("Every game has been checked already.") : tr("No games to check.");
+    QString media = dataDir();
+    if (media.isEmpty())
+        media = paths::writableConfigDir() + QStringLiteral("/downloaded_media");
+    ra().start(std::move(jobs), user, key, s.value(QStringLiteral("icons")).toBool(), media, progress_only);
+    return {};
+}
+
+QVariantMap Settings::raStatus(QObject* collections) const
+{
+    QVariantMap out;
+    int games = 0, checked = 0, matched = 0, with = 0, not_found = 0, earned = 0, total = 0;
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    QSet<QString> seen;
+    for (int i = 0; list && i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        for (model::Game* const game : coll->gameList()->entries()) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            if (files.empty() || files.front()->path().startsWith(QLatin1String("android:")) || seen.contains(files.front()->path()))
+                continue;
+            seen.insert(files.front()->path());
+            games++;
+            const QString id = ra_extra(*game, "ra-id");
+            if (id.isEmpty())
+                continue;
+            checked++;
+            if (id.toInt() <= 0) {
+                not_found++;
+                continue;
+            }
+            matched++;
+            const int n = ra_extra(*game, "ra-achievements").toInt();
+            if (n > 0) {
+                with++;
+                total += n;
+                earned += ra_extra(*game, "ra-earned").toInt();
+            }
+        }
+    }
+    out.insert(QStringLiteral("games"), games);
+    out.insert(QStringLiteral("checked"), checked);
+    out.insert(QStringLiteral("matched"), matched);
+    out.insert(QStringLiteral("withAchievements"), with);
+    out.insert(QStringLiteral("notFound"), not_found);
+    out.insert(QStringLiteral("unsupported"), checked - matched - not_found);
+    out.insert(QStringLiteral("earned"), earned);
+    out.insert(QStringLiteral("total"), total);
+    // the cached lists
+    int lists = 0;
+    QDateTime oldest;
+    for (const QFileInfo& f : QDir(scraper::RetroAchievements::dir()).entryInfoList({ QStringLiteral("console-*.json") }, QDir::Files)) {
+        lists++;
+        if (!oldest.isValid() || f.lastModified() < oldest)
+            oldest = f.lastModified();
+    }
+    out.insert(QStringLiteral("lists"), lists);
+    out.insert(QStringLiteral("listsDate"), oldest.isValid() ? oldest.toString(QStringLiteral("yyyy-MM-dd")) : QString());
+    return out;
+}
+
+void Settings::raAfterGame(model::Game* game)
+{
+    if (!game || !raSettings().value(QStringLiteral("autoRefresh")).toBool())
+        return;
+    if (ra_extra(*game, "ra-id").toInt() <= 0)
+        return;
+    if (m_ra && m_ra->running())
+        return;
+    const model::Collection* coll = game->collectionsModel()->entries().empty() ? nullptr : game->collectionsModel()->entries().front();
+    if (!coll)
+        return;
+    // the library isn't read again for this: the game's loaded fields are
+    // updated when it finishes
+    QPointer<model::Game> keep(game);
+    auto* const once = new QMetaObject::Connection();
+    *once = connect(&ra(), &scraper::RetroAchievements::finished, this, [this, keep, once](const QVariantMap&){
+        disconnect(*once);
+        delete once;
+        if (!keep)
+            return;
+        // the fresh numbers, from the file just written
+        const QVariantMap found = providers::esde::game_extra_fields(keep->collectionsModel()->entries().front()->name(),
+                                                                     keep->filesModel()->entries().front()->path(), QStringLiteral("x-ra-"));
+        for (auto it = found.cbegin(); it != found.cend(); ++it)
+            keep->extraMapMut().insert(it.key().mid(2), it.value());
+    });
+    m_ra_quiet = true;  // the game's fields are updated in place, no library read
+    if (!raStart(nullptr, false, true, game, coll->name()).isEmpty()) {
+        m_ra_quiet = false;
+        disconnect(*once);
+        delete once;
+    }
 }
 
 scraper::LaunchBoxDb& Settings::launchBox() const

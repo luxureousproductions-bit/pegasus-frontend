@@ -3720,7 +3720,7 @@ QStringList value_lines(const QString& key, const QVariant& value, const QDir& b
 }
 
 QString apply_changes(MetaFile& file, size_t block_index, const QVariantMap& changes, const QString& header_key,
-                      bool scraped = false)
+                      bool scraped = false, bool save = true)
 {
     QStringList edited;
     const QDir base(file.dir);
@@ -3740,7 +3740,7 @@ QString apply_changes(MetaFile& file, size_t block_index, const QVariantMap& cha
     // emptied field is gone from it)
     Q_UNUSED(scraped);
     Q_UNUSED(edited);
-    return file.save();
+    return save ? file.save() : QString();
 }
 // title without region/version tags and punctuation, to match your entry
 QString match_name(const QString& title)
@@ -3907,6 +3907,53 @@ QString save_game_metadata(const QString& collection_name, const QString& game_p
     return error;
 }
 
+
+QVariantMap game_extra_fields(const QString& collection_name, const QString& game_path, const QString& prefix)
+{
+    QVariantMap out;
+    MetaFile file;
+    if (!file.load(edits_file_path(collection_name)))
+        return out;
+    const QString wanted = MetaFile::is_uri(game_path) ? game_path : ::clean_abs_path(QFileInfo(game_path));
+    for (const MetaBlock& block : file.blocks) {
+        if (block.is_collection || !file.game_files(block).contains(wanted))
+            continue;
+        for (const MetaEntry& e : block.entries) {
+            if (e.key.startsWith(prefix))
+                out.insert(e.key, e.values);
+        }
+        break;
+    }
+    return out;
+}
+
+QString save_games_metadata(const QString& collection_name, const std::vector<GameEdit>& edits, bool backup)
+{
+    split_legacy_edits_file();
+    if (edits.empty())
+        return {};
+    int coll_index = -1;
+    MetaFile file = override_file(collection_name, coll_index);
+    if (coll_index < 0)
+        return QStringLiteral("Could not write the game directory file for `%1`").arg(collection_name);
+    if (backup)
+        providers::gamedir::backup(file.path, QStringLiteral("scrape"));
+    int written = 0;
+    for (const GameEdit& edit : edits) {
+        if (edit.changes.isEmpty())
+            continue;
+        const QString wanted = MetaFile::is_uri(edit.path) ? edit.path : ::clean_abs_path(QFileInfo(edit.path));
+        const int block_index = override_game_block(file, coll_index, wanted, edit.title);
+        if (block_index < 0)
+            continue;
+        apply_changes(file, static_cast<size_t>(block_index), edit.changes, QStringLiteral("title"), true, false);
+        written++;
+    }
+    const QString error = file.save();
+    if (error.isEmpty())
+        Log::info(QStringLiteral("Metadata"), LOGMSG("%1 games saved in `%2`").arg(written).arg(file.path));
+    return error;
+}
 
 QString save_collection_metadata(const QString& collection_name, const QVariantMap& changes)
 {

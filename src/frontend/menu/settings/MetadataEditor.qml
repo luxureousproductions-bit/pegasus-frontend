@@ -211,6 +211,58 @@ FocusScope {
         message = qsTr("Scraping \"%1\"...").arg(entry.title) + api.tr;
     }
 
+    // -- RetroAchievements ----------------------------------------------------------
+    property var raStatus: Internal.settings.raStatus(api.collections)
+    property var raRun: Internal.settings.raState()
+    property bool raChecking: false
+    property var raExtra: null   // the open game's x-ra-* fields after a check here (its file's, not the loaded ones)
+    // a game's x-ra-* field as loaded (extra["ra-id"] is a list of one)
+    function raField(key) {
+        if (!game || !game.obj || !game.obj.extra)
+            return "";
+        var v = (raExtra && (key in raExtra)) ? raExtra[key] : game.obj.extra[key];
+        if (v === undefined || v === null)
+            return "";
+        if (Array.isArray(v) || (typeof v === "object" && v.length !== undefined))
+            return v.length > 0 ? String(v[0]) : "";
+        return String(v);
+    }
+    function raCheckThisGame() {
+        if (raChecking || !game || !game.obj)
+            return;
+        var error = Internal.settings.raCheckGame(game.obj, gameColl());
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        keepPosition(function() { root.raChecking = true; });
+        message = qsTr("Hashing and looking the game up on RetroAchievements...") + api.tr;
+    }
+    Connections {
+        target: Internal.settings
+        function onRaProgress(state) { root.raRun = state; }
+        function onRaFinished(result) {
+            root.raRun = Internal.settings.raState();
+            root.keepPosition(function() { root.raStatus = Internal.settings.raStatus(api.collections); });
+            if (!root.raChecking)
+                return;
+            root.keepPosition(function() { root.raChecking = false; });
+            if (result.error && !(result.matched > 0 || result.notFound > 0)) {
+                root.message = result.error;
+                return;
+            }
+            root.anySaved = true;
+            // the page shows the fields just written (the file is read again for this game)
+            if (root.page === "game" && root.game && root.game.obj) {
+                var fresh = Internal.settings.gameExtraFields(root.gameColl(), root.game.path, "x-ra-");
+                var extra = {};
+                for (var f in fresh) extra[f.substring(2)] = fresh[f];
+                root.keepPosition(function() { root.raExtra = extra; });
+                root.message = result.matched > 0 ? qsTr("Found on RetroAchievements.") + api.tr : qsTr("Not on RetroAchievements.") + api.tr;
+            }
+        }
+    }
+
     // -- Scraping one collection ----------------------------------------------------
     property bool collScraping: false
     readonly property string collScrapeSub: (run && run.running)
@@ -1150,6 +1202,7 @@ FocusScope {
     }
     function openGame(entry) {
         building = true;
+        raExtra = null;
         game = entry;
         launchInfo = isAndroidCollection(collObj) ? Internal.settings.gameLaunchInfo(entry.obj) : ({});
         orig = readGame(entry.obj);
@@ -1467,6 +1520,12 @@ FocusScope {
                 out.push({ "kind": "section", "text": qsTr("Your library · %1 games").arg(st.games || 0) + api.tr });
                 out.push({ "kind": "scraper", "text": qsTr("Scraper") + api.tr,
                            "value": qsTr("sources, content, pictures, accounts ›") + api.tr });
+                var ra = root.raStatus || {};
+                out.push({ "kind": "ra", "text": qsTr("RetroAchievements") + api.tr,
+                           "value": (root.raRun && root.raRun.running) ? qsTr("working: %1 ›").arg(root.raRun.stage || "") + api.tr
+                                  : (ra.withAchievements || 0) > 0 ? qsTr("%1 games with achievements · %2 of %3 earned ›").arg(ra.withAchievements).arg(ra.earned || 0).arg(ra.total || 0) + api.tr
+                                  : qsTr("match your games by hash ›") + api.tr,
+                           "done": (ra.withAchievements || 0) > 0 });
                 out.push({ "kind": "complete", "text": qsTr("Complete my library") + api.tr, "sub": " " });
                 out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
                            "value": nReview === 1 ? qsTr("1 game") + api.tr : qsTr("%1 games").arg(nReview) + api.tr,
@@ -1635,6 +1694,30 @@ FocusScope {
                                    "muted": a2 === "", "edited": key2 in root.edits, "done": key2 in root.saved });
                     }
                 }
+            }
+            if (root.page === "game" && !root.isAndroidCollection(root.collObj)) {
+                out.push({ "kind": "section", "text": "RetroAchievements" });
+                var raId = root.raField("ra-id");
+                var raN = parseInt(root.raField("ra-achievements") || "0", 10);
+                var raEarned = root.raField("ra-earned");
+                if (raId === "")
+                    out.push({ "kind": "racheck", "text": qsTr("Check this game...") + api.tr,
+                               "value": root.raChecking ? qsTr("checking...") + api.tr : qsTr("not checked yet: hash it and look it up") + api.tr, "muted": true });
+                else if (raId === "0")
+                    out.push({ "kind": "racheck", "text": qsTr("Not on RetroAchievements") + api.tr,
+                               "value": root.raChecking ? qsTr("checking...") + api.tr
+                                      : (root.raField("ra-hash") !== "" ? qsTr("hash %1 · A checks again").arg(root.raField("ra-hash").substring(0, 8)) : qsTr("couldn't be hashed · A checks again")) + api.tr,
+                               "muted": true });
+                else
+                    out.push({ "kind": "racheck", "text": root.raField("ra-title") || qsTr("Matched") + api.tr,
+                               "sub": qsTr("RA id %1 · %2 · A checks again").arg(raId)
+                                      .arg(root.raField("ra-match") === "title" ? qsTr("matched by name") : qsTr("matched by hash")) + api.tr,
+                               "value": root.raChecking ? qsTr("checking...") + api.tr
+                                      : raN === 0 ? qsTr("no achievements yet") + api.tr
+                                      : (raEarned !== "" ? qsTr("%1 of %2 earned").arg(raEarned).arg(raN) : qsTr("%1 achievements").arg(raN)) + api.tr
+                                        + " · " + qsTr("%1 points").arg(root.raField("ra-points") || "0") + api.tr,
+                               "done": raN > 0 && raEarned !== "" && parseInt(raEarned, 10) >= raN,
+                               "warn": false });
             }
             if (root.page === "game") {
                 out.push({ "kind": "section", "text": qsTr("Art and manual") + api.tr });
@@ -1863,6 +1946,12 @@ FocusScope {
                 scraperLoader.active = true;
                 scraperLoader.focus = true;
             }
+            else if (row.kind === "ra") {
+                raLoader.active = true;
+                raLoader.focus = true;
+            }
+            else if (row.kind === "racheck")
+                root.raCheckThisGame();
             else if (row.kind === "scrapegame")
                 root.scrapeThisGame();
             else if (row.kind === "scrapecoll")
@@ -3141,6 +3230,26 @@ FocusScope {
             list.focus = true;
             // after the signal is done: the screen that sent it goes
             Qt.callLater(function() { scraperLoader.active = false; });
+        }
+    }
+    // Pegasus X: Settings > Library > RetroAchievements
+    Loader {
+        id: raLoader
+        anchors.fill: parent
+        z: 7
+        active: false
+        enabled: focus
+        visible: active && focus
+        source: "RetroAchievementsScreen.qml"
+        onLoaded: item.focus = true
+        onFocusChanged: if (item && focus) item.focus = true
+    }
+    Connections {
+        target: raLoader.item
+        function onClose() {
+            list.focus = true;
+            root.keepPosition(function() { root.raStatus = Internal.settings.raStatus(api.collections); });
+            Qt.callLater(function() { raLoader.active = false; });
         }
     }
 

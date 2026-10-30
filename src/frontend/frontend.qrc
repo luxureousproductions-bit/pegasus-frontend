@@ -48,6 +48,7 @@
         <file>menu/settings/EsdeImport.qml</file>
         <file>menu/settings/MetadataEditor.qml</file>
         <file>menu/settings/ScraperScreen.qml</file>
+        <file>menu/settings/RetroAchievementsScreen.qml</file>
         <file>menu/settings/ScraperChoice.qml</file>
         <file>menu/settings/ThemeDownloader.qml</file>
         <file>menu/settings/UpdateDialog.qml</file>
