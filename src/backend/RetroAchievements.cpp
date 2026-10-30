@@ -91,11 +91,11 @@ QString plain_title(QString title)
 // the ROM inside a .zip: the first file that isn't itself an archive
 QByteArray rom_in_zip(const QString& path, QString& name)
 {
-    ZipReader zip(path);
+    utils::ZipReader zip(path);
     if (!zip.isReadable())
         return {};
     static const QStringList archives { "zip", "7z", "rar" };
-    for (const ZipReader::Entry& entry : zip.entries()) {
+    for (const utils::ZipReader::Entry& entry : zip.entries()) {
         if (entry.is_dir || entry.size == 0)
             continue;
         if (archives.contains(QFileInfo(entry.path).suffix().toLower()))
