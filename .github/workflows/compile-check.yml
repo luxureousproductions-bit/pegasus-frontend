@@ -113,14 +113,22 @@ jobs:
           foreach ($p in @("platforms","imageformats","sqldrivers","gamepads","mediaservice","audio","playlistformats","iconengines","styles")) {
             if (Test-Path "$qt\plugins\$p") {
               New-Item -ItemType Directory -Force "$out\$p" | Out-Null
-              Get-ChildItem "$qt\plugins\$p" -Filter *.dll | Where-Object { $_.Name -notmatch "d\.dll$" } | Copy-Item -Destination "$out\$p\"
+              Get-ChildItem "$qt\plugins\$p" -Filter *.dll | Copy-Item -Destination "$out\$p\"
             } else { Write-Host "::warning::no plugins\$p" }
           }
           foreach ($m in @("QtQuick","QtQuick.2","QtQml","QtGraphicalEffects","QtMultimedia","Qt","QtGamepad","QtQuick.Timeline")) {
             if (Test-Path "$qt\qml\$m") { Copy-Item -Recurse "$qt\qml\$m" "$out\$m" } else { Write-Host "::warning::no qml\$m" }
           }
-          # debug copies and .pdb files of the QML modules: not shipped
-          Get-ChildItem $out -Recurse -File | Where-Object { $_.Name -match "d\.dll$|\.pdb$|\.prl$" } | Remove-Item
+          # debug copies (a Food.dll next to its Foo.dll: Qt5Cored.dll, qjpegd.dll)
+          # and .pdb files: not shipped. Only the twin test tells a debug copy
+          # from a name that happens to end in d (Qt5Gamepad.dll, qtxinputgamepad.dll).
+          Get-ChildItem $out -Recurse -File | Where-Object {
+            ($_.Name -match "\.pdb$|\.prl$") -or
+            ($_.Name -match "d\.dll$" -and (Test-Path (Join-Path $_.DirectoryName ($_.Name -replace "d\.dll$", ".dll"))))
+          } | Remove-Item
+          foreach ($must in @("Qt5Gamepad.dll","gamepads\qtxinputgamepad.dll","QtGamepad\declarative_gamepad.dll")) {
+            if (-not (Test-Path "$out\$must")) { Write-Host "::error::missing $must"; exit 1 }
+          }
           Write-Host "::notice::deployed: $((Get-ChildItem $out -Recurse -File).Count) files"
       - name: Package (Pegasus X)
         shell: bash
