@@ -75,14 +75,13 @@ public:
         return QObject::eventFilter(watched, event);
     }
 };
-// a pool of one low-priority thread for the hashing
+// a pool of one thread for the hashing (lowered in priority by the work itself)
 QThreadPool& hash_pool()
 {
     static QThreadPool pool;
     static bool set = false;
     if (!set) {
         pool.setMaxThreadCount(1);
-        pool.setThreadPriority(QThread::LowestPriority);
         set = true;
     }
     return pool;
@@ -448,6 +447,8 @@ void RetroAchievements::hashAndMatch()
         });
     });
     m_hash_watcher->setFuture(QtConcurrent::run(&hash_pool(), [jobs, stop, progress_count]{
+        if (QThread::currentThread())
+            QThread::currentThread()->setPriority(QThread::LowestPriority);
         // the lists, read once per console: hash -> game, plain title -> game
         struct Entry { int id; QString title; QString icon; int achievements; int points; };
         QHash<int, QHash<QString, Entry>> by_hash;
