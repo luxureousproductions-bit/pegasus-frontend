@@ -139,7 +139,7 @@ void on_app_close(AppCloseType type)
     }
 
     Log::info(LOGMSG("Closing Pegasus, goodbye!"));
-    Log::close();
+    // Pegasus X: the log stays open through the teardown (see main.cpp)
 
     QCoreApplication::quit();
     switch (type) {
@@ -163,10 +163,17 @@ Backend::Backend()
 
 Backend::~Backend()
 {
+    // Pegasus X: each step named in the log, so a hang on the way out shows
+    // where (the watchdog in main.cpp ends the process after a few seconds)
+    Log::info(LOGMSG("Shutdown: launcher"));
     delete m_launcher;
+    Log::info(LOGMSG("Shutdown: frontend"));
     delete m_frontend;
+    Log::info(LOGMSG("Shutdown: providers"));
     delete m_providerman;
+    Log::info(LOGMSG("Shutdown: settings, scraper, achievements"));
     delete m_api_private;
+    Log::info(LOGMSG("Shutdown: library"));
     delete m_api_public;
 
 #if defined(WITH_SDL_GAMEPAD) || defined(WITH_SDL_POWER)

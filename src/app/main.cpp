@@ -16,6 +16,7 @@
 
 
 #include "backend/Backend.h"
+#include "backend/Log.h"
 #include "backend/Paths.h"
 #include "backend/platform/TerminalKbd.h"
 
@@ -26,6 +27,9 @@
 #include <QIcon>
 #include <QSettings>
 #include <QtPlugin>
+#include <chrono>
+#include <cstdlib>
+#include <thread>
 
 #ifdef Q_OS_ANDROID
 #include "backend/platform/AndroidHelpers.h"
@@ -40,6 +44,7 @@ Q_IMPORT_PLUGIN(ApngImagePlugin)
 backend::CliArgs handle_cli_args(QGuiApplication&);
 bool request_runtime_permissions();
 bool portable_txt_present();
+void start_shutdown_watchdog();
 
 int main(int argc, char *argv[])
 {
@@ -83,10 +88,32 @@ int main(int argc, char *argv[])
     backend::CliArgs cli_args = handle_cli_args(app);
     cli_args.portable |= portable_txt_present();
 
-    backend::Backend backend(cli_args);
-    backend.start();
+    int result = 0;
+    {
+        backend::Backend backend(cli_args);
+        backend.start();
+        result = app.exec();
 
-    return app.exec();
+        // Pegasus X: the window is gone; what follows is the teardown (threads
+        // finishing, files written). Should any of it hang, the process would
+        // sit invisible, holding its folder: after a few seconds it is ended
+        // instead, with a note in the log of how far it got.
+        Log::info(LOGMSG("Window closed, shutting down..."));
+        start_shutdown_watchdog();
+    }
+    Log::info(LOGMSG("Shutdown complete"));
+    Log::close();
+    return result;
+}
+
+void start_shutdown_watchdog()
+{
+    std::thread([]{
+        std::this_thread::sleep_for(std::chrono::seconds(8));
+        Log::error(LOGMSG("Shutdown took too long, ending the process"));
+        Log::close();
+        std::_Exit(0);
+    }).detach();
 }
 
 bool request_runtime_permissions()
