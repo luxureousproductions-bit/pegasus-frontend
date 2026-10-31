@@ -165,11 +165,13 @@ public:
     Q_PROPERTY(bool favorite READ isFavorite WRITE setFavorite NOTIFY favoriteChanged)
     Q_PROPERTY(bool missing READ isMissing WRITE setMissing NOTIFY missingChanged)
 
-    Q_PROPERTY(QVariantMap extra READ extraMap NOTIFY dataChanged)
+    Q_PROPERTY(QVariantMap extra READ extraMap NOTIFY extraChanged)
     const QVariantMap& extraMap() const { return m_extra; }
     QVariantMap& extraMapMut() { return m_extra; }
     /// Pegasus X: after changing the loaded game's details in place
     void notifyDataChanged() { emit dataChanged(); }
+    /// Pegasus X: after changing the loaded game's extra fields in place
+    void notifyExtraChanged() { emit extraChanged(); }
 
 
     bool hasSlug() const { return !m_data.slug.isEmpty(); }
@@ -205,6 +207,8 @@ signals:
     /// Pegasus X: the details or extra fields changed after loading (Library's
     /// edits, the scraper, RetroAchievements): themes read them again
     void dataChanged();
+    /// Pegasus X: the extra fields (x-*) changed after loading (RetroAchievements)
+    void extraChanged();
 
 private slots:
     void onEntryPlayStatsChanged();

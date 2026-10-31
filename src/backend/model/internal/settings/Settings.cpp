@@ -2026,11 +2026,19 @@ void apply_scraped(model::Game& game, const QVariantMap& changes)
         { QStringLiteral("assets.video"), AssetType::VIDEO },
         { QStringLiteral("assets.steam"), AssetType::UI_STEAMGRID },
     };
+    bool assets = false, details = false, extra = false;
     for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
         const QString& key = it.key();
-        if (kinds.contains(key))
+        if (kinds.contains(key)) {
             game.assetsMut().set_files(kinds.value(key), it.value().toStringList());
-        else if (key == QLatin1String("x-manual"))
+            assets = true;
+            continue;
+        }
+        if (key.startsWith(QLatin1String("x-")))
+            extra = true;
+        else
+            details = true;
+        if (key == QLatin1String("x-manual"))
             game.extraMapMut().insert(QStringLiteral("manual"), it.value().toStringList());
         else if (key == QLatin1String("x-pegasusx-hidden-art"))
             game.extraMapMut().insert(QStringLiteral("pegasusx-hidden-art"), it.value().toStringList());
@@ -2055,9 +2063,14 @@ void apply_scraped(model::Game& game, const QVariantMap& changes)
         else if (key.startsWith(QLatin1String("x-")))
             game.extraMapMut().insert(key.mid(2), it.value().toStringList().isEmpty() ? QVariant(QStringList { it.value().toString() }) : it.value());
     }
-    // themes bound to the game read it again
-    game.assetsMut().notifyChanged();
-    game.notifyDataChanged();
+    // themes bound to the game read again only what changed (a details
+    // change can re-sort a theme's lists: not for art or extra fields alone)
+    if (assets)
+        game.assetsMut().notifyChanged();
+    if (details)
+        game.notifyDataChanged();
+    if (extra)
+        game.notifyExtraChanged();
 }
 
 // one game for the scraper, with what it has now

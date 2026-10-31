@@ -47,6 +47,7 @@
 #include <QEvent>
 #include <QThread>
 #include <QThreadPool>
+#include <memory>
 
 
 namespace {
@@ -654,13 +655,33 @@ void RetroAchievements::writeAll(std::function<void()> then)
             return;
         if (!error.isEmpty() && m_result.error.isEmpty())
             m_result.error = error;
-        if (error.isEmpty()) {
-            for (auto it = per_collection.cbegin(); it != per_collection.cend(); ++it) {
-                for (const providers::esde::GameEdit& edit : it.value())
-                    emit gameWritten(edit.path, edit.changes);
-            }
+        if (!error.isEmpty()) {
+            then();
+            return;
         }
-        then();
+        // the loaded games take their fields a few at a time, between
+        // other events, so the menus keep moving meanwhile
+        auto edits = std::make_shared<std::vector<providers::esde::GameEdit>>();
+        for (auto it = per_collection.cbegin(); it != per_collection.cend(); ++it)
+            edits->insert(edits->end(), it.value().cbegin(), it.value().cend());
+        auto at = std::make_shared<size_t>(0);
+        m_stage = tr("applying");
+        m_total = static_cast<int>(edits->size());
+        auto step_ptr = std::make_shared<std::function<void()>>();
+        *step_ptr = [this, edits, at, run, then, step_ptr]{
+            if (run != m_run)
+                return;
+            const size_t end = qMin(edits->size(), *at + 40);
+            for (; *at < end; (*at)++)
+                emit gameWritten((*edits)[*at].path, (*edits)[*at].changes);
+            m_done = static_cast<int>(*at);
+            report();
+            if (*at < edits->size())
+                QTimer::singleShot(10, this, *step_ptr);
+            else
+                then();
+        };
+        (*step_ptr)();
     });
     watcher->setFuture(QtConcurrent::run([per_collection]{
         QString error;

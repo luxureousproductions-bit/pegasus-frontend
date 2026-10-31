@@ -247,7 +247,7 @@ FocusScope {
                 root.message = result.error;
                 return;
             }
-            root.anySaved = true;
+            // (the loaded game took its fields in place: no library read on leaving)
             // the page shows the fields just written (the file is read again for this game)
             if (root.page === "game" && root.game && root.game.obj) {
                 var fresh = Internal.settings.gameExtraFields(root.gameColl(), root.game.path, "x-ra-");
