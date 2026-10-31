@@ -1,0 +1,30 @@
+Chrono Trigger (my own file)
+  screenshot: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/screenshots/Chrono Trigger (USA).png
+  steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/my snes picks/miximages/Chrono Trigger (USA).png
+Crash Bandicoot
+  boxFront: /home/runner/work/_temp/px/MyGames/psx/media/crash.png
+Final Fantasy VII (USA)
+Mario Kart 64 (USA)
+  boxFront: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/covers/Mario Kart 64 (USA).png
+  boxFront: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/3D Boxes/Mario Kart 64 (USA).png
+  logo: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/wheel/Mario Kart 64 (USA).png
+  screenshot: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/screenshot/Mario Kart 64 (USA).png
+  background: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/fanart/Mario Kart 64 (USA).png
+  steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/miximages/Mario Kart 64 (USA).png
+  extra.box3d: file:///home/runner/work/_temp/px/MyGames/Nintendo 64/media/3D Boxes/Mario Kart 64 (USA).png
+Metroid Fusion (USA)
+Metroid Prime
+Star Fox 64 (USA)
+  boxFront: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/Star Fox 64 (USA)/boxFront.png
+  screenshot: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/Star Fox 64 (USA)/screenshot.png
+  steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/miximages/Star Fox 64 (USA).png
+Super Mario World
+  boxFront: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/covers/Super Mario World (USA).png
+  boxFront: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/3dboxes/Super Mario World (USA).png
+  logo: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/marquees/Super Mario World (USA).png
+  screenshot: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/screenshots/Super Mario World (USA).png
+  cartridge: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/physicalmedia/Super Mario World (USA).png
+  steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/miximages/Super Mario World (USA).png
+  extra.box3d: file:///home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/3dboxes/Super Mario World (USA).png
+The Legend of Zelda - A Link to the Past (USA)
+Wind Waker (USA)

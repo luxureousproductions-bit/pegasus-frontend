@@ -1,0 +1,4 @@
+downloaded_media/snes/titlescreens/Super Mario World (USA).png
+downloaded_media/snes/screenshots/Super Mario World (USA).png
+downloaded_media/snes/covers/Super Mario World (USA).png
+downloaded_media/snes/miximages/Super Mario World (USA).png

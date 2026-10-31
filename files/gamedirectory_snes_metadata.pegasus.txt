@@ -1,0 +1,39 @@
+# Pegasus X game directory: Nintendo SNES (Super Nintendo)
+# Made by Pegasus X from ES-DE (/home/runner/work/_temp/px/storage/ES-DE).
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/storage/ROMs/snes
+
+collection: Nintendo SNES (Super Nintendo)
+shortname: snes
+
+game: Super Mario World
+file: /home/runner/work/_temp/px/storage/ROMs/snes/Super Mario World (USA).sfc
+sort-by: Super Mario World (USA)
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Platform
+players: 2
+release: 1990-11-21
+description: Mario is having a vacation in Dinosaur Land when he learns that Princess Peach Toadstool has been kidnapped by the evil King Koopa Bowser. When Mario starts searching for her he finds a giant egg with a dinosaur named Yoshi hatching out of it. Yoshi tells Mario that his fellow dinosaurs have been imprisoned in eggs by Bowser's underlings. The intrepid plumber has to travel to their castles, rescue the dinosaurs, and eventually face King Koopa himself, forcing him to release the princess.
+  .
+  Super Mario World is a jump-and-run platformer and a follow-up to Super Mario Bros. 3. The gameplay is similar to previous installments and includes fast-paced platforming in (mostly) side-view stages populated by various enemies and traps, which must be completed within time limits. Mario has access to his traditional power-ups — the Super Mushroom that makes him bigger, the Fire Flower that allows him to throw little fireballs at enemies, and others. A new power-up is the Cape Feather: when wearing the cape, Mario can spin to hurt enemies, and fly as long as the player is able to sustain his balance in the air. Another new feature is the possibility to ride the dinosaur Yoshi, who can eat enemies and gain special attacks from some of them. In order to unlock certain areas, it is sometimes necessary to physically pick up and carry items (e.g. keys) and use them in appropriate places.
+  .
+  The game's world is divided into several large areas, each containing a number of stages. Outdoor scenarios prevail, but there are also many underground and underwater levels. Each large area has at least one ghost house, typically containing more elaborate traps and ghostly non-destructible enemies. In order to venture to the next area, the player usually has to visit a castle (a more difficult stage with harder enemies and dangerous traps) and defeat the boss enemy guarding it.
+  .
+  Many stages have secret exits, which lead to optional areas, such as fortresses with recurrent boss enemies, interconnected stages of the Star World, and Switch Palaces, which allow the player to materialize specifically colored bricks in all the stages, gaining access to power-ups and other secrets. Secret areas may also open access to other dinosaur types, with different abilities such as breathing fire or flying.
+rating: 95%
+assets.box_front: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/covers/Super Mario World (USA).png
+  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/3dboxes/Super Mario World (USA).png
+assets.cartridge: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/physicalmedia/Super Mario World (USA).png
+assets.logo: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/marquees/Super Mario World (USA).png
+assets.screenshot: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/screenshots/Super Mario World (USA).png
+assets.steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/miximages/Super Mario World (USA).png
+assets.titlescreen: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/titlescreens/Super Mario World (USA).png
+assets.background: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/fanart/Super Mario World (USA).jpg
+assets.banner: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/banners/Super Mario World (USA).png
+assets.box_back: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/backcovers/Super Mario World (USA).jpg
+assets.box_spine: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/spines/Super Mario World (USA).jpg
+
+game: The Legend of Zelda - A Link to the Past (USA)
+file: /home/runner/work/_temp/px/storage/ROMs/snes/The Legend of Zelda - A Link to the Past (USA).sfc
+

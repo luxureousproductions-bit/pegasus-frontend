@@ -1,0 +1,76 @@
+[i] Pegasus X 88b2fe00 build 2078 (2026-10-31)[0m
+[i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)[0m
+[i] Qt version 5.15.3[0m
+[i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)[0m
+[i] Found locale `ar`[0m
+[i] Found locale `bs`[0m
+[i] Found locale `ca`[0m
+[i] Found locale `de`[0m
+[i] Found locale `en-GB`[0m
+[i] Found locale `en`[0m
+[i] Found locale `es`[0m
+[i] Found locale `fr`[0m
+[i] Found locale `hr`[0m
+[i] Found locale `hu`[0m
+[i] Found locale `it`[0m
+[i] Found locale `ja`[0m
+[i] Found locale `ko`[0m
+[i] Found locale `lt`[0m
+[i] Found locale `nl`[0m
+[i] Found locale `pt-BR`[0m
+[i] Found locale `ru`[0m
+[i] Found locale `sr@Latn`[0m
+[i] Found locale `sv`[0m
+[i] Found locale `zh-TW`[0m
+[i] Found locale `zh`[0m
+[i] Locale set to `en`[0m
+[i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`[0m
+[i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`[0m
+[93m[w] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`, line 11: Asset file `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/fanart/Mario Kart 64 (USA).png` doesn't seem to exist[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Finished searching in 1ms[0m
+[i] Pegasus Media: Finished searching in 0ms[0m
+[i] Steam: No installation found[0m
+[i] Steam: Finished searching in 0ms[0m
+[i] GOG: 0 games found[0m
+[i] GOG: Finished searching in 0ms[0m
+[i] EmulationStation: No installation found[0m
+[i] EmulationStation: Finished searching in 0ms[0m
+[i] Logiqx: Finished searching in 0ms[0m
+[i] Lutris: No installation found[0m
+[i] Lutris: Finished searching in 0ms[0m
+[i] Skraper Assets: 0 assets found[0m
+[i] Skraper Assets: Finished searching in 0ms[0m
+[i] Pegasus Favorites: Finished searching in 0ms[0m
+[i] Pegasus Playtime: Finished searching in 0ms[0m
+[93m[w] The collection 'GOG' has no valid games, ignored[0m
+[i] Game list post-processing took 0ms[0m
+[i] Saved game index cache[0m
+[i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)[0m
+[i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)[0m
+[i] 10 games found[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg[0m
+[i] qml: [timing] ScraperScreen.qml opened in 28 ms[0m
+[i] Scraper: Scraping 10 games into `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media` (source: launchbox, interactive: no, overwrite: no, ScreenScraper login: missing, LaunchBox database: missing)[0m
+[i] Scraper: Collection `GameCube`: system `gc`[0m
+[i] Scraper: Collection `My SNES picks`: system `?` (not a ScreenScraper system: LaunchBox and libretro only)[0m
+[i] Scraper: Collection `Nintendo 64`: system `n64`[0m
+[i] Scraper: Collection `Nintendo Game Boy Advance`: system `gba`[0m
+[i] Scraper: Collection `Nintendo SNES (Super Nintendo)`: system `snes`[0m
+[i] Scraper: Collection `Sony PlayStation`: system `psx`[0m
+[i] Metadata: `Chrono Trigger (my own file)` saved in `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`[0m
+[i] Scraper: Saving `Chrono Trigger (my own file)` (/home/runner/work/_temp/px/storage/ROMs/snes/Chrono Trigger (USA).sfc) into the metadata of `My SNES picks`: ok[0m
+[i] Metadata: `Mario Kart 64 (USA)` saved in `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`[0m
+[i] Scraper: Saving `Mario Kart 64 (USA)` (/home/runner/work/_temp/px/MyGames/Nintendo 64/Mario Kart 64 (USA).z64) into the metadata of `Nintendo 64`: ok[0m
+[i] Metadata: `Star Fox 64 (USA)` saved in `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`[0m
+[i] Scraper: Saving `Star Fox 64 (USA)` (/home/runner/work/_temp/px/MyGames/Nintendo 64/Star Fox 64 (USA).z64) into the metadata of `Nintendo 64`: ok[0m
+[i] Metadata: `Super Mario World` saved in `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`[0m
+[i] Scraper: Saving `Super Mario World` (/home/runner/work/_temp/px/storage/ROMs/snes/Super Mario World (USA).sfc) into the metadata of `Nintendo SNES (Super Nintendo)`: ok[0m
+[i] Scraper: Done: 4 saved, 6 not found, 0 failed[0m

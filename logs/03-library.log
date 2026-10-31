@@ -1,0 +1,59 @@
+2026-10-31T17:29:34 [i] Pegasus X 88b2fe00 build 2078 (2026-10-31)
+2026-10-31T17:29:34 [i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)
+2026-10-31T17:29:34 [i] Qt version 5.15.3
+2026-10-31T17:29:34 [i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)
+2026-10-31T17:29:34 [i] Found locale `ar`
+2026-10-31T17:29:34 [i] Found locale `bs`
+2026-10-31T17:29:34 [i] Found locale `ca`
+2026-10-31T17:29:34 [i] Found locale `de`
+2026-10-31T17:29:34 [i] Found locale `en-GB`
+2026-10-31T17:29:34 [i] Found locale `en`
+2026-10-31T17:29:34 [i] Found locale `es`
+2026-10-31T17:29:34 [i] Found locale `fr`
+2026-10-31T17:29:34 [i] Found locale `hr`
+2026-10-31T17:29:34 [i] Found locale `hu`
+2026-10-31T17:29:34 [i] Found locale `it`
+2026-10-31T17:29:34 [i] Found locale `ja`
+2026-10-31T17:29:34 [i] Found locale `ko`
+2026-10-31T17:29:34 [i] Found locale `lt`
+2026-10-31T17:29:34 [i] Found locale `nl`
+2026-10-31T17:29:34 [i] Found locale `pt-BR`
+2026-10-31T17:29:34 [i] Found locale `ru`
+2026-10-31T17:29:34 [i] Found locale `sr@Latn`
+2026-10-31T17:29:34 [i] Found locale `sv`
+2026-10-31T17:29:34 [i] Found locale `zh-TW`
+2026-10-31T17:29:34 [i] Found locale `zh`
+2026-10-31T17:29:34 [i] Locale set to `en`
+2026-10-31T17:29:34 [i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`
+2026-10-31T17:29:34 [i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`
+2026-10-31T17:29:34 [w] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`, line 11: Asset file `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/fanart/Mario Kart 64 (USA).png` doesn't seem to exist
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`
+2026-10-31T17:29:34 [i] Pegasus Metafiles: Finished searching in 1ms
+2026-10-31T17:29:34 [i] Pegasus Media: Finished searching in 0ms
+2026-10-31T17:29:34 [i] Steam: No installation found
+2026-10-31T17:29:34 [i] Steam: Finished searching in 0ms
+2026-10-31T17:29:34 [i] GOG: 0 games found
+2026-10-31T17:29:34 [i] GOG: Finished searching in 0ms
+2026-10-31T17:29:34 [i] EmulationStation: No installation found
+2026-10-31T17:29:34 [i] EmulationStation: Finished searching in 0ms
+2026-10-31T17:29:34 [i] Logiqx: Finished searching in 0ms
+2026-10-31T17:29:34 [i] Lutris: No installation found
+2026-10-31T17:29:34 [i] Lutris: Finished searching in 0ms
+2026-10-31T17:29:34 [i] Skraper Assets: 0 assets found
+2026-10-31T17:29:34 [i] Skraper Assets: Finished searching in 0ms
+2026-10-31T17:29:34 [i] Pegasus Favorites: Finished searching in 0ms
+2026-10-31T17:29:34 [i] Pegasus Playtime: Finished searching in 0ms
+2026-10-31T17:29:34 [w] The collection 'GOG' has no valid games, ignored
+2026-10-31T17:29:34 [i] Game list post-processing took 0ms
+2026-10-31T17:29:34 [i] Saved game index cache
+2026-10-31T17:29:34 [i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)
+2026-10-31T17:29:34 [i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)
+2026-10-31T17:29:34 [i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)
+2026-10-31T17:29:34 [i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)
+2026-10-31T17:29:34 [i] 10 games found
+2026-10-31T17:29:34 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg

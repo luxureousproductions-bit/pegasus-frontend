@@ -1,0 +1,15 @@
+# Pegasus X game directory: GameCube
+# Made from your library on 2026-10-31T17:28:46.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+
+collection: GameCube
+shortname: gc
+launch: dolphin-emu -b -e "{file.path}"
+
+game: Metroid Prime
+file: /home/runner/work/_temp/px/Pegasus/gamecube/Metroid Prime (USA).iso
+description: Written in a Pegasus metadata file.
+
+game: Wind Waker (USA)
+file: /home/runner/work/_temp/px/Pegasus/gamecube/Wind Waker (USA).iso
+

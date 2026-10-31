@@ -1,0 +1,26 @@
+[i] qml: [test] LaunchBox database: reading in
+[i] LaunchBox: Sony Playstation: 4651 games
+[i] LaunchBox: Nintendo Game Boy Advance: 2378 games
+[i] LaunchBox: Super Nintendo Entertainment System: 2964 games
+[i] LaunchBox: Nintendo GameCube: 814 games
+[i] LaunchBox: Nintendo 64: 818 games
+[i] LaunchBox: The database is ready
+[i] qml: [test] LaunchBox database: ready, 11625 games
+[i] Scraper: Scraping 1 games into `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media` (source: launchbox, interactive: no, overwrite: yes, ScreenScraper login: missing, LaunchBox database: yes)
+[i] Scraper: Collection `Nintendo SNES (Super Nintendo)`: system `snes`
+[i] qml: [test] scraping "Super Mario World" in "Nintendo SNES (Super Nintendo)": started
+[i] Scraper: Hasheous: answered 404, checksum not known
+[i] Scraper: LaunchBox: using "Super Mario World" (Super Nintendo Entertainment System, id 136)
+[i] Scraper: LaunchBox: 10 pictures to download (of 73 it lists)
+[i] Scraper: Downloaded covers (12389 KB) -> https://images.launchbox-app.com/00fb4aca-c22f-4ca9-84d0-90cf8c22d4af.png
+[i] Scraper: Downloaded 3dboxes (1342 KB) -> https://images.launchbox-app.com/26563ff1-d24d-487b-b651-5a71fbe59a8c.png
+[i] Scraper: Downloaded backcovers (1418 KB) -> https://images.launchbox-app.com/1c158bd5-22be-49d8-a0ca-895e1a206f5a.jpg
+[i] Scraper: Downloaded physicalmedia (1032 KB) -> https://images.launchbox-app.com/a4906ecc-e7dd-4bda-ab8e-b57a461794d0.png
+[i] Scraper: Downloaded screenshots (72 KB) -> https://images.launchbox-app.com/20e828d7-c019-40d5-9165-3541da89304b.png
+[i] Scraper: Downloaded titlescreens (72 KB) -> https://images.launchbox-app.com/9c67a5b7-3746-483f-bb0d-c3643c7fde6c.png
+[i] Scraper: Downloaded fanart (345 KB) -> https://images.launchbox-app.com/c00133c7-9ed6-451c-a09a-a2644546aa55.jpg
+[i] Scraper: Downloaded marquees (479 KB) -> https://images.launchbox-app.com/r2_d99d82fd-5d28-4990-bae3-1b598f9d0cc9.png
+[i] Scraper: Downloaded banners (324 KB) -> https://images.launchbox-app.com/39ba46cc-33f7-472e-9fc2-36781a4ca886.png
+[i] Scraper: Downloaded spines (33 KB) -> https://images.launchbox-app.com/dbf473bc-a534-4aa1-84c1-8de3a218c060.jpg
+[i] Scraper: Saving `Super Mario World` (/home/runner/work/_temp/px/storage/ROMs/snes/Super Mario World (USA).sfc) into the metadata of `Nintendo SNES (Super Nintendo)`: ok
+[i] Scraper: Done: 1 saved, 0 not found, 0 failed

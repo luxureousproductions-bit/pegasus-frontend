@@ -1,0 +1,94 @@
+2026-10-31T17:33:29 [i] Pegasus X 88b2fe00 build 2078 (2026-10-31)
+2026-10-31T17:33:29 [i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)
+2026-10-31T17:33:29 [i] Qt version 5.15.3
+2026-10-31T17:33:29 [i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)
+2026-10-31T17:33:29 [i] Found locale `ar`
+2026-10-31T17:33:29 [i] Found locale `bs`
+2026-10-31T17:33:29 [i] Found locale `ca`
+2026-10-31T17:33:29 [i] Found locale `de`
+2026-10-31T17:33:29 [i] Found locale `en-GB`
+2026-10-31T17:33:29 [i] Found locale `en`
+2026-10-31T17:33:29 [i] Found locale `es`
+2026-10-31T17:33:29 [i] Found locale `fr`
+2026-10-31T17:33:29 [i] Found locale `hr`
+2026-10-31T17:33:29 [i] Found locale `hu`
+2026-10-31T17:33:29 [i] Found locale `it`
+2026-10-31T17:33:29 [i] Found locale `ja`
+2026-10-31T17:33:29 [i] Found locale `ko`
+2026-10-31T17:33:29 [i] Found locale `lt`
+2026-10-31T17:33:29 [i] Found locale `nl`
+2026-10-31T17:33:29 [i] Found locale `pt-BR`
+2026-10-31T17:33:29 [i] Found locale `ru`
+2026-10-31T17:33:29 [i] Found locale `sr@Latn`
+2026-10-31T17:33:29 [i] Found locale `sv`
+2026-10-31T17:33:29 [i] Found locale `zh-TW`
+2026-10-31T17:33:29 [i] Found locale `zh`
+2026-10-31T17:33:29 [i] Locale set to `en`
+2026-10-31T17:33:29 [i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`
+2026-10-31T17:33:29 [i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`
+2026-10-31T17:33:29 [w] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`, line 11: Asset file `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/fanart/Mario Kart 64 (USA).png` doesn't seem to exist
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`
+2026-10-31T17:33:29 [i] Pegasus Metafiles: Finished searching in 1ms
+2026-10-31T17:33:29 [i] Pegasus Media: Finished searching in 0ms
+2026-10-31T17:33:29 [i] Steam: No installation found
+2026-10-31T17:33:29 [i] Steam: Finished searching in 0ms
+2026-10-31T17:33:29 [i] GOG: 0 games found
+2026-10-31T17:33:29 [i] GOG: Finished searching in 0ms
+2026-10-31T17:33:29 [i] EmulationStation: No installation found
+2026-10-31T17:33:29 [i] EmulationStation: Finished searching in 0ms
+2026-10-31T17:33:29 [i] Logiqx: Finished searching in 0ms
+2026-10-31T17:33:29 [i] Lutris: No installation found
+2026-10-31T17:33:29 [i] Lutris: Finished searching in 0ms
+2026-10-31T17:33:29 [i] Skraper Assets: 0 assets found
+2026-10-31T17:33:29 [i] Skraper Assets: Finished searching in 0ms
+2026-10-31T17:33:29 [i] Pegasus Favorites: Finished searching in 0ms
+2026-10-31T17:33:29 [i] Pegasus Playtime: Finished searching in 0ms
+2026-10-31T17:33:29 [w] The collection 'GOG' has no valid games, ignored
+2026-10-31T17:33:29 [i] Game list post-processing took 0ms
+2026-10-31T17:33:29 [i] Saved game index cache
+2026-10-31T17:33:29 [i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)
+2026-10-31T17:33:29 [i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)
+2026-10-31T17:33:29 [i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)
+2026-10-31T17:33:29 [i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)
+2026-10-31T17:33:29 [i] 10 games found
+2026-10-31T17:33:29 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg
+2026-10-31T17:33:29 [i] qml: [test] LaunchBox database: reading in
+2026-10-31T17:33:42 [i] LaunchBox: Sony Playstation: 4651 games
+2026-10-31T17:33:42 [i] LaunchBox: Nintendo Game Boy Advance: 2378 games
+2026-10-31T17:33:42 [i] LaunchBox: Super Nintendo Entertainment System: 2964 games
+2026-10-31T17:33:42 [i] LaunchBox: Nintendo GameCube: 814 games
+2026-10-31T17:33:42 [i] LaunchBox: Nintendo 64: 818 games
+2026-10-31T17:33:42 [i] LaunchBox: The database is ready
+2026-10-31T17:33:42 [i] qml: [test] LaunchBox database: ready, 11625 games
+2026-10-31T17:33:42 [i] Scraper: Scraping 1 games into `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media` (source: launchbox, interactive: no, overwrite: yes, ScreenScraper login: missing, LaunchBox database: yes)
+2026-10-31T17:33:42 [i] Scraper: Collection `Nintendo SNES (Super Nintendo)`: system `snes`
+2026-10-31T17:33:42 [i] qml: [test] scraping "Super Mario World" in "Nintendo SNES (Super Nintendo)": started
+2026-10-31T17:33:42 [i] Scraper: Hasheous: answered 404, checksum not known
+2026-10-31T17:33:42 [i] Scraper: LaunchBox: using "Super Mario World" (Super Nintendo Entertainment System, id 136)
+2026-10-31T17:33:42 [i] Scraper: LaunchBox: 10 pictures to download (of 73 it lists)
+2026-10-31T17:33:42 [i] Scraper: Downloaded covers (12389 KB) -> https://images.launchbox-app.com/00fb4aca-c22f-4ca9-84d0-90cf8c22d4af.png
+2026-10-31T17:33:43 [i] Scraper: Downloaded 3dboxes (1342 KB) -> https://images.launchbox-app.com/26563ff1-d24d-487b-b651-5a71fbe59a8c.png
+2026-10-31T17:33:43 [w] libpng warning: iCCP: known incorrect sRGB profile
+2026-10-31T17:33:43 [i] Scraper: Downloaded backcovers (1418 KB) -> https://images.launchbox-app.com/1c158bd5-22be-49d8-a0ca-895e1a206f5a.jpg
+2026-10-31T17:33:43 [i] Scraper: Downloaded physicalmedia (1032 KB) -> https://images.launchbox-app.com/a4906ecc-e7dd-4bda-ab8e-b57a461794d0.png
+2026-10-31T17:33:43 [w] libpng warning: iCCP: known incorrect sRGB profile
+2026-10-31T17:33:44 [i] Scraper: Downloaded screenshots (72 KB) -> https://images.launchbox-app.com/20e828d7-c019-40d5-9165-3541da89304b.png
+2026-10-31T17:33:44 [w] libpng warning: iCCP: known incorrect sRGB profile
+2026-10-31T17:33:44 [w] libpng warning: known incorrect sRGB profile
+2026-10-31T17:33:44 [w] libpng warning: profile matches sRGB but writing iCCP instead
+2026-10-31T17:33:44 [i] Scraper: Downloaded titlescreens (72 KB) -> https://images.launchbox-app.com/9c67a5b7-3746-483f-bb0d-c3643c7fde6c.png
+2026-10-31T17:33:44 [w] libpng warning: iCCP: known incorrect sRGB profile
+2026-10-31T17:33:44 [w] libpng warning: known incorrect sRGB profile
+2026-10-31T17:33:44 [w] libpng warning: profile matches sRGB but writing iCCP instead
+2026-10-31T17:33:44 [i] Scraper: Downloaded fanart (345 KB) -> https://images.launchbox-app.com/c00133c7-9ed6-451c-a09a-a2644546aa55.jpg
+2026-10-31T17:33:44 [i] Scraper: Downloaded marquees (479 KB) -> https://images.launchbox-app.com/r2_d99d82fd-5d28-4990-bae3-1b598f9d0cc9.png
+2026-10-31T17:33:44 [i] Scraper: Downloaded banners (324 KB) -> https://images.launchbox-app.com/39ba46cc-33f7-472e-9fc2-36781a4ca886.png
+2026-10-31T17:33:44 [i] Scraper: Downloaded spines (33 KB) -> https://images.launchbox-app.com/dbf473bc-a534-4aa1-84c1-8de3a218c060.jpg
+2026-10-31T17:33:44 [w] libpng warning: iCCP: known incorrect sRGB profile
+2026-10-31T17:33:44 [w] libpng warning: iCCP: known incorrect sRGB profile
+2026-10-31T17:33:44 [w] libpng warning: iCCP: known incorrect sRGB profile

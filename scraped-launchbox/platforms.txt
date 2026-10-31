@@ -1,0 +1,190 @@
+   387  3DO Interactive Multiplayer
+    13  APF Imagination Machine
+    10  Aamber Pegasus
+   325  Acorn Archimedes
+   102  Acorn Atom
+   515  Acorn Electron
+  3114  Amstrad CPC
+    31  Amstrad GX4000
+  1290  Android
+    70  Apogee BK-01
+  1770  Apple II
+   198  Apple IIGS
+   735  Apple Mac OS
+   324  Apple iOS
+  7205  Arcade
+    95  Arduboy
+  1298  Atari 2600
+   148  Atari 5200
+   163  Atari 7800
+  2768  Atari 800
+   129  Atari Jaguar
+    46  Atari Jaguar CD
+   162  Atari Lynx
+  2000  Atari ST
+    42  Atari XEGS
+  1518  BBC Microcomputer System
+    51  Bally Astrocade
+     7  Bandai Super Vision 8000
+    42  Camputers Lynx
+    10  Casio Loopy
+    13  Casio PV-1000
+    80  Coleco ADAM
+   578  ColecoVision
+   286  Commodore 128
+ 13949  Commodore 64
+  9702  Commodore Amiga
+   414  Commodore Amiga CD32
+   121  Commodore CDTV
+    22  Commodore MAX Machine
+   113  Commodore PET
+   497  Commodore Plus 4
+   709  Commodore VIC-20
+   355  Dragon 32/64
+    24  EACA EG2000 Colour Genie
+     1  Elektor TV Games Computer
+     4  Elektronika BK
+    62  Emerson Arcadia 2001
+    70  Enterprise
+     4  Entex Adventure Vision
+     6  Epoch Game Pocket Computer
+    29  Epoch Super Cassette Vision
+    61  Exelvision EXL 100
+    64  Exidy Sorcerer
+    46  Fairchild Channel F
+   626  Fujitsu FM Towns Marty
+   253  Fujitsu FM-7
+    12  Funtech Super Acan
+   104  GCE Vectrex
+    13  Game Wave Family Entertainment System
+    29  GamePark GP32
+    13  GameWave
+    18  Hartung Game Master
+    47  Hector HRX
+    52  Interton VC 4000
+   102  Jupiter Ace
+    18  Linux
+  7201  MS-DOS
+   123  MUGEN
+    33  Magnavox Odyssey
+    96  Magnavox Odyssey 2
+    56  Matra and Hachette Alice
+    61  Mattel Aquarius
+     5  Mattel HyperScan
+   180  Mattel Intellivision
+    38  Mega Duck
+    61  Memotech MTX512
+  1826  Microsoft MSX
+   700  Microsoft MSX2
+    40  Microsoft MSX2+
+  1143  Microsoft Xbox
+  5806  Microsoft Xbox 360
+  1293  Microsoft Xbox One
+   121  Microsoft Xbox Series X/S
+  1080  NEC PC-8801
+  2388  NEC PC-9801
+    73  NEC PC-FX
+   343  NEC TurboGrafx-16
+   446  NEC TurboGrafx-CD
+     3  Namco System 22
+  1707  Nintendo 3DS
+   818  Nintendo 64
+    13  Nintendo 64DD
+  4578  Nintendo DS
+  3861  Nintendo Entertainment System
+   270  Nintendo Famicom Disk System
+   320  Nintendo Game & Watch
+  1609  Nintendo Game Boy
+  2378  Nintendo Game Boy Advance
+  1571  Nintendo Game Boy Color
+   814  Nintendo GameCube
+    42  Nintendo Pokemon Mini
+   208  Nintendo Satellaview
+  6690  Nintendo Switch
+   217  Nintendo Switch 2
+    75  Nintendo Virtual Boy
+  2297  Nintendo Wii
+   819  Nintendo Wii U
+    74  Nokia N-Gage
+    10  Nuon
+   405  OpenBOR
+   309  Oric Atmos
+     8  Othello Multivision
+    42  Ouya
+     5  PC Engine SuperGrafx
+   323  PICO-8
+   283  Philips CD-i
+    30  Philips VG 5000
+    86  Philips Videopac+
+  2378  Pinball
+    32  Pioneer LaserActive
+    29  RCA Studio II
+    94  SAM Coupé
+   180  SNK Neo Geo AES
+   113  SNK Neo Geo CD
+    37  SNK Neo Geo MVS
+    10  SNK Neo Geo Pocket
+    84  SNK Neo Geo Pocket Color
+    34  Sammy Atomiswave
+   349  ScummVM
+    63  Sega 32X
+   232  Sega CD
+     7  Sega CD 32X
+   917  Sega Dreamcast
+    32  Sega Dreamcast VMU
+   412  Sega Game Gear
+  2170  Sega Genesis
+     6  Sega Hikaru
+   555  Sega Master System
+     4  Sega Model 1
+    35  Sega Model 2
+    29  Sega Model 3
+   154  Sega Naomi
+    21  Sega Naomi 2
+   262  Sega Pico
+    50  Sega SC-3000
+   112  Sega SG-1000
+    50  Sega ST-V
+  1195  Sega Saturn
+    39  Sega System 16
+    21  Sega System 32
+     8  Sega Triforce
+    50  Sharp MZ-2500
+   334  Sharp X1
+  1114  Sharp X68000
+  5034  Sinclair ZX Spectrum
+   153  Sinclair ZX-81
+  2045  Sony PSP
+   310  Sony PSP Minis
+  4651  Sony Playstation
+  4789  Sony Playstation 2
+  2607  Sony Playstation 3
+  4850  Sony Playstation 4
+  1056  Sony Playstation 5
+  1190  Sony Playstation Vita
+    29  Sony PocketStation
+    27  Sord M5
+    37  Spectravideo
+  2964  Super Nintendo Entertainment System
+   614  TRS-80 Color Computer
+    97  Taito Type X
+   382  Tandy TRS-80
+    10  Tapwave Zodiac
+   121  Texas Instruments TI 99/4A
+    23  Tiger Game.com
+    29  Tomy Tutor
+     7  Uzebox
+    20  VTech CreatiVision
+     8  VTech Socrates
+    57  VTech V.Smile
+     2  Vector-06C
+    14  WASM-4
+    79  Watara Supervision
+   878  Web Browser
+ 39103  Windows
+  1238  Windows 3.X
+     5  WoW Action Max
+   113  WonderSwan
+    97  WonderSwan Color
+    16  XaviXPORT
+    51  ZiNc
