@@ -65,13 +65,24 @@ jobs:
           pip install -q aqtinstall
           aqt install-tool windows desktop tools_opensslv3_x64 -O ssl || echo "::warning::tools_opensslv3_x64 couldn't be installed"
           find ssl -iname "libssl*.dll" -o -iname "libcrypto*.dll" | while read -r f; do echo "::notice::OpenSSL: $f"; done
+      # Pegasus X: the same build number as the Android build of this commit
+      # (the updater compares it with the pegasus-x-latest release's)
+      - name: Build number
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          N=$(gh run list -w android.yml -c "$GITHUB_SHA" --json number -q '.[0].number' 2>/dev/null || true)
+          [ -n "$N" ] || N="$GITHUB_RUN_NUMBER"
+          echo "PEGASUSX_RUN_NUMBER=$N" >> "$GITHUB_ENV"
+          echo "::notice::build number $((2000 + N)) (android run $N)"
       - name: Build
         shell: bash
         run: |
           set -o pipefail
           export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
           mkdir build && cd build
-          qmake ..
+          GITHUB_RUN_NUMBER="$PEGASUSX_RUN_NUMBER" qmake ..
           mingw32-make -j4 2>&1 | tee ../build.log
       - name: Report build errors
         if: failure()

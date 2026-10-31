@@ -23,9 +23,16 @@
 #ifdef Q_OS_ANDROID
 #include "platform/AndroidHelpers.h"
 #endif
+#ifdef Q_OS_WIN
+#include "utils/ZipReader.h"
+#include <QCoreApplication>
+#include <QProcess>
+#include <QTextStream>
+#endif
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -55,10 +62,20 @@ QString wanted_abi()
 
 bool can_install()
 {
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) || defined(Q_OS_WIN)
     return true;
 #else
     return false;
+#endif
+}
+// the release asset for this platform: the APK for this processor, or the
+// Windows zip
+bool wanted_asset(const QString& name)
+{
+#ifdef Q_OS_WIN
+    return name == QLatin1String("pegasus-x-windows.zip");
+#else
+    return name.endsWith(QLatin1String(".apk")) && name.contains(wanted_abi());
 #endif
 }
 } // namespace
@@ -91,7 +108,11 @@ void Updater::setState(const QString& state, const QString& error)
 
 QString Updater::apkPath() const
 {
+#ifdef Q_OS_WIN
+    return paths::writableCacheDir() + QStringLiteral("/update/pegasus-x-windows.zip");
+#else
     return paths::writableCacheDir() + QStringLiteral("/update/pegasus-x.apk");
+#endif
 }
 
 void Updater::check()
@@ -126,11 +147,10 @@ void Updater::check()
         m_latest = m.hasMatch() ? m.captured(1).toInt() : 0;
         m_url.clear();
         m_size = 0;
-        const QString abi = wanted_abi();
         for (const QJsonValue& v : release.value(QStringLiteral("assets")).toArray()) {
             const QJsonObject asset = v.toObject();
             const QString name = asset.value(QStringLiteral("name")).toString();
-            if (name.endsWith(QLatin1String(".apk")) && name.contains(abi)) {
+            if (wanted_asset(name)) {
                 m_url = asset.value(QStringLiteral("browser_download_url")).toString();
                 m_size = static_cast<qint64>(asset.value(QStringLiteral("size")).toDouble());
             }
@@ -148,7 +168,7 @@ void Updater::download()
     if (m_state != QLatin1String("available") || m_url.isEmpty())
         return;
     if (!can_install()) {
-        setState(QStringLiteral("error"), tr("Updates install on Android; get this build from the GitHub release."));
+        setState(QStringLiteral("error"), tr("Updates install on Android and Windows; get this build from the GitHub release."));
         return;
     }
     QDir().mkpath(QFileInfo(apkPath()).absolutePath());
@@ -209,6 +229,71 @@ void Updater::install()
     }
     if (!result.isEmpty())
         setState(QStringLiteral("ready"), result);
+#endif
+#ifdef Q_OS_WIN
+    // the zip unpacked next to the download; a script waits for this
+    // process to end, copies the new files over the program's folder and
+    // starts it again
+    const QString app_dir = QDir::toNativeSeparators(QCoreApplication::applicationDirPath());
+    const QString stage = QDir::cleanPath(QFileInfo(apkPath()).absolutePath() + QStringLiteral("/new"));
+    QDir(stage).removeRecursively();
+    QDir().mkpath(stage);
+    utils::ZipReader zip(apkPath());
+    if (!zip.isReadable()) {
+        setState(QStringLiteral("error"), tr("The download isn't a zip that can be read."));
+        return;
+    }
+    int files = 0;
+    for (const utils::ZipReader::Entry& entry : zip.entries()) {
+        if (entry.is_dir || entry.is_symlink)
+            continue;
+        // "pegasus-x/<file>" -> "<file>"
+        QString rel = entry.path;
+        const int slash = rel.indexOf(QLatin1Char('/'));
+        if (slash >= 0)
+            rel = rel.mid(slash + 1);
+        if (rel.isEmpty() || rel.contains(QLatin1String("..")))
+            continue;
+        const QString target = stage + QLatin1Char('/') + rel;
+        QDir().mkpath(QFileInfo(target).absolutePath());
+        QFile out(target);
+        if (!out.open(QIODevice::WriteOnly))
+            continue;
+        const bool ok = zip.extract(entry, [&out](const char* data, int len){ return out.write(data, len) == len; });
+        out.close();
+        if (ok)
+            files++;
+    }
+    if (files == 0) {
+        setState(QStringLiteral("error"), tr("Nothing could be unpacked from the download."));
+        return;
+    }
+    const QString script = QDir::toNativeSeparators(QFileInfo(apkPath()).absolutePath() + QStringLiteral("/apply-update.cmd"));
+    QFile cmd(script);
+    if (!cmd.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        setState(QStringLiteral("error"), tr("Couldn't write the update script."));
+        return;
+    }
+    {
+        QTextStream out(&cmd);
+        const qint64 pid = QCoreApplication::applicationPid();
+        out << "@echo off\r\n"
+            << "title Pegasus X update\r\n"
+            << "echo Waiting for Pegasus X to close...\r\n"
+            << ":wait\r\n"
+            << "tasklist /FI \"PID eq " << pid << "\" 2>nul | find \"" << pid << "\" >nul && (timeout /t 1 /nobreak >nul & goto wait)\r\n"
+            << "echo Installing build " << m_latest << "...\r\n"
+            << "xcopy /E /Y /I /Q \"" << QDir::toNativeSeparators(stage) << "\" \"" << app_dir << "\" >nul\r\n"
+            << "start \"\" \"" << app_dir << "\\pegasus-fe.exe\"\r\n"
+            << "exit\r\n";
+    }
+    cmd.close();
+    Log::info(LOG_TAG, LOGMSG("Update unpacked (%1 files); handing over to %2").arg(files).arg(script));
+    if (!QProcess::startDetached(QStringLiteral("cmd.exe"), { QStringLiteral("/c"), script })) {
+        setState(QStringLiteral("error"), tr("Couldn't start the update script."));
+        return;
+    }
+    QCoreApplication::quit();
 #endif
 }
 

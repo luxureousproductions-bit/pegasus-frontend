@@ -62,6 +62,7 @@ FocusScope {
         list.currentIndex = Math.min(i, Math.max(0, list.count - 1));
     }
     Component.onCompleted: {
+        openedAt = Date.now();
         refreshStatus();
         checkLogin();
         list.currentIndex = 1;
@@ -179,7 +180,12 @@ FocusScope {
         return out;
     }
 
+    // the press (or tap) that opened this screen must not land on its first
+    // row (that started a match on opening)
+    property real openedAt: 0
     function activate(row) {
+        if (Date.now() - openedAt < 600)
+            return;
         if (row.kind === "match") match(status.checked > 0 && status.checked < status.games);
         else if (row.kind === "matchall") match(false);
         else if (row.kind === "progress") refreshProgress();

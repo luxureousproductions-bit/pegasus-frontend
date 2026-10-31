@@ -145,7 +145,7 @@ FocusScope {
                             case "uptodate": return current + "\n" + qsTr("It's the newest one.") + api.tr;
                             case "available":
                                 return current + "\n" + qsTr("Build %1 is out.").arg(root.info.latest) + api.tr
-                                    + (root.info.canInstall ? "" : "\n" + qsTr("Get it from the GitHub release (updates install on Android).") + api.tr);
+                                    + (root.info.canInstall ? "" : "\n" + qsTr("Get it from the GitHub release (updates install on Android and Windows).") + api.tr);
                             case "downloading":
                                 return qsTr("Downloading build %1... %2 of %3 MB").arg(root.info.latest)
                                     .arg(root.mb(root.info.received)).arg(root.mb(root.info.size)) + api.tr;
