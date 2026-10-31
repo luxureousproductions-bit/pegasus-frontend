@@ -46,6 +46,8 @@ jobs:
 
   windows:
     runs-on: windows-2022
+    env:
+      SDL_VERSION: "2.32.10"
     permissions:
       contents: write
     steps:
@@ -76,13 +78,25 @@ jobs:
           [ -n "$N" ] || N="$GITHUB_RUN_NUMBER"
           echo "PEGASUSX_RUN_NUMBER=$N" >> "$GITHUB_ENV"
           echo "::notice::build number $((2000 + N)) (android run $N)"
+      # Pegasus X: controllers through SDL2, as upstream Pegasus does on
+      # Windows (Qt's MinGW package has no gamepad backend plugin); SDL2 also
+      # gives the battery level to themes
+      - name: SDL2 (Pegasus X)
+        shell: bash
+        run: |
+          curl -sSL "https://github.com/libsdl-org/SDL/releases/download/release-${SDL_VERSION}/SDL2-devel-${SDL_VERSION}-mingw.tar.gz" | tar xzf -
+          mv "SDL2-${SDL_VERSION}/x86_64-w64-mingw32" sdl2
+          ls sdl2/bin/SDL2.dll sdl2/include/SDL2/SDL.h
       - name: Build
         shell: bash
         run: |
           set -o pipefail
           export PATH="$IQTA_TOOLS/mingw810_64/bin:$PATH"
+          SDL="$(cd sdl2 && pwd -W)"
           mkdir build && cd build
-          GITHUB_RUN_NUMBER="$PEGASUSX_RUN_NUMBER" qmake ..
+          GITHUB_RUN_NUMBER="$PEGASUSX_RUN_NUMBER" qmake .. \
+            USE_SDL_GAMEPAD=1 USE_SDL_POWER=1 \
+            SDL_LIBS="-L$SDL/lib -lSDL2" SDL_INCLUDES="$SDL/include/SDL2"
           mingw32-make -j4 2>&1 | tee ../build.log
       - name: Report build errors
         if: failure()
@@ -106,17 +120,17 @@ jobs:
           Copy-Item $exe.FullName $out\
           $qt = $env:QT_ROOT_DIR
           $dlls = @("Qt5Core","Qt5Gui","Qt5Network","Qt5Qml","Qt5QmlModels","Qt5QmlWorkerScript","Qt5Quick","Qt5QuickShapes",
-                    "Qt5QuickParticles","Qt5QuickTemplates2","Qt5QuickControls2","Qt5Sql","Qt5Gamepad","Qt5Multimedia",
+                    "Qt5QuickParticles","Qt5QuickTemplates2","Qt5QuickControls2","Qt5Sql","Qt5Multimedia",
                     "Qt5MultimediaQuick","Qt5Svg","Qt5Concurrent","Qt5Widgets","Qt5QuickWidgets","Qt5OpenGL",
                     "libgcc_s_seh-1","libstdc++-6","libwinpthread-1","libEGL","libGLESv2","opengl32sw","d3dcompiler_47")
           foreach ($d in $dlls) { if (Test-Path "$qt\bin\$d.dll") { Copy-Item "$qt\bin\$d.dll" $out\ } else { Write-Host "::warning::no $d.dll" } }
-          foreach ($p in @("platforms","imageformats","sqldrivers","gamepads","mediaservice","audio","playlistformats","iconengines","styles")) {
+          foreach ($p in @("platforms","imageformats","sqldrivers","mediaservice","audio","playlistformats","iconengines","styles")) {
             if (Test-Path "$qt\plugins\$p") {
               New-Item -ItemType Directory -Force "$out\$p" | Out-Null
               Get-ChildItem "$qt\plugins\$p" -Filter *.dll | Copy-Item -Destination "$out\$p\"
             } else { Write-Host "::warning::no plugins\$p" }
           }
-          foreach ($m in @("QtQuick","QtQuick.2","QtQml","QtGraphicalEffects","QtMultimedia","Qt","QtGamepad","QtQuick.Timeline")) {
+          foreach ($m in @("QtQuick","QtQuick.2","QtQml","QtGraphicalEffects","QtMultimedia","Qt","QtQuick.Timeline")) {
             if (Test-Path "$qt\qml\$m") { Copy-Item -Recurse "$qt\qml\$m" "$out\$m" } else { Write-Host "::warning::no qml\$m" }
           }
           # debug copies (a Food.dll next to its Foo.dll: Qt5Cored.dll, qjpegd.dll)
@@ -126,10 +140,13 @@ jobs:
             ($_.Name -match "\.pdb$|\.prl$") -or
             ($_.Name -match "d\.dll$" -and (Test-Path (Join-Path $_.DirectoryName ($_.Name -replace "d\.dll$", ".dll"))))
           } | Remove-Item
-          foreach ($must in @("Qt5Gamepad.dll","QtGamepad\declarative_gamepad.dll")) {
-            if (-not (Test-Path "$out\$must")) { Write-Host "::error::missing $must"; exit 1 }
-          }
-          Write-Host "::notice::gamepad plugins: $((Get-ChildItem "$qt\plugins\gamepads" -ErrorAction SilentlyContinue | ForEach-Object Name) -join ', ')"
+          Copy-Item sdl2\bin\SDL2.dll $out\
+          # every DLL the program imports must be beside it (or be Windows' own)
+          $have = Get-ChildItem $out -Filter *.dll | ForEach-Object { $_.Name.ToLower() }
+          $imports = (& "$env:IQTA_TOOLS\mingw810_64\bin\objdump.exe" -p "$out\pegasus-fe.exe" | Select-String "DLL Name: (.+)" | ForEach-Object { $_.Matches[0].Groups[1].Value.ToLower() })
+          $missing = $imports | Where-Object { $have -notcontains $_ -and $_ -notmatch "^(kernel32|user32|gdi32|advapi32|shell32|ole32|oleaut32|ws2_32|msvcrt|winmm|version|imm32|setupapi|dwmapi|uxtheme|netapi32|userenv|wtsapi32|mpr|winspool|comdlg32|shlwapi|crypt32|dnsapi|iphlpapi|bcrypt|ncrypt|rpcrt4|secur32|d3d9|d3d11|dxgi|hid|api-ms-.*|ext-ms-.*)\.dll$" }
+          if ($missing) { Write-Host "::error::not packaged: $($missing -join ', ')"; exit 1 }
+          Write-Host "::notice::imports: $($imports -join ', ')"
           Write-Host "::notice::deployed: $((Get-ChildItem $out -Recurse -File).Count) files"
       - name: Package (Pegasus X)
         shell: bash
