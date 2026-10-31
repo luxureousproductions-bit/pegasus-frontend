@@ -2,7 +2,7 @@
 
 QT *= qml quick multimedia svg sql
 
-win32: LIBS += -luser32 -ladvapi32 -lole32  # ole32: WASAPI loopback (audio/LiveAudio.cpp)
+win32: LIBS += -luser32 -ladvapi32
 macx: LIBS += -framework Cocoa
 
 
@@ -13,6 +13,8 @@ else:win32:CONFIG(debug, debug|release): LIBS += "-L$${TOP_BUILDDIR}/src/backend
 else:unix: LIBS += "-L$${TOP_BUILDDIR}/src/backend/"
 
 LIBS += -lbackend
+# after libbackend: a static lib only resolves against what follows it
+win32: LIBS += -lole32  # WASAPI loopback (audio/LiveAudio.cpp)
 INCLUDEPATH += \
     "$${TOP_SRCDIR}/src" \
     "$${TOP_SRCDIR}/src/backend" \
