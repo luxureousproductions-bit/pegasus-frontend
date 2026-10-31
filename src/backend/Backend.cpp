@@ -425,7 +425,7 @@ void Backend::sessionStart()
     // the game's app never took over (a launch that failed quietly): the
     // session ends, so the controls come back
     const qint64 started = m_session.start_ms;
-    QTimer::singleShot(6000, this, [this, started]{
+    QTimer::singleShot(6000, [this, started]{
         if (m_session.open && m_session.start_ms == started && !m_session.left)
             sessionEnd(QStringLiteral("the game didn't come to the front"));
     });

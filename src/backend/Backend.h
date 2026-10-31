@@ -19,6 +19,9 @@
 
 #include "CliArgs.h"
 
+#include <QString>
+#include <QtGlobal>
+
 namespace model { class ApiObject; }
 namespace model { class Internal; }
 class FrontendLayer;
