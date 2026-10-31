@@ -28,6 +28,7 @@
 #include <mmdeviceapi.h>
 #include <audioclient.h>
 #elif defined(Q_OS_ANDROID)
+#include <QHash>
 #include <QtAndroid>
 #include <QtAndroidExtras/QAndroidJniEnvironment>
 #include <QtAndroidExtras/QAndroidJniObject>

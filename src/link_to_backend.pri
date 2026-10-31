@@ -2,7 +2,7 @@
 
 QT *= qml quick multimedia svg sql
 
-win32: LIBS += -luser32 -ladvapi32
+win32: LIBS += -luser32 -ladvapi32 -lole32  # ole32: WASAPI loopback (audio/LiveAudio.cpp)
 macx: LIBS += -framework Cocoa
 
 

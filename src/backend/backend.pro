@@ -64,4 +64,3 @@ DEFINES *= $${COMMON_DEFINES}
 include($${TOP_SRCDIR}/thirdparty/thirdparty.pri)
 
 # Pegasus X: the live audio spectrum reads Windows' output back (WASAPI)
-win32: LIBS += -lole32
