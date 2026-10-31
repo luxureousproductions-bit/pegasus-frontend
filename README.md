@@ -32,6 +32,9 @@ Pegasus is a graphical frontend for browsing your game library and launching all
 You can find downloads and platform-specific notes on the [project's website](http://pegasus-frontend.org), under *Downloads*. Documentation and configuration guides can be found [HERE](http://pegasus-frontend.org/docs/), in particular you might want to take a look on the [Getting started](http://pegasus-frontend.org/docs/user-guide/getting-started/) page.
 
 
+**Pegasus X on Windows:** unzip `pegasus-x-windows.zip` anywhere and run `pegasus-fe.exe`. Make a `config` folder next to it (or a `portable.txt`) and everything — settings, themes, metadata, scraped art — stays in that folder instead of your user profile.
+
+
 ## Building from source
 
 **Build dependencies**

@@ -105,8 +105,12 @@ bool portable_txt_present()
     // NOTE: On Android, the executable location is not generally accessible
     return false;
 #else
-    const QString path = paths::app_dir_path() + QStringLiteral("/portable.txt");
-    return QFileInfo::exists(path);
+    // portable.txt, as upstream Pegasus; Pegasus X: a `config` folder next to
+    // the program means the same (everything is kept there, nothing in the
+    // user's profile)
+    const QString app_dir = paths::app_dir_path();
+    return QFileInfo::exists(app_dir + QStringLiteral("/portable.txt"))
+        || QFileInfo(app_dir + QStringLiteral("/config")).isDir();
 #endif
 }
 
