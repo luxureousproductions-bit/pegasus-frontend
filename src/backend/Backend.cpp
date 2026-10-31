@@ -18,6 +18,7 @@
 #include "Backend.h"
 
 #include "AppSettings.h"
+#include "AudioSpectrum.h"
 #include "Log.h"
 #include "FrontendLayer.h"
 #include "ProcessLauncher.h"
@@ -101,6 +102,8 @@ void register_api_classes()
 
     // QML utilities
     qmlRegisterType<FolderListModel>("Pegasus.FolderListModel", 1, 0, "FolderListModel");
+    // Pegasus X: a music visualizer for themes
+    qmlRegisterType<AudioSpectrum>("Pegasus.Audio", 1, 0, "AudioSpectrum");
 
     // third-party
     qqsfpm::registerSorterTypes();

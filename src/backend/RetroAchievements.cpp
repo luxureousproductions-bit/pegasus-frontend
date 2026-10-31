@@ -42,10 +42,51 @@
 #include <QUrl>
 #include <QUrlQuery>
 #include <QtConcurrent/QtConcurrent>
+#include <QCoreApplication>
+#include <QElapsedTimer>
+#include <QEvent>
+#include <QThread>
+#include <QThreadPool>
 
 
 namespace {
 const QString LOG_TAG = QStringLiteral("RetroAchievements");
+
+// when you last pressed something: the hashing (heavy reads from the card)
+// pauses while you're using the menus, so they stay quick
+std::atomic<qint64> g_last_input_ms { 0 };
+QElapsedTimer& uptime()
+{
+    static QElapsedTimer timer = []{ QElapsedTimer t; t.start(); return t; }();
+    return timer;
+}
+class InputWatch : public QObject {
+public:
+    using QObject::QObject;
+    bool eventFilter(QObject* watched, QEvent* event) override
+    {
+        switch (event->type()) {
+            case QEvent::KeyPress: case QEvent::KeyRelease: case QEvent::MouseButtonPress:
+            case QEvent::TouchBegin: case QEvent::TouchUpdate: case QEvent::Wheel:
+                g_last_input_ms = uptime().elapsed();
+                break;
+            default: break;
+        }
+        return QObject::eventFilter(watched, event);
+    }
+};
+// a pool of one low-priority thread for the hashing
+QThreadPool& hash_pool()
+{
+    static QThreadPool pool;
+    static bool set = false;
+    if (!set) {
+        pool.setMaxThreadCount(1);
+        pool.setThreadPriority(QThread::LowestPriority);
+        set = true;
+    }
+    return pool;
+}
 const char* const API_BASE = "https://retroachievements.org/API/";
 const char* const MEDIA_BASE = "https://media.retroachievements.org";
 const int KEEP_DAYS = 7;
@@ -116,7 +157,11 @@ namespace scraper {
 
 RetroAchievements::RetroAchievements(QObject* parent)
     : QObject(parent)
-{}
+{
+    uptime();
+    if (QCoreApplication::instance())
+        QCoreApplication::instance()->installEventFilter(new InputWatch(this));
+}
 
 int RetroAchievements::console_for(const QString& esde_system)
 {
@@ -402,7 +447,7 @@ void RetroAchievements::hashAndMatch()
             fetchProgress([this]{ writeAll([this]{ finish(); }); });
         });
     });
-    m_hash_watcher->setFuture(QtConcurrent::run([jobs, stop, progress_count]{
+    m_hash_watcher->setFuture(QtConcurrent::run(&hash_pool(), [jobs, stop, progress_count]{
         // the lists, read once per console: hash -> game, plain title -> game
         struct Entry { int id; QString title; QString icon; int achievements; int points; };
         QHash<int, QHash<QString, Entry>> by_hash;
@@ -439,6 +484,11 @@ void RetroAchievements::hashAndMatch()
                 by_hash.insert(console, hashes);
                 by_title.insert(console, titles);
             }
+            // the menus first: no reads while you're pressing buttons, and a
+            // breath between files so the card isn't saturated
+            while (!stop->load() && uptime().elapsed() - g_last_input_ms.load() < 1500)
+                QThread::msleep(100);
+            QThread::msleep(15);
             m.hash = hash_file(console, job.path);
             const Entry* found = nullptr;
             if (!m.hash.isEmpty()) {

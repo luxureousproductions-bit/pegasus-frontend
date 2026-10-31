@@ -34,6 +34,8 @@ add_library(pegasus-backend
     LaunchBoxDb.h
     RetroAchievements.cpp
     RetroAchievements.h
+    AudioSpectrum.cpp
+    AudioSpectrum.h
     ScraperKeys.h
 )
 
@@ -65,6 +67,7 @@ target_link_libraries(pegasus-backend PUBLIC
     Qt::Svg
     SortFilterProxyModel
     rcheevos-hash
+    audiodec
 )
 
 include(PegasusCommonProps)
