@@ -59,6 +59,20 @@ private:
     void onFavoritesChanged();
     void onProcessLaunched();
     void onProcessFinished();
+
+    // Pegasus X (Android): a game's session, from its launch until Pegasus X
+    // is in front again; timed from Android's usage history when allowed
+    struct PlaySession {
+        bool open = false;
+        bool left = false;   ///< Pegasus X went out of front since the launch
+        qint64 start_ms = 0;
+        QString package;
+        QString path;
+    };
+    PlaySession m_session;
+    void sessionStart();
+    void sessionEnd(const QString& why);
+    void sessionRecover();
 };
 
 } // namespace backend

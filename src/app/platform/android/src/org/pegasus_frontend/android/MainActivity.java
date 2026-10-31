@@ -54,6 +54,11 @@ import java.util.List;
 
 public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity {
     private static Activity m_self;
+
+    // Pegasus X: for the helpers that need a Context (PlayStats)
+    public static Context context() {
+        return m_self != null ? m_self.getApplicationContext() : null;
+    }
     private static PackageManager m_pm;
     private static int m_icon_density;
 

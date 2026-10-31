@@ -82,6 +82,9 @@ signals:
 
     // user actions
     void launchGameFile(const model::GameFile*);
+    /// Pegasus X: a launch asked for while the last game still counts as
+    /// running (Android): whoever tracks it ends it first
+    void launchWhileRunning();
     void launchFailed(QString);
     void gameFileFinished(model::GameFile* const);
     void gameFileLaunched(model::GameFile* const);
@@ -114,6 +117,10 @@ private slots:
 private:
     // game launching
     model::GameFile* m_launch_game_file;
+public:
+    /// Pegasus X: the file of the game launched and not finished yet
+    model::GameFile* launchingFile() const { return m_launch_game_file; }
+private:
 
     // used to trigger re-rendering of texts on locale change
     QString emptyString() const { return QString(); }

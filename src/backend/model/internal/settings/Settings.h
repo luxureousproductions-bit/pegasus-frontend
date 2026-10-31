@@ -348,6 +348,12 @@ public:
     /// a game just played: its progress again, in the background (Auto refresh)
     void raAfterGame(model::Game* game);
 
+    // Pegasus X: play times on Android, from the usage history
+    /// Android's "Usage access" given to Pegasus X (false elsewhere)
+    Q_INVOKABLE bool playtimeUsageAccess() const;
+    /// Android's Usage access settings page
+    Q_INVOKABLE void openUsageAccess();
+
     // Pegasus X: Settings > Library's status rows
     /// { games, box, shots, details, fanart, videos, any (games missing what
     /// Complete my library fills by default), review, collections: { name: missing art },

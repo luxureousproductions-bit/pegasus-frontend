@@ -338,4 +338,37 @@ QString to_document_uri(const QString& path)
     return uri_str;
 }
 
+
+bool has_usage_access()
+{
+    QAndroidJniEnvironment jni_env;
+    const jboolean ok = QAndroidJniObject::callStaticMethod<jboolean>("org/pegasus_frontend/android/PlayStats", "hasUsageAccess", "()Z");
+    if (jni_env->ExceptionCheck()) {
+        jni_env->ExceptionClear();
+        return false;
+    }
+    return ok;
+}
+
+void open_usage_access()
+{
+    QAndroidJniEnvironment jni_env;
+    QAndroidJniObject::callStaticMethod<void>("org/pegasus_frontend/android/PlayStats", "openUsageAccess", "()V");
+    if (jni_env->ExceptionCheck())
+        jni_env->ExceptionClear();
+}
+
+qint64 foreground_millis(const QString& package_name, qint64 from_ms, qint64 to_ms)
+{
+    QAndroidJniEnvironment jni_env;
+    const QAndroidJniObject jni_pkg = QAndroidJniObject::fromString(package_name);
+    const jlong ms = QAndroidJniObject::callStaticMethod<jlong>("org/pegasus_frontend/android/PlayStats", "foregroundMillis",
+        "(Ljava/lang/String;JJ)J", jni_pkg.object<jstring>(), static_cast<jlong>(from_ms), static_cast<jlong>(to_ms));
+    if (jni_env->ExceptionCheck()) {
+        jni_env->ExceptionClear();
+        return -1;
+    }
+    return ms;
+}
+
 } // namespace android

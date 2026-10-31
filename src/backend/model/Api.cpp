@@ -89,8 +89,12 @@ void ApiObject::onGameFileSelectorRequested()
 
 void ApiObject::onGameFileLaunchRequested()
 {
-    if (m_launch_game_file)
-        return;
+    if (m_launch_game_file) {
+        // Pegasus X: the last game's session (Android) ends now
+        emit launchWhileRunning();
+        if (m_launch_game_file)
+            return;
+    }
 
     m_launch_game_file = static_cast<model::GameFile*>(QObject::sender());
     // Pegasus X: theme settings are on disk before the game takes over

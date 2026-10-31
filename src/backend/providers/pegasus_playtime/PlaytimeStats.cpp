@@ -292,6 +292,25 @@ void PlaytimeStats::onGameLaunched(model::GameFile* const gamefile)
     m_last_launch_time = QDateTime::currentDateTimeUtc();
 }
 
+namespace {
+qint64 g_next_duration = -1;
+} // namespace
+
+void PlaytimeStats::setNextDuration(qint64 seconds)
+{
+    g_next_duration = seconds;
+}
+
+void PlaytimeStats::recordSession(const QString& game_path, const QDateTime& launch_time, qint64 duration)
+{
+    if (game_path.isEmpty())
+        return;
+    QMutexLocker lock(&m_queue_guard);
+    m_pending_tasks.emplace_back(game_path, launch_time, duration);
+    if (m_active_tasks.empty())
+        start_processing();
+}
+
 void PlaytimeStats::onGameFinished(model::GameFile* const gamefile)
 {
     Q_ASSERT(gamefile);
@@ -300,7 +319,9 @@ void PlaytimeStats::onGameFinished(model::GameFile* const gamefile)
     QMutexLocker lock(&m_queue_guard);
 
     const auto now = QDateTime::currentDateTimeUtc();
-    const auto duration = m_last_launch_time.secsTo(now);
+    // Pegasus X: a measured duration when there is one
+    const auto duration = g_next_duration >= 0 ? g_next_duration : m_last_launch_time.secsTo(now);
+    g_next_duration = -1;
 
     m_pending_tasks.emplace_back(
         gamefile,
@@ -323,8 +344,10 @@ void PlaytimeStats::start_processing()
         emit startedWriting();
 
         while (!m_active_tasks.empty() || !m_active_migrations.empty()) {
-            for (const QueueEntry& entry : m_active_tasks)
-                update_modelgame(entry.gamefile, entry.launch_time, entry.duration);
+            for (const QueueEntry& entry : m_active_tasks) {
+                if (entry.gamefile)
+                    update_modelgame(entry.gamefile, entry.launch_time, entry.duration);
+            }
 
             SqliteDb channel(m_db_path);
             if (!channel.open()) {
@@ -341,15 +364,18 @@ void PlaytimeStats::start_processing()
             }
 
             for (const QueueEntry& entry : m_active_tasks) {
-                const model::Game* game = entry.gamefile->parentGame();
-                // file path as default
-                QString path = ::clean_abs_path(entry.gamefile->fileinfo());
-                // game slug overrides everything
-                if (game->hasSlug())
-                    path = SLUG_PREFIX + game->slug();
-                // otherwise use URI if provided
-                else if (entry.gamefile->hasUri())
-                    path = entry.gamefile->uri();
+                QString path = entry.path;
+                if (entry.gamefile) {
+                    const model::Game* game = entry.gamefile->parentGame();
+                    // file path as default
+                    path = ::clean_abs_path(entry.gamefile->fileinfo());
+                    // game slug overrides everything
+                    if (game->hasSlug())
+                        path = SLUG_PREFIX + game->slug();
+                    // otherwise use URI if provided
+                    else if (entry.gamefile->hasUri())
+                        path = entry.gamefile->uri();
+                }
 
                 const int path_id = get_path_id(display_name(), path);
                 if (path_id >= 0)

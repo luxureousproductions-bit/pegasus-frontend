@@ -55,5 +55,10 @@ QString to_document_uri(const QString&);
 /// Pegasus X: Android's installer for a downloaded APK (the updater): "" when
 /// it opened, "permission" when "Install unknown apps" had to be allowed first
 QString install_apk(const QString& path);
+// Pegasus X: play times from Android's usage history (PlayStats.java)
+bool has_usage_access();
+void open_usage_access();
+/// ms the package was in front between the two wall-clock times; -1 without usage access
+qint64 foreground_millis(const QString& package_name, qint64 from_ms, qint64 to_ms);
 
 } // namespace android

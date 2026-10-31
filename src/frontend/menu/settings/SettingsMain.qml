@@ -161,6 +161,14 @@ FocusScope {
             enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
+            label: QT_TR_NOOP("Accurate play times (Usage access)...")
+            desc: QT_TR_NOOP("Android counts a game as played from its launch until Pegasus X is in front again. With Usage access, Pegasus X asks Android how long the emulator was really in front instead, and a session is kept even if Pegasus X was stopped meanwhile. Opens Android's Usage access page: allow Pegasus X there.")
+            type: SettingsEntry.Type.Button
+            buttonAction: function() { Internal.settings.openUsageAccess(); }
+            section: "gaming"
+            enabled: Qt.platform.os === "android"
+        },
+        SettingsEntry {
             label: QT_TR_NOOP("RetroAchievements...")
             desc: QT_TR_NOOP("Your games found on RetroAchievements by their ROM's hash, and your progress on them. Themes read the result (game.extra[\"ra-id\"]...).")
             type: SettingsEntry.Type.Button

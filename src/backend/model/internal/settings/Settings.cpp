@@ -2293,6 +2293,22 @@ Missing missing_of(const model::Game& game)
 }
 } // namespace
 
+bool Settings::playtimeUsageAccess() const
+{
+#ifdef Q_OS_ANDROID
+    return ::android::has_usage_access();
+#else
+    return false;
+#endif
+}
+
+void Settings::openUsageAccess()
+{
+#ifdef Q_OS_ANDROID
+    ::android::open_usage_access();
+#endif
+}
+
 QVariantMap Settings::libraryStatus(QObject* collections) const
 {
     QVariantMap out;

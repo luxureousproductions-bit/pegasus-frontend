@@ -40,6 +40,14 @@ public:
     void onGameLaunched(model::GameFile* const) final;
     void onGameFinished(model::GameFile* const) final;
 
+    /// Pegasus X: how long the next finished game really ran (seconds), when
+    /// something measured it better than the clock here (Android: the
+    /// emulator's time in front); -1 clears it
+    static void setNextDuration(qint64 seconds);
+    /// Pegasus X: a session that ended while Pegasus X wasn't running
+    /// (counted and timed by the game's file path)
+    void recordSession(const QString& game_path, const QDateTime& launch_time, qint64 duration);
+
 signals:
     void startedWriting();
     void finishedWriting();
@@ -50,12 +58,19 @@ private:
     QDateTime m_last_launch_time;
 
     struct QueueEntry {
-        model::GameFile* const gamefile;
+        model::GameFile* const gamefile;  ///< null for a session recorded by path alone
+        const QString path;               ///< the stats path, when there's no game file
         const QDateTime launch_time;
         const qint64 duration;
 
         QueueEntry(model::GameFile* const gamefile, QDateTime launch_time, qint64 duration)
             : gamefile(std::move(gamefile))
+            , launch_time(std::move(launch_time))
+            , duration(std::move(duration))
+        {}
+        QueueEntry(QString path, QDateTime launch_time, qint64 duration)
+            : gamefile(nullptr)
+            , path(std::move(path))
             , launch_time(std::move(launch_time))
             , duration(std::move(duration))
         {}

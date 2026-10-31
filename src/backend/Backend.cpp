@@ -44,8 +44,18 @@
 #include "SortFilterProxyModel/proxyroles/proxyrolesqmltypes.h"
 #include "SortFilterProxyModel/sorters/sortersqmltypes.h"
 
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QGuiApplication>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QQmlEngine>
+#include <QFileInfo>
+#include <QRegularExpression>
+#include <QTimer>
+#include "providers/pegasus_playtime/PlaytimeStats.h"
+#include "utils/PathTools.h"
 
 #if defined(WITH_SDL_GAMEPAD) || defined(WITH_SDL_POWER)
 #include <SDL.h>
@@ -222,6 +232,23 @@ Backend::Backend(const CliArgs& args)
 
     QObject::connect(m_launcher, &ProcessLauncher::processFinished,
                      [this](){ onProcessFinished(); });
+#ifdef Q_OS_ANDROID
+    // Pegasus X: back in front after a game: the session ends
+    QObject::connect(qApp, &QGuiApplication::applicationStateChanged, [this](Qt::ApplicationState state){
+        if (!m_session.open)
+            return;
+        if (state != Qt::ApplicationActive)
+            m_session.left = true;
+        else if (m_session.left && QDateTime::currentMSecsSinceEpoch() - m_session.start_ms > 1500)
+            sessionEnd(QStringLiteral("Pegasus X in front again"));
+    });
+    // a game launched while the last one's session is still open (its app
+    // never came to the front, or you came back another way): that one ends
+    QObject::connect(m_api_public, &model::ApiObject::launchWhileRunning, [this](){
+        if (m_session.open)
+            sessionEnd(QStringLiteral("another game launched"));
+    });
+#endif
 
     // Setting changes
     QObject::connect(m_api_private->settings().localesPtr(), &model::Locales::localeChanged,
@@ -262,6 +289,7 @@ Backend::Backend(const CliArgs& args)
 void Backend::start()
 {
     m_api_private->settings().postInit();
+    sessionRecover();
     onProcessFinished();
     onScanRequested(AppSettings::general.scan_on_launch);
 }
@@ -320,7 +348,9 @@ void Backend::onProcessLaunched()
     // If Android needs the memory it can still stop Pegasus, which then
     // starts fresh as before.
     m_api_private->gamepad().stop();
-    QMetaObject::invokeMethod(m_launcher, &ProcessLauncher::onTeardownComplete, Qt::QueuedConnection);
+    // the game counts as finished when Pegasus X is in front again
+    // (sessionEnd), not now
+    sessionStart();
 #else
     m_frontend->teardown();
     m_api_private->gamepad().stop();
@@ -332,6 +362,128 @@ void Backend::onProcessFinished()
     if (!m_frontend->isLoaded())
         m_frontend->rebuild();
     m_api_private->gamepad().start(m_args);
+}
+
+// -- Pegasus X: play sessions on Android ---------------------------------------------
+//
+// An Android launch returns at once (the emulator is another app), so the
+// session runs until Pegasus X's window is in front again. Its length is
+// the emulator's time in front according to Android's usage history (with
+// Usage access), else the time until the return. The session is kept in a
+// file meanwhile: if Android stops Pegasus X while the game runs, the next
+// start still records it.
+
+namespace {
+QString session_file()
+{
+    return paths::writableConfigDir() + QStringLiteral("/metadata/playing.json");
+}
+// the emulator's package from an "am start" command (-n pkg/cls, -p pkg,
+// or the first pkg/ cls)
+QString package_of(const QString& command)
+{
+    static const QRegularExpression rx_n(QStringLiteral("(?:^|\\s)-(?:n|p)\\s+\"?([A-Za-z0-9_.]+)"));
+    const QRegularExpressionMatch m = rx_n.match(command);
+    if (m.hasMatch())
+        return m.captured(1);
+    static const QRegularExpression rx_any(QStringLiteral("([A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+)/"));
+    const QRegularExpressionMatch m2 = rx_any.match(command);
+    return m2.hasMatch() ? m2.captured(1) : QString();
+}
+providers::playtime::PlaytimeStats* playtime_provider()
+{
+    for (const auto& provider : AppSettings::providers()) {
+        if (auto* const p = dynamic_cast<providers::playtime::PlaytimeStats*>(provider.get()))
+            return p;
+    }
+    return nullptr;
+}
+} // namespace
+
+void Backend::sessionStart()
+{
+#ifdef Q_OS_ANDROID
+    const model::GameFile* const file = m_api_public->launchingFile();
+    if (!file)
+        return;
+    m_session.open = true;
+    m_session.left = false;
+    m_session.start_ms = QDateTime::currentMSecsSinceEpoch();
+    m_session.path = file->path();
+    m_session.package = file->parentGame() ? package_of(file->parentGame()->launchCmd()) : QString();
+    QDir().mkpath(QFileInfo(session_file()).absolutePath());
+    QFile f(session_file());
+    if (f.open(QIODevice::WriteOnly)) {
+        f.write(QJsonDocument(QJsonObject {
+            { QStringLiteral("path"), m_session.path },
+            { QStringLiteral("package"), m_session.package },
+            { QStringLiteral("start"), static_cast<double>(m_session.start_ms) },
+            { QStringLiteral("statsPath"), file->hasUri() ? file->uri() : ::clean_abs_path(file->fileinfo()) },
+        }).toJson(QJsonDocument::Compact));
+    }
+    Log::info(LOGMSG("Play session: `%1` (%2) started").arg(m_session.path, m_session.package.isEmpty() ? QStringLiteral("?") : m_session.package));
+    // the game's app never took over (a launch that failed quietly): the
+    // session ends, so the controls come back
+    const qint64 started = m_session.start_ms;
+    QTimer::singleShot(6000, this, [this, started]{
+        if (m_session.open && m_session.start_ms == started && !m_session.left)
+            sessionEnd(QStringLiteral("the game didn't come to the front"));
+    });
+#endif
+}
+
+void Backend::sessionEnd(const QString& why)
+{
+#ifdef Q_OS_ANDROID
+    if (!m_session.open)
+        return;
+    m_session.open = false;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    qint64 seconds = (now - m_session.start_ms) / 1000;
+    QString how = QStringLiteral("until the return");
+    if (!m_session.package.isEmpty()) {
+        const qint64 in_front = android::foreground_millis(m_session.package, m_session.start_ms, now);
+        if (in_front >= 0) {
+            seconds = in_front / 1000;
+            how = QStringLiteral("in front (usage history)");
+        }
+    }
+    QFile::remove(session_file());
+    Log::info(LOGMSG("Play session: `%1` ended (%2): %3 s %4").arg(m_session.path, why).arg(seconds).arg(how));
+    providers::playtime::PlaytimeStats::setNextDuration(seconds);
+    m_launcher->onTeardownComplete();  // processFinished: the game is finished for everyone
+#else
+    Q_UNUSED(why);
+#endif
+}
+
+// a session left by a Pegasus X that was stopped while the game ran
+void Backend::sessionRecover()
+{
+#ifdef Q_OS_ANDROID
+    QFile f(session_file());
+    if (!f.open(QIODevice::ReadOnly))
+        return;
+    const QJsonObject s = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+    QFile::remove(session_file());
+    const qint64 start = static_cast<qint64>(s.value(QStringLiteral("start")).toDouble());
+    const QString package = s.value(QStringLiteral("package")).toString();
+    const QString stats_path = s.value(QStringLiteral("statsPath")).toString();
+    if (start <= 0 || stats_path.isEmpty())
+        return;
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // its time in front, when Android can say; else only the launch counts
+    qint64 seconds = 0;
+    if (!package.isEmpty()) {
+        const qint64 in_front = android::foreground_millis(package, start, now);
+        if (in_front >= 0)
+            seconds = in_front / 1000;
+    }
+    Log::info(LOGMSG("Play session: `%1` ended while Pegasus X wasn't running: %2 s recorded").arg(stats_path).arg(seconds));
+    if (auto* const playtime = playtime_provider())
+        playtime->recordSession(stats_path, QDateTime::fromMSecsSinceEpoch(start, Qt::UTC), seconds);
+#endif
 }
 
 } // namespace backend
