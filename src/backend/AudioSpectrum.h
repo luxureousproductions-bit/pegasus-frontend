@@ -17,6 +17,8 @@
 #pragma once
 
 #include <QElapsedTimer>
+#include "audio/SpectrumMath.h"
+
 #include <QFutureWatcher>
 #include <QObject>
 #include <QString>
@@ -26,6 +28,8 @@
 #include <QVector>
 #include <memory>
 #include <vector>
+
+namespace audio { class LiveSource; }
 
 
 // Pegasus X: a music visualizer for themes.
@@ -39,6 +43,13 @@
 //         playing: music.playbackState === Audio.PlayingState
 //         bands: 32                   // bars, from the bass up
 //     }
+//
+// or, for whatever the device is playing right now (video previews,
+// emulators, anything): `live: true` instead of source/position/playing.
+// Windows reads its output back (WASAPI loopback), Linux the output's
+// monitor device (PulseAudio / PipeWire), Android the output mix (it asks
+// for the microphone permission once: that's what Android requires to
+// listen to the mix). `liveStatus` says "capturing" or why not.
 //     Repeater { model: spectrum.bands; Rectangle { height: 100 * spectrum.levels[index] } }
 //
 // `levels` is a list of `bands` numbers between 0 and 1, updated `fps`
@@ -61,6 +72,8 @@ class AudioSpectrum : public QObject {
     Q_PROPERTY(bool decoding READ decoding NOTIFY readyChanged)
     Q_PROPERTY(QString error READ error NOTIFY readyChanged)
     Q_PROPERTY(int duration READ duration NOTIFY readyChanged)
+    Q_PROPERTY(bool live READ live WRITE setLive NOTIFY liveChanged)
+    Q_PROPERTY(QString liveStatus READ liveStatus NOTIFY liveChanged)
 
 public:
     explicit AudioSpectrum(QObject* parent = nullptr);
@@ -86,6 +99,9 @@ public:
     bool decoding() const { return m_decoding; }
     QString error() const { return m_error; }
     int duration() const { return m_analysis ? m_analysis->duration_ms : 0; }
+    bool live() const { return m_live; }
+    void setLive(bool);
+    QString liveStatus() const { return m_live_status; }
 
     /// the frames of a file: `bands` levels every 1000/fps ms
     struct Analysis {
@@ -106,6 +122,7 @@ signals:
     void gainChanged();
     void levelsChanged();
     void readyChanged();
+    void liveChanged();
 
 private:
     QUrl m_source;
@@ -124,7 +141,18 @@ private:
     QTimer m_tick;
     QElapsedTimer m_since_position;  ///< time since the player last said where it is
     int m_run = 0;
+    bool m_live = false;
+    QString m_live_status = QStringLiteral("off");
+    audio::LiveSource* m_live_source = nullptr;
+    QTimer m_live_tick;
+    std::vector<float> m_live_block;
+    std::unique_ptr<spectrum::Analyzer> m_live_analyzer;
+    int m_live_rate = 0;
+    spectrum::Bands m_live_bins;   ///< Android: which of Android's bins make a band
+    float m_live_bin_hz = 0.f;
 
+    void liveTick();
+    void applyLevels(const float* target);
     void analyze();
     void tick();
     void showFrame(int ms);

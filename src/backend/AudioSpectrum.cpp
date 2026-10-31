@@ -17,6 +17,7 @@
 #include "AudioSpectrum.h"
 
 #include "Log.h"
+#include "audio/LiveAudio.h"
 
 #define MINIMP3_FLOAT_OUTPUT
 #include "minimp3_ex.h"
@@ -33,10 +34,7 @@
 
 namespace {
 const QString LOG_TAG = QStringLiteral("AudioSpectrum");
-const int FFT_SIZE = 2048;
-const float PI_F = 3.14159265358979f;
-const float LOW_HZ = 40.f;
-const float HIGH_HZ = 16000.f;
+using spectrum::FFT_SIZE;
 
 struct Pcm {
     std::vector<float> mono;  ///< -1..1
@@ -126,34 +124,6 @@ Pcm decode(const QString& path)
     return out;
 }
 
-// in place, radix-2
-void fft(std::vector<std::complex<float>>& a)
-{
-    const size_t n = a.size();
-    for (size_t i = 1, j = 0; i < n; i++) {
-        size_t bit = n >> 1;
-        for (; j & bit; bit >>= 1)
-            j ^= bit;
-        j ^= bit;
-        if (i < j)
-            std::swap(a[i], a[j]);
-    }
-    for (size_t len = 2; len <= n; len <<= 1) {
-        const float ang = -2.f * PI_F / static_cast<float>(len);
-        const std::complex<float> wlen(std::cos(ang), std::sin(ang));
-        for (size_t i = 0; i < n; i += len) {
-            std::complex<float> w(1.f, 0.f);
-            for (size_t j = 0; j < len / 2; j++) {
-                const std::complex<float> u = a[i + j];
-                const std::complex<float> v = a[i + j + len / 2] * w;
-                a[i + j] = u + v;
-                a[i + j + len / 2] = u - v;
-                w *= wlen;
-            }
-        }
-    }
-}
-
 // the levels of every frame: an FFT every 1000/fps ms, its bins gathered
 // into log-spaced bands, in dB scaled to 0..1
 std::shared_ptr<AudioSpectrum::Analysis> analyze_pcm(const Pcm& pcm, int bands, int fps)
@@ -168,45 +138,17 @@ std::shared_ptr<AudioSpectrum::Analysis> analyze_pcm(const Pcm& pcm, int bands, 
     out->duration_ms = static_cast<int>(pcm.mono.size() * 1000 / static_cast<size_t>(pcm.rate));
     const size_t hop = static_cast<size_t>(pcm.rate) / static_cast<size_t>(fps);
     const size_t n_frames = pcm.mono.size() / hop + 1;
-    // which bins each band takes (log spaced between LOW_HZ and HIGH_HZ)
-    std::vector<int> band_lo(static_cast<size_t>(bands)), band_hi(static_cast<size_t>(bands));
-    const float bin_hz = static_cast<float>(pcm.rate) / FFT_SIZE;
-    for (int b = 0; b < bands; b++) {
-        const float f0 = LOW_HZ * std::pow(HIGH_HZ / LOW_HZ, static_cast<float>(b) / bands);
-        const float f1 = LOW_HZ * std::pow(HIGH_HZ / LOW_HZ, static_cast<float>(b + 1) / bands);
-        int lo = static_cast<int>(f0 / bin_hz);
-        int hi = static_cast<int>(f1 / bin_hz);
-        if (hi <= lo) hi = lo + 1;
-        if (hi > FFT_SIZE / 2) hi = FFT_SIZE / 2;
-        if (lo >= FFT_SIZE / 2) lo = FFT_SIZE / 2 - 1;
-        band_lo[static_cast<size_t>(b)] = lo;
-        band_hi[static_cast<size_t>(b)] = hi;
-    }
-    std::vector<float> window(FFT_SIZE);
-    for (int i = 0; i < FFT_SIZE; i++)
-        window[static_cast<size_t>(i)] = 0.5f * (1.f - std::cos(2.f * PI_F * i / (FFT_SIZE - 1)));
+    spectrum::Analyzer analyzer;
+    analyzer.init(pcm.rate, bands);
     out->frames.assign(n_frames * static_cast<size_t>(bands), 0.f);
-    std::vector<std::complex<float>> buf(FFT_SIZE);
+    std::vector<float> block(FFT_SIZE);
     for (size_t f = 0; f < n_frames; f++) {
         const size_t start = f * hop;
         for (int i = 0; i < FFT_SIZE; i++) {
             const size_t at = start + static_cast<size_t>(i);
-            buf[static_cast<size_t>(i)] = at < pcm.mono.size() ? pcm.mono[at] * window[static_cast<size_t>(i)] : 0.f;
+            block[static_cast<size_t>(i)] = at < pcm.mono.size() ? pcm.mono[at] : 0.f;
         }
-        fft(buf);
-        for (int b = 0; b < bands; b++) {
-            float sum = 0.f;
-            const int lo = band_lo[static_cast<size_t>(b)], hi = band_hi[static_cast<size_t>(b)];
-            for (int k = lo; k < hi; k++)
-                sum += std::norm(buf[static_cast<size_t>(k)]);
-            const float power = sum / static_cast<float>(hi - lo) / (FFT_SIZE * FFT_SIZE / 16.f);
-            // -60 dB .. 0 dB -> 0..1
-            const float db = 10.f * std::log10(power + 1e-12f);
-            float level = (db + 60.f) / 60.f;
-            if (level < 0.f) level = 0.f;
-            if (level > 1.f) level = 1.f;
-            out->frames[f * static_cast<size_t>(bands) + static_cast<size_t>(b)] = level;
-        }
+        analyzer.levels(block.data(), &out->frames[f * static_cast<size_t>(bands)]);
     }
     return out;
 }
@@ -219,11 +161,106 @@ AudioSpectrum::AudioSpectrum(QObject* parent)
     m_levels.fill(0.f, m_bands);
     m_tick.setInterval(1000 / m_fps);
     connect(&m_tick, &QTimer::timeout, this, &AudioSpectrum::tick);
+    m_live_tick.setInterval(1000 / m_fps);
+    connect(&m_live_tick, &QTimer::timeout, this, &AudioSpectrum::liveTick);
 }
 
 AudioSpectrum::~AudioSpectrum()
 {
     m_run++;
+    if (m_live_source)
+        m_live_source->stop();
+}
+
+// -- live: the device's output ------------------------------------------------------
+
+void AudioSpectrum::setLive(bool on)
+{
+    if (on == m_live)
+        return;
+    m_live = on;
+    if (on) {
+        m_tick.stop();
+        if (!m_live_source)
+            m_live_source = audio::make_live_source(this);
+        const bool ok = m_live_source->start();
+        m_live_status = m_live_source->status();
+        m_live_rate = 0;
+        if (ok)
+            m_live_tick.start();
+        else
+            zero();
+    }
+    else {
+        m_live_tick.stop();
+        if (m_live_source)
+            m_live_source->stop();
+        m_live_status = QStringLiteral("off");
+        zero();
+        if (m_playing)
+            m_tick.start();
+    }
+    emit liveChanged();
+}
+
+void AudioSpectrum::liveTick()
+{
+    if (!m_live_source)
+        return;
+    std::vector<float> target(static_cast<size_t>(m_bands), 0.f);
+    if (m_live_source->givesBins()) {
+        // Android: its FFT's magnitudes, gathered into the bands
+        float bin_hz = 0.f;
+        const std::vector<float> bins = m_live_source->bins(bin_hz);
+        if (bins.size() < 4 || bin_hz <= 0.f) {
+            applyLevels(target.data());
+            return;
+        }
+        if (!qFuzzyCompare(bin_hz, m_live_bin_hz) || m_live_bins.lo.size() != static_cast<size_t>(m_bands)) {
+            m_live_bins.init(m_bands, bin_hz, static_cast<int>(bins.size()));
+            m_live_bin_hz = bin_hz;
+        }
+        for (int b = 0; b < m_bands; b++) {
+            float sum = 0.f;
+            const int lo = m_live_bins.lo[static_cast<size_t>(b)], hi = m_live_bins.hi[static_cast<size_t>(b)];
+            for (int k = lo; k < hi; k++)
+                sum += bins[static_cast<size_t>(k)] * bins[static_cast<size_t>(k)];
+            // magnitudes are 0..~1 already: the same dB scale as the files
+            target[static_cast<size_t>(b)] = spectrum::db_level(sum / static_cast<float>(hi - lo) * 4.f);
+        }
+        applyLevels(target.data());
+        return;
+    }
+    const int rate = m_live_source->rate();
+    if (rate <= 0) {
+        applyLevels(target.data());
+        return;
+    }
+    if (rate != m_live_rate || !m_live_analyzer || m_live_analyzer->bands() != m_bands) {
+        m_live_analyzer.reset(new spectrum::Analyzer());
+        m_live_analyzer->init(rate, m_bands);
+        m_live_rate = rate;
+        m_live_block.assign(FFT_SIZE, 0.f);
+    }
+    m_live_source->latest(m_live_block.data(), FFT_SIZE);
+    m_live_analyzer->levels(m_live_block.data(), target.data());
+    applyLevels(target.data());
+}
+
+// the levels towards their targets (quick up, smooth down), with the gain
+void AudioSpectrum::applyLevels(const float* target)
+{
+    const float keep = static_cast<float>(m_smoothing);
+    float peak = 0.f;
+    for (int b = 0; b < m_bands; b++) {
+        float t = target[b] * static_cast<float>(m_gain);
+        if (t > 1.f) t = 1.f;
+        float& now = m_levels[b];
+        now = t > now ? t : now * keep + t * (1.f - keep);
+        if (now > peak) peak = now;
+    }
+    m_peak = peak;
+    emit levelsChanged();
 }
 
 void AudioSpectrum::setSource(const QUrl& url)
@@ -254,6 +291,7 @@ void AudioSpectrum::setFps(int n)
         return;
     m_fps = n;
     m_tick.setInterval(1000 / m_fps);
+    m_live_tick.setInterval(1000 / m_fps);
     emit fpsChanged();
     analyze();
 }
@@ -281,7 +319,7 @@ void AudioSpectrum::setPosition(int ms)
     m_position = ms;
     m_since_position.restart();
     emit positionChanged();
-    if (!m_playing)
+    if (!m_playing && !m_live)
         showFrame(ms);
 }
 
@@ -291,6 +329,8 @@ void AudioSpectrum::setPlaying(bool on)
         return;
     m_playing = on;
     emit playingChanged();
+    if (m_live)
+        return;  // the live source drives the levels
     if (on) {
         m_since_position.restart();
         m_tick.start();
@@ -378,17 +418,5 @@ void AudioSpectrum::showFrame(int ms)
     const size_t n_frames = m_analysis->frames.size() / static_cast<size_t>(m_bands);
     if (frame >= n_frames)
         frame = n_frames - 1;
-    const float* src = &m_analysis->frames[frame * static_cast<size_t>(m_bands)];
-    const float keep = static_cast<float>(m_smoothing);
-    float peak = 0.f;
-    for (int b = 0; b < m_bands; b++) {
-        float target = src[b] * static_cast<float>(m_gain);
-        if (target > 1.f) target = 1.f;
-        float& now = m_levels[b];
-        // quick up, smooth down
-        now = target > now ? target : now * keep + target * (1.f - keep);
-        if (now > peak) peak = now;
-    }
-    m_peak = peak;
-    emit levelsChanged();
+    applyLevels(&m_analysis->frames[frame * static_cast<size_t>(m_bands)]);
 }

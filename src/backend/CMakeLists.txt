@@ -36,6 +36,9 @@ add_library(pegasus-backend
     RetroAchievements.h
     AudioSpectrum.cpp
     AudioSpectrum.h
+    audio/LiveAudio.cpp
+    audio/LiveAudio.h
+    audio/SpectrumMath.h
     ScraperKeys.h
 )
 
@@ -112,3 +115,7 @@ pegasus_print_box(
     TITLE "Backend Settings"
     CONTENT "${BOX_LINES}"
 )
+
+if(WIN32)
+    target_link_libraries(pegasus-backend PUBLIC ole32)
+endif()

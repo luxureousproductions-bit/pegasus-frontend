@@ -1,6 +1,6 @@
 TEMPLATE = lib
 
-QT += qml quick sql
+QT += qml quick sql multimedia
 CONFIG += c++11 staticlib warn_on exceptions_off
 android: QT += androidextras
 
@@ -28,6 +28,7 @@ SOURCES += \
     LaunchBoxDb.cpp \
     RetroAchievements.cpp \
     AudioSpectrum.cpp \
+    audio/LiveAudio.cpp \
 
 HEADERS += \
     Backend.h \
@@ -46,6 +47,8 @@ HEADERS += \
     LaunchBoxDb.h \
     RetroAchievements.h \
     AudioSpectrum.h \
+    audio/LiveAudio.h \
+    audio/SpectrumMath.h \
     ScraperKeys.h \
 
 include(imggen/imggen.pri)
@@ -59,3 +62,6 @@ include(utils/utils.pri)
 DEFINES *= $${COMMON_DEFINES}
 
 include($${TOP_SRCDIR}/thirdparty/thirdparty.pri)
+
+# Pegasus X: the live audio spectrum reads Windows' output back (WASAPI)
+win32: LIBS += -lole32
