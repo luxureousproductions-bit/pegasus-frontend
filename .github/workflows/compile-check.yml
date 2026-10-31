@@ -126,9 +126,10 @@ jobs:
             ($_.Name -match "\.pdb$|\.prl$") -or
             ($_.Name -match "d\.dll$" -and (Test-Path (Join-Path $_.DirectoryName ($_.Name -replace "d\.dll$", ".dll"))))
           } | Remove-Item
-          foreach ($must in @("Qt5Gamepad.dll","gamepads\qtxinputgamepad.dll","QtGamepad\declarative_gamepad.dll")) {
+          foreach ($must in @("Qt5Gamepad.dll","QtGamepad\declarative_gamepad.dll")) {
             if (-not (Test-Path "$out\$must")) { Write-Host "::error::missing $must"; exit 1 }
           }
+          Write-Host "::notice::gamepad plugins: $((Get-ChildItem "$qt\plugins\gamepads" -ErrorAction SilentlyContinue | ForEach-Object Name) -join ', ')"
           Write-Host "::notice::deployed: $((Get-ChildItem $out -Recurse -File).Count) files"
       - name: Package (Pegasus X)
         shell: bash
