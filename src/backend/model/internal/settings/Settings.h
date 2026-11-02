@@ -335,6 +335,18 @@ public:
     Q_INVOKABLE QString raRefreshProgress(QObject* collections);
     /// one game, hashed and looked up again
     Q_INVOKABLE QString raCheckGame(QObject* game, const QString& collection_name);
+    /// matches one collection's games (picks made by hand are kept)
+    Q_INVOKABLE QString raMatchCollection(QObject* collections, const QString& collection_name);
+    /// picking a game by hand: makes sure its console's list is here,
+    /// then raListReady(error) (empty error: raCandidates can be asked)
+    Q_INVOKABLE void raLoadList(QObject* game, const QString& collection_name);
+    /// the console's games looking like `query`, best first: [{ id, title, achievements, points, icon }]
+    Q_INVOKABLE QVariantList raCandidates(QObject* game, const QString& collection_name, const QString& query) const;
+    /// saves a game picked by hand ({ id, title, achievements, points }; id 0:
+    /// not on RetroAchievements), kept by every later match; shows at once
+    Q_INVOKABLE QString raSetMatch(QObject* game, const QString& collection_name, const QVariantMap& pick);
+    /// the RA console id of a game in a collection (0: none)
+    Q_INVOKABLE int raConsoleOf(QObject* game, const QString& collection_name) const;
     Q_INVOKABLE void raStop();
     /// the cached game lists removed (downloaded again on the next match)
     Q_INVOKABLE void raForgetLists();
@@ -411,6 +423,9 @@ public:
     /// Every genre used in the library, A to Z
     Q_INVOKABLE QStringList libraryGenres(QObject* all_games) const;
     Q_INVOKABLE QStringList libraryValues(QObject* all_games, const QString& field) const;
+    /// every word in the library (titles, descriptions, names, genres), the
+    /// most used first: the keyboard's word suggestions (read once per library)
+    Q_INVOKABLE QStringList libraryWords(QObject* all_games);
     /// Reads the games again from the cache (quick), applying the changes
     Q_INVOKABLE void reloadLibrary();
     /// Settings' "Reload all games": scans again and lands on the theme
@@ -462,6 +477,7 @@ signals:
     void raProgress(QVariantMap state);
     void raFinished(QVariantMap result);
     void raLoginChecked(QVariantMap result);
+    void raListReady(QString error);
     void libraryHousekeepingReady(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
     void collectionDetailsReady(QString collection, QVariantMap details);
@@ -477,6 +493,8 @@ signals:
     void lastBrowseFolderChanged();
 
 private:
+    QStringList m_words;       ///< libraryWords, for this many games:
+    int m_words_games = -1;
     bool m_esde_import_running = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
@@ -485,7 +503,8 @@ private:
     scraper::RetroAchievements* m_ra = nullptr;
     bool m_ra_quiet = false;  ///< a run after a game: no library read when it's done
     scraper::RetroAchievements& ra();
-    QString raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection);
+    QString raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection,
+                    const QString& only_collection = QString());
     QPointer<model::Game> m_single_game;
     QHash<QString, QPointer<model::Game>> m_scrape_games;  ///< the games of the run, by path (updated in place when saved)
     int m_scrape_unapplied = 0;                            ///< saved games no longer loaded (a read is needed)

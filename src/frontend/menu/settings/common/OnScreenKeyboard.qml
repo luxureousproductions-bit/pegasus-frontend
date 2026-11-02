@@ -39,7 +39,8 @@ import QtQuick 2.6
 // appear in a row above the keys, a few at a time: up from the top row goes
 // to them, left/right picks, A puts it in. With `suggestionSep` ("," or
 // "\n") the text is a list, and only the item the cursor is on is matched
-// and replaced; without it the whole text is.
+// and replaced; with "word" only the word the cursor is in (`suggestions`
+// then being words, the most used first); without it the whole text is.
 FocusScope {
     id: root
 
@@ -47,7 +48,7 @@ FocusScope {
     property bool multiLine: false   // an Enter key next to the space bar
     property bool allowClipboard: true
     property var suggestions: []     // words to offer (strings)
-    property string suggestionSep: ""  // "" whole text, "," or "\n" a list
+    property string suggestionSep: ""  // "" whole text, "," or "\n" a list, "word" the word typed
     signal done
     signal leaveUp                   // the d-pad went up from the top row
     signal leaveDown                 // ... down from the bottom row
@@ -320,14 +321,36 @@ FocusScope {
     // -- Suggestions ---------------------------------------------------------------------
 
     // what's typed: the whole text, or the list item the cursor is on
+    // letters (accented too), digits, and ' or - inside a word
+    readonly property var wordRx: new RegExp("[\\w\\u00C0-\\u024F'\\-]")
+    function wordChar(ch) {
+        return ch !== undefined && ch !== "" && wordRx.test(ch);
+    }
     function termBounds() {
         var t = target ? target.text : "";
         var c = target ? target.cursorPosition : 0;
         if (suggestionSep === "")
             return { "start": 0, "end": t.length };
+        if (suggestionSep === "word") {
+            var ws = c, we = c;
+            while (ws > 0 && wordChar(t.charAt(ws - 1))) ws--;
+            while (we < t.length && wordChar(t.charAt(we))) we++;
+            return { "start": ws, "end": we };
+        }
         var start = t.lastIndexOf(suggestionSep, c - 1) + 1;
         var end = t.indexOf(suggestionSep, c);
         return { "start": start, "end": end < 0 ? t.length : end };
+    }
+
+    // a suggested word written the way it's being typed: "Mar" -> "Mario",
+    // "MAR" -> "MARIO", "mar" keeps the word's own ("Mario", "march")
+    function caseLike(word, typed) {
+        if (typed.length > 1 && typed === typed.toUpperCase() && typed !== typed.toLowerCase())
+            return word.toUpperCase();
+        var first = typed.charAt(0);
+        if (first !== first.toLowerCase())
+            return word.charAt(0).toUpperCase() + word.substring(1);
+        return word;
     }
 
     Connections {
@@ -385,10 +408,18 @@ FocusScope {
                 }
                 var t = root.target.text;
                 var b = root.termBounds();
-                var typed = t.substring(b.start, b.end).trim().toLowerCase();
+                var raw = t.substring(b.start, b.end).trim();
+                var typed = raw.toLowerCase();
+                var wordMode = root.suggestionSep === "word";
+                // words: something typed first, and only words that start with it
+                if (wordMode && typed.length === 0) {
+                    if (items.length > 0) items = [];
+                    if (root.row === -1) root.row = 0;
+                    return;
+                }
                 // the other items of a list: already there
                 var have = {};
-                if (root.suggestionSep !== "") {
+                if (root.suggestionSep !== "" && !wordMode) {
                     var lines = (t.substring(0, b.start) + t.substring(b.end)).split(root.suggestionSep);
                     for (var l = 0; l < lines.length; l++)
                         have[lines[l].trim().toLowerCase()] = true;
@@ -400,8 +431,8 @@ FocusScope {
                     if (have[g] || g === typed)
                         continue;
                     if (typed === "" || g.indexOf(typed) === 0)
-                        starts.push(src[i]);
-                    else if (inside.length < max && typed.length >= 2 && g.indexOf(typed) > 0)
+                        starts.push(wordMode ? root.caseLike(src[i], raw) : src[i]);
+                    else if (!wordMode && inside.length < max && typed.length >= 2 && g.indexOf(typed) > 0)
                         inside.push(src[i]);
                 }
                 var all = starts.concat(inside);
@@ -429,6 +460,16 @@ FocusScope {
                 var t = root.target.text;
                 var b = root.termBounds();
                 var sep = root.suggestionSep;
+                if (sep === "word") {
+                    // the word, then a space (unless one follows already)
+                    var tail = t.substring(b.end);
+                    var gap = tail.charAt(0) === " " ? "" : " ";
+                    root.target.text = t.substring(0, b.start) + name + gap + tail;
+                    root.target.cursorPosition = b.start + name.length + 1;
+                    root.sugIndex = 0;
+                    root.row = 0;
+                    return;
+                }
                 var lead = (sep === "," && b.start > 0) ? " " : "";
                 var before = t.substring(0, b.start) + lead + name;
                 var after = sep === "" ? "" : (sep === "," ? ", " : "\n");

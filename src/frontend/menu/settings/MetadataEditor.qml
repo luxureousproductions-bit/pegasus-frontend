@@ -54,6 +54,12 @@ FocusScope {
     readonly property bool dirty: Object.keys(edits).length > 0
     property var savedTitles: ({})       // game path -> title saved this time
     property var pickLists: ({})         // genres, developers, publishers in the library: quick picks
+    property var words: null             // every word in the library, most used first (the keyboard's suggestions)
+    function wordList() {
+        if (words === null)
+            words = Internal.settings.libraryWords(api.allGames);
+        return words;
+    }
 
     // Pegasus X: what the library looked like when Library opened; leaving with
     // the same (eg. hidden and shown again) reads nothing again
@@ -237,9 +243,66 @@ FocusScope {
         keepPosition(function() { root.raChecking = true; });
         message = qsTr("Hashing and looking the game up on RetroAchievements...") + api.tr;
     }
+    // a loaded game's x-ra-* field (games other than the open one)
+    function raOf(obj, key) {
+        if (!obj || !obj.extra)
+            return "";
+        var v = obj.extra[key];
+        if (v === undefined || v === null)
+            return "";
+        if (Array.isArray(v) || (typeof v === "object" && v.length !== undefined))
+            return v.length > 0 ? String(v[0]) : "";
+        return String(v);
+    }
+    function raHowText(how) {
+        return how === "manual" ? qsTr("picked by hand") + api.tr
+             : how === "none-manual" ? qsTr("marked by hand") + api.tr
+             : how === "title" ? qsTr("matched by name") + api.tr
+             : qsTr("matched by hash") + api.tr;
+    }
+    // the open collection: matched / not found / not checked
+    property bool raCollRunning: false
+    function raCollCounts() {
+        var c = { "matched": 0, "missing": 0, "unchecked": 0, "total": 0 };
+        for (var i = 0; i < games.length; i++) {
+            if (!games[i].obj || String(games[i].path || "").indexOf("android:") === 0)
+                continue;
+            var id = raOf(games[i].obj, "ra-id");
+            c.total++;
+            if (id === "") c.unchecked++;
+            else if (parseInt(id, 10) > 0) c.matched++;
+            else c.missing++;
+        }
+        return c;
+    }
+    function raMatchThisCollection() {
+        if (raCollRunning || raChecking)
+            return;
+        var error = Internal.settings.raMatchCollection(api.collections, collName);
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        keepPosition(function() { root.raCollRunning = true; });
+        message = qsTr("Matching %1 with RetroAchievements (picks made by hand stay)...").arg(collName) + api.tr;
+    }
+    function openRaMatches() {
+        building = true;
+        message = "";
+        page = "ramatches";
+        building = false;
+        list.currentIndex = 1;
+        list.positionViewAtBeginning();
+    }
     Connections {
         target: Internal.settings
         function onRaFinished(result) {
+            if (root.raCollRunning) {
+                root.keepPosition(function() { root.raCollRunning = false; });
+                root.message = result.error && !(result.matched > 0 || result.notFound > 0) ? result.error
+                    : qsTr("%1 matched · %2 not found").arg(result.matched || 0).arg((result.notFound || 0) + (result.unsupported || 0)) + api.tr;
+                return;
+            }
             if (!root.raChecking)
                 return;
             root.keepPosition(function() { root.raChecking = false; });
@@ -1242,6 +1305,20 @@ FocusScope {
             });
             return;
         }
+        if (page === "ramatches") {
+            building = true;
+            message = "";
+            page = "collection";
+            building = false;
+            for (var r = 0; r < list.rows.length; r++) {
+                if (list.rows[r].kind === "ramatchlist") {
+                    list.currentIndex = r;
+                    list.positionViewAtIndex(r, ListView.Center);
+                    break;
+                }
+            }
+            return;
+        }
         building = true;
         edits = {};
         message = "";
@@ -1498,6 +1575,7 @@ FocusScope {
         text: (page === "collections" ? qsTr("Settings > Library")
              : page === "hidden" ? qsTr("Library > Hidden")
              : page === "review" ? qsTr("Library > Needs your check")
+             : page === "ramatches" ? qsTr("%1 > RetroAchievements").arg(root.collName)
              : page === "collection" ? qsTr("Library > %1").arg(root.collName)
              : qsTr("%1 > %2").arg(root.collName).arg(root.current("title"))) + api.tr
         z: 2
@@ -1587,6 +1665,36 @@ FocusScope {
                                "warn": !!e.closest, "muted": !e.closest });
                 }
                 return out;
+            }
+            if (root.page === "ramatches") {
+                var gone = [], found = [];
+                for (i = 0; i < root.games.length; i++) {
+                    var rg = root.games[i];
+                    if (!rg.obj || String(rg.path || "").indexOf("android:") === 0)
+                        continue;
+                    var rid = root.raOf(rg.obj, "ra-id");
+                    var rhow = root.raOf(rg.obj, "ra-match");
+                    var rrow = { "kind": "ramatchgame", "text": rg.title, "entry": rg };
+                    if (rid !== "" && parseInt(rid, 10) > 0) {
+                        rrow.sub = root.raOf(rg.obj, "ra-title") + " · " + root.raHowText(rhow);
+                        rrow.value = qsTr("%1 achievements").arg(root.raOf(rg.obj, "ra-achievements") || "0") + api.tr;
+                        rrow.done = rhow === "manual";
+                        found.push(rrow);
+                    }
+                    else {
+                        rrow.value = rid === "" ? qsTr("not checked") + api.tr
+                                   : rhow === "none-manual" ? qsTr("not on RA (marked)") + api.tr : qsTr("not found") + api.tr;
+                        rrow.warn = rid !== "" && rhow !== "none-manual";
+                        rrow.muted = rid === "" || rhow === "none-manual";
+                        gone.push(rrow);
+                    }
+                }
+                out.push({ "kind": "section", "text": qsTr("Not found · A picks it from RA's list") + api.tr });
+                if (gone.length === 0)
+                    out.push({ "kind": "info", "text": qsTr("None") + api.tr, "value": "" });
+                out = out.concat(gone);
+                out.push({ "kind": "section", "text": qsTr("Matched · A changes it") + api.tr });
+                return out.concat(found);
             }
             if (root.page === "hidden") {
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
@@ -1713,18 +1821,22 @@ FocusScope {
                 else if (raId === "0")
                     out.push({ "kind": "racheck", "text": qsTr("Not on RetroAchievements") + api.tr,
                                "value": root.raChecking ? qsTr("checking...") + api.tr
+                                      : root.raField("ra-match") === "none-manual" ? qsTr("marked by hand · A checks again") + api.tr
                                       : (root.raField("ra-hash") !== "" ? qsTr("hash %1 · A checks again").arg(root.raField("ra-hash").substring(0, 8)) : qsTr("couldn't be hashed · A checks again")) + api.tr,
                                "muted": true });
                 else
                     out.push({ "kind": "racheck", "text": root.raField("ra-title") || qsTr("Matched") + api.tr,
-                               "sub": qsTr("RA id %1 · %2 · A checks again").arg(raId)
-                                      .arg(root.raField("ra-match") === "title" ? qsTr("matched by name") : qsTr("matched by hash")) + api.tr,
+                               "sub": qsTr("RA id %1 · %2 · A checks again").arg(raId).arg(root.raHowText(root.raField("ra-match"))) + api.tr,
                                "value": root.raChecking ? qsTr("checking...") + api.tr
                                       : raN === 0 ? qsTr("no achievements yet") + api.tr
                                       : (raEarned !== "" ? qsTr("%1 of %2 earned").arg(raEarned).arg(raN) : qsTr("%1 achievements").arg(raN)) + api.tr
                                         + " · " + qsTr("%1 points").arg(root.raField("ra-points") || "0") + api.tr,
                                "done": raN > 0 && raEarned !== "" && parseInt(raEarned, 10) >= raN,
                                "warn": false });
+                out.push({ "kind": "rapick", "text": qsTr("Pick the game on RetroAchievements...") + api.tr,
+                           "value": root.raField("ra-match") === "manual" ? qsTr("picked by hand: kept by every match") + api.tr
+                                  : qsTr("wrong or missing? choose it from RA's list") + api.tr,
+                           "muted": root.raField("ra-match") !== "manual" });
             }
             if (root.page === "game") {
                 out.push({ "kind": "section", "text": qsTr("Art and manual") + api.tr });
@@ -1780,6 +1892,19 @@ FocusScope {
                 out.push({ "kind": "scrapecoll", "text": qsTr("Scrape this collection...") + api.tr,
                            "value": root.collScraping ? root.collScrapeSub : missingLine,
                            "warn": !root.collScraping && missingCount > 0 });
+                if (!root.isAndroidCollection(root.collObj) && root.games.length > 0
+                        && Internal.settings.raConsoleOf(root.games[0].obj, root.collName) > 0) {
+                    var rc = root.raCollCounts();
+                    out.push({ "kind": "section", "text": "RetroAchievements" });
+                    out.push({ "kind": "racoll", "text": qsTr("Match this collection") + api.tr,
+                               "value": root.raCollRunning ? qsTr("matching...") + api.tr
+                                      : qsTr("%1 of %2 matched").arg(rc.matched).arg(rc.total) + api.tr });
+                    out.push({ "kind": "ramatchlist", "text": qsTr("Matches...") + api.tr,
+                               "value": rc.missing + rc.unchecked > 0
+                                      ? qsTr("%1 not found · %2 not checked").arg(rc.missing).arg(rc.unchecked) + api.tr
+                                      : qsTr("all matched") + api.tr,
+                               "warn": rc.missing > 0 });
+                }
                 out.push({ "kind": "section", "text": qsTr("Show") + api.tr });
                 out.push({ "kind": "missingfilter", "text": qsTr("Games to list") + api.tr,
                            "value": root.missingOnly ? qsTr("Missing art or video only · %1").arg(missingCount + missingVideos) + api.tr
@@ -1957,6 +2082,14 @@ FocusScope {
             }
             else if (row.kind === "racheck")
                 root.raCheckThisGame();
+            else if (row.kind === "rapick")
+                raPicker.openFor(root.game.obj, root.current("title") || root.game.title);
+            else if (row.kind === "racoll")
+                root.raMatchThisCollection();
+            else if (row.kind === "ramatchlist")
+                root.openRaMatches();
+            else if (row.kind === "ramatchgame")
+                raPicker.openFor(row.entry.obj, row.entry.title);
             else if (row.kind === "scrapegame")
                 root.scrapeThisGame();
             else if (row.kind === "scrapecoll")
@@ -2148,6 +2281,7 @@ FocusScope {
             : root.page === "collections" ? qsTr("A open · B back · Edits are saved in Pegasus metadata files, so every theme shows them") + api.tr
             : root.page === "hidden" ? qsTr("A show it again · B back") + api.tr
             : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · B back") + api.tr
+            : root.page === "ramatches" ? qsTr("A pick the game on RetroAchievements · B back") + api.tr
             : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr
         anchors.bottom: parent.bottom
@@ -2746,6 +2880,260 @@ FocusScope {
     }
 
 
+    // -- Picking a game on RetroAchievements by hand ---------------------------------
+    // the console's list (kept a week, fetched when missing), closest to the
+    // game's name first; Y searches, A saves it (kept by every later match),
+    // X marks the game as not on RetroAchievements
+
+    FocusScope {
+        id: raPicker
+
+        property var gameObj: null
+        property string gameTitle: ""
+        property bool loading: false
+        property string error: ""
+        property var results: []
+        property bool pending: false
+
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+        z: 5
+
+        function openFor(obj, title) {
+            if (!obj)
+                return;
+            gameObj = obj;
+            gameTitle = title;
+            error = "";
+            results = [];
+            searchInput.text = String(title || "").replace(new RegExp("\\s*[\\(\\[][^\\)\\]]*[\\)\\]]", "g"), "").trim();  // no (USA), [!]
+            loading = true;
+            raResults.currentIndex = 0;
+            focus = true;
+            raResults.focus = true;
+            Internal.settings.raLoadList(obj, root.collName);
+        }
+        function refresh() {
+            pending = false;
+            if (!visible || loading || !gameObj)
+                return;
+            results = Internal.settings.raCandidates(gameObj, root.collName, searchInput.text);
+            raResults.currentIndex = 0;
+        }
+        function update() {
+            if (pending)
+                return;
+            pending = true;
+            Qt.callLater(refresh);
+        }
+        function close() {
+            list.focus = true;
+        }
+        function save(pick) {
+            var error = Internal.settings.raSetMatch(gameObj, root.collName, pick);
+            close();
+            root.keepPosition(function() { root.raExtra = null; });
+            root.message = error !== "" ? error
+                : pick.id > 0 ? qsTr("Saved: %1 is \"%2\" on RetroAchievements.").arg(gameTitle).arg(pick.title) + api.tr
+                : qsTr("Saved: %1 isn't on RetroAchievements.").arg(gameTitle) + api.tr;
+        }
+
+        Connections {
+            target: Internal.settings
+            function onRaListReady(error) {
+                if (!raPicker.visible)
+                    return;
+                raPicker.loading = false;
+                raPicker.error = error;
+                raPicker.refresh();
+            }
+        }
+
+        Keys.onPressed: {
+            if (event.isAutoRepeat)
+                return;
+            if (api.keys.isCancel(event)) {
+                event.accepted = true;
+                if (raKeyboard.activeFocus)
+                    raResults.focus = true;
+                else
+                    close();
+            }
+            else if (api.keys.isFilters(event) && !raKeyboard.activeFocus) {
+                event.accepted = true;
+                raKeyboard.focus = true;
+            }
+            else if (api.keys.isDetails(event) && !raKeyboard.activeFocus) {
+                event.accepted = true;
+                save({ "id": 0 });
+            }
+            else if (api.keys.isAccept(event) && raResults.activeFocus) {
+                event.accepted = true;
+                if (raPicker.results.length > 0)
+                    save(raPicker.results[raResults.currentIndex]);
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.6
+            MouseArea {
+                anchors.fill: parent
+                acceptedButtons: Qt.LeftButton | Qt.RightButton
+                onClicked: raPicker.close()
+            }
+        }
+
+        Rectangle {
+            id: raPanel
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: vpx(14)
+            width: Math.min(parent.width * 0.8, vpx(900))
+            height: (raKeyboard.activeFocus ? raKeyboard.y - vpx(10) : raPrompts.y - vpx(10)) - y
+            color: "#333"
+            MouseArea { anchors.fill: parent }
+
+            Text {
+                id: raHeading
+                anchors.top: parent.top
+                anchors.topMargin: vpx(14)
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - vpx(40)
+                text: qsTr("Which game is \"%1\" on RetroAchievements?").arg(raPicker.gameTitle) + api.tr
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(19)
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideRight
+            }
+            Rectangle {
+                id: raSearchBox
+                anchors.top: raHeading.bottom
+                anchors.topMargin: vpx(12)
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - vpx(40)
+                height: vpx(46)
+                color: "#262626"
+                border.color: raKeyboard.activeFocus ? "#3aa" : "#555"
+                border.width: vpx(1)
+                TextInput {
+                    id: searchInput
+                    anchors.fill: parent
+                    anchors.leftMargin: vpx(14)
+                    anchors.rightMargin: vpx(14)
+                    verticalAlignment: TextInput.AlignVCenter
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(19)
+                    clip: true
+                    cursorVisible: raKeyboard.activeFocus
+                    activeFocusOnPress: false
+                    onTextChanged: raPicker.update()
+                }
+                Text {
+                    anchors.right: parent.right
+                    anchors.rightMargin: vpx(14)
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: !raKeyboard.activeFocus
+                    text: qsTr("Y search") + api.tr
+                    color: "#888"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(15)
+                }
+                MouseArea {
+                    anchors.fill: parent
+                    onClicked: raKeyboard.focus = true
+                }
+            }
+            ListView {
+                id: raResults
+                anchors.top: raSearchBox.bottom
+                anchors.topMargin: vpx(10)
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: vpx(10)
+                anchors.horizontalCenter: parent.horizontalCenter
+                width: parent.width - vpx(40)
+                clip: true
+                focus: true
+                highlightMoveDuration: 0
+                model: raPicker.results
+                delegate: Rectangle {
+                    readonly property bool on: ListView.isCurrentItem && raResults.activeFocus
+                    width: ListView.view.width
+                    height: vpx(52)
+                    color: on ? "#3aa" : (index % 2 ? "#2e2e2e" : "transparent")
+                    Text {
+                        anchors.left: parent.left
+                        anchors.leftMargin: vpx(14)
+                        anchors.right: raCount.left
+                        anchors.rightMargin: vpx(12)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.title
+                        color: parent.on ? "#111" : "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(18)
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        id: raCount
+                        anchors.right: parent.right
+                        anchors.rightMargin: vpx(14)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: (modelData.achievements > 0
+                               ? qsTr("%1 achievements · %2 points").arg(modelData.achievements).arg(modelData.points)
+                               : qsTr("no achievements yet")) + api.tr
+                        color: parent.on ? "#111" : "#aaa"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(15)
+                    }
+                    MouseArea {
+                        anchors.fill: parent
+                        onClicked: raPicker.save(modelData)
+                    }
+                }
+            }
+            Text {
+                anchors.centerIn: raResults
+                visible: raPicker.loading || raPicker.error !== "" || raPicker.results.length === 0
+                width: raResults.width
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+                text: raPicker.loading ? qsTr("Getting the console's list from RetroAchievements...") + api.tr
+                    : raPicker.error !== "" ? raPicker.error
+                    : qsTr("Nothing on RetroAchievements looks like that. Y searches another name.") + api.tr
+                color: "#aaa"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(17)
+            }
+        }
+
+        OnScreenKeyboard {
+            id: raKeyboard
+            visible: activeFocus
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: vpx(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            keyH: vpx(40)
+            target: searchInput
+            suggestionSep: "word"
+            suggestions: root.wordList()
+            onDone: raResults.focus = true
+            onLeaveUp: raResults.focus = true
+        }
+
+        PromptBar {
+            id: raPrompts
+            visible: !raKeyboard.activeFocus
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            text: qsTr("A this is the game · Y search · X not on RetroAchievements · B cancel") + api.tr
+        }
+    }
+
+
     // -- Editing one field ----------------------------------------------------------
 
     FocusScope {
@@ -2787,8 +3175,11 @@ FocusScope {
                 lists[f.key] = Internal.settings.libraryValues(api.allGames, f.key);
                 root.pickLists = lists;
             }
-            kb.suggestions = f.picks ? root.pickLists[f.key] : [];
-            kb.suggestionSep = f.picks ? (multiLine ? "\n" : ",") : "";
+            // a list of names: the ones you have; any other text: words, as you type them
+            var wordy = !f.picks && (f.type === "text" || f.type === "multi" || f.type === "list")
+                        && f.key !== "shortname" && f.key !== "extensions";
+            kb.suggestions = f.picks ? root.pickLists[f.key] : wordy ? root.wordList() : [];
+            kb.suggestionSep = f.picks ? (multiLine ? "\n" : ",") : wordy ? "word" : "";
             kb.target = multiLine ? multiInput : lineInput;
             kb.multiLine = multiLine && !isCommand;
             kb.row = 1;

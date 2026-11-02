@@ -51,6 +51,7 @@
 
 #include <QCoreApplication>
 #include <QCursor>
+#include <QElapsedTimer>
 #include <algorithm>
 #include <QLocale>
 #include <QNetworkAccessManager>
@@ -2632,7 +2633,83 @@ QString Settings::raCheckGame(QObject* game_obj, const QString& collection_name)
     return raStart(nullptr, false, false, game, collection_name);
 }
 
-QString Settings::raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection)
+QString Settings::raMatchCollection(QObject* collections, const QString& collection_name)
+{
+    return raStart(collections, false, false, nullptr, QString(), collection_name);
+}
+
+namespace {
+const model::Collection* collection_of(model::Game& game, const QString& name)
+{
+    const model::Collection* coll = nullptr;
+    for (model::Collection* const c : game.collectionsModel()->entries()) {
+        if (c->name() == name || !coll)
+            coll = c;
+    }
+    return coll;
+}
+} // namespace
+
+int Settings::raConsoleOf(QObject* game_obj, const QString& collection_name) const
+{
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    if (!game)
+        return 0;
+    const model::Collection* const coll = collection_of(*game, collection_name);
+    return coll ? scraper::RetroAchievements::console_for(scraper::Scraper::system_of(coll->name(), coll->shortName())) : 0;
+}
+
+void Settings::raLoadList(QObject* game, const QString& collection_name)
+{
+    const int console = raConsoleOf(game, collection_name);
+    if (console <= 0) {
+        emit raListReady(tr("RetroAchievements has no console for this system."));
+        return;
+    }
+    const QVariantMap s = raSettings();
+    ra().fetchList(console, s.value(QStringLiteral("user")).toString(), s.value(QStringLiteral("key")).toString(),
+                   [this](QString error){ emit raListReady(error); });
+}
+
+QVariantList Settings::raCandidates(QObject* game, const QString& collection_name, const QString& query) const
+{
+    const int console = raConsoleOf(game, collection_name);
+    return console > 0 ? scraper::RetroAchievements::candidates(console, query) : QVariantList();
+}
+
+QString Settings::raSetMatch(QObject* game_obj, const QString& collection_name, const QVariantMap& pick)
+{
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    if (!game || game->filesModel()->entries().empty())
+        return tr("No game.");
+    const int id = pick.value(QStringLiteral("id")).toInt();
+    QVariantMap changes {
+        { QStringLiteral("x-ra-id"), QString::number(qMax(0, id)) },
+        { QStringLiteral("x-ra-match"), id > 0 ? QStringLiteral("manual") : QStringLiteral("none-manual") },
+    };
+    if (id > 0) {
+        changes.insert(QStringLiteral("x-ra-title"), pick.value(QStringLiteral("title")).toString());
+        changes.insert(QStringLiteral("x-ra-achievements"), QString::number(pick.value(QStringLiteral("achievements")).toInt()));
+        changes.insert(QStringLiteral("x-ra-points"), QString::number(pick.value(QStringLiteral("points")).toInt()));
+    }
+    else {
+        changes.insert(QStringLiteral("x-ra-title"), QString());
+        changes.insert(QStringLiteral("x-ra-achievements"), QString());
+        changes.insert(QStringLiteral("x-ra-points"), QString());
+    }
+    // another game: its progress and icon aren't this one's
+    if (ra_extra(*game, "ra-id").toInt() != id) {
+        changes.insert(QStringLiteral("x-ra-earned"), QString());
+        changes.insert(QStringLiteral("x-ra-earned-hardcore"), QString());
+        changes.insert(QStringLiteral("x-ra-icon"), QString());
+    }
+    const model::Collection* const coll = collection_of(*game, collection_name);
+    const QString path = game->filesModel()->entries().front()->path();
+    return saveGameMetadata(coll ? coll->name() : collection_name, path, game->title(), changes, game);
+}
+
+QString Settings::raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection,
+                          const QString& only_collection)
 {
     if (m_ra && m_ra->running())
         return tr("RetroAchievements is still working.");
@@ -2652,9 +2729,14 @@ QString Settings::raStart(QObject* collections, bool only_new, bool progress_onl
             return;
         const int ra_id = ra_extra(*game, "ra-id").toInt();
         const bool checked = !ra_extra(*game, "ra-id").isEmpty();
+        // picked by hand: a match keeps it (an explicit check of the game asks again)
+        const QString how = ra_extra(*game, "ra-match");
+        const bool manual = how == QLatin1String("manual") || how == QLatin1String("none-manual");
         if (progress_only && ra_id <= 0)
             return;
         if (only_new && checked)
+            return;
+        if (manual && !progress_only && !one_game && ra_id <= 0)
             return;
         seen.insert(path);
         m_ra_games.insert(path, game);
@@ -2664,6 +2746,10 @@ QString Settings::raStart(QObject* collections, bool only_new, bool progress_onl
         job.collection = coll.name();
         job.system = scraper::Scraper::system_of(coll.name(), coll.shortName());
         job.ra_id = progress_only ? ra_id : 0;
+        if (manual && !progress_only && !one_game) {
+            job.ra_id = ra_id;
+            job.keep = true;
+        }
         jobs.push_back(std::move(job));
     };
     if (one_game) {
@@ -2682,7 +2768,7 @@ QString Settings::raStart(QObject* collections, bool only_new, bool progress_onl
             return tr("No library.");
         for (int i = 0; i < list->count(); i++) {
             auto* const coll = qobject_cast<model::Collection*>(list->get(i));
-            if (!coll)
+            if (!coll || (!only_collection.isEmpty() && coll->name() != only_collection))
                 continue;
             for (model::Game* const game : coll->gameList()->entries())
                 add(*coll, game);
@@ -3048,6 +3134,79 @@ QStringList Settings::libraryValues(QObject* all_games, const QString& field) co
     }
     std::sort(out.begin(), out.end(), [](const QString& a, const QString& b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
     return out;
+}
+
+QStringList Settings::libraryWords(QObject* all_games)
+{
+    const auto* const list = qobject_cast<model::ObjectListModel*>(all_games);
+    if (!list)
+        return {};
+    if (m_words_games == list->count())
+        return m_words;
+    QElapsedTimer timer;
+    timer.start();
+    // lowered word -> how often, and how it's written most
+    struct Word { int count = 0; QHash<QString, int> forms; };
+    QHash<QString, Word> words;
+    const auto add_text = [&words](const QString& text) {
+        int start = -1;
+        const int n = text.size();
+        for (int i = 0; i <= n; i++) {
+            const bool part = i < n && (text[i].isLetterOrNumber() || ((text[i] == QLatin1Char('\'') || text[i] == QLatin1Char('-'))
+                                                                       && start >= 0 && i + 1 < n && text[i + 1].isLetter()));
+            if (part) {
+                if (start < 0)
+                    start = i;
+                continue;
+            }
+            if (start >= 0) {
+                const QString word = text.mid(start, i - start);
+                start = -1;
+                bool letters = false;
+                for (const QChar c : word) {
+                    if (c.isLetter()) { letters = true; break; }
+                }
+                if (word.size() < 2 || word.size() > 30 || !letters)
+                    continue;
+                Word& w = words[word.toLower()];
+                w.count++;
+                w.forms[word]++;
+            }
+        }
+    };
+    for (int i = 0; i < list->count(); i++) {
+        const auto* const game = qobject_cast<model::Game*>(list->get(i));
+        if (!game)
+            continue;
+        add_text(game->title());
+        add_text(game->summary());
+        add_text(game->description());
+        for (const QString& v : game->developerListConst()) add_text(v);
+        for (const QString& v : game->publisherListConst()) add_text(v);
+        for (const QString& v : game->genreListConst()) add_text(v);
+    }
+    std::vector<std::pair<int, QString>> sorted;
+    sorted.reserve(static_cast<size_t>(words.size()));
+    for (auto it = words.cbegin(); it != words.cend(); ++it) {
+        // the way it's written most ("Mario", "the")
+        QString best;
+        int best_n = 0;
+        for (auto f = it->forms.cbegin(); f != it->forms.cend(); ++f) {
+            if (f.value() > best_n) { best_n = f.value(); best = f.key(); }
+        }
+        sorted.emplace_back(it->count, best);
+    }
+    std::sort(sorted.begin(), sorted.end(), [](const std::pair<int, QString>& a, const std::pair<int, QString>& b){
+        return a.first != b.first ? a.first > b.first : a.second < b.second;
+    });
+    m_words.clear();
+    const size_t max = qMin<size_t>(sorted.size(), 40000);
+    m_words.reserve(static_cast<int>(max));
+    for (size_t i = 0; i < max; i++)
+        m_words.append(sorted[i].second);
+    m_words_games = list->count();
+    Log::info(LOGMSG("Library: %1 words for the keyboard's suggestions (%2 ms)").arg(m_words.size()).arg(timer.elapsed()));
+    return m_words;
 }
 
 void Settings::reloadLibrary()

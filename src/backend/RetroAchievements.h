@@ -53,7 +53,8 @@ public:
         QString title;
         QString collection;
         QString system;
-        int ra_id = 0;   ///< already matched (progress only)
+        int ra_id = 0;   ///< already matched (progress only, or kept)
+        bool keep = false;  ///< picked by hand: keep ra_id, don't match again
     };
     struct Result {
         int matched = 0;      ///< games found on RA
@@ -75,6 +76,10 @@ public:
     static QString dir();
     /// the cached list of a console: { fetched, games: [{ id, title, icon, achievements, points, hashes }] }
     static QVariantMap console_list(int console);
+    /// the games of a console's list looking like `query`, best first: [{ id, title, achievements, points, icon }]
+    static QVariantList candidates(int console, const QString& query, int limit = 60);
+    /// makes sure a console's list is here (kept a week, else asked for): done(error), empty when it is
+    void fetchList(int console, const QString& user, const QString& key, std::function<void(QString)> done);
 
     bool running() const { return m_running; }
     QVariantMap state() const;
@@ -104,6 +109,8 @@ private:
         int points = 0;
         bool unsupported = false;
         bool by_title = false;
+        bool manual = false;        ///< picked by hand, kept
+        bool progress_only = false; ///< only the progress was asked for
         QString icon_file;         ///< the icon downloaded, when it was
         bool progress_known = false;
         bool has_progress = false;

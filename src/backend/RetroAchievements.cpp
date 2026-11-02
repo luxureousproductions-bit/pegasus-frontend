@@ -47,6 +47,7 @@
 #include <QEvent>
 #include <QThread>
 #include <QThreadPool>
+#include <algorithm>
 #include <memory>
 
 
@@ -123,12 +124,35 @@ QString plain_title(QString title)
 {
     static const QRegularExpression rx_tags(QStringLiteral("\\s*[\\(\\[][^\\)\\]]*[\\)\\]]"));
     title.remove(rx_tags);
+    // the same name written differently: "II" / "2", "&" / "and", "The ..."
+    static const QRegularExpression rx_the(QStringLiteral("^\\s*the\\s+"), QRegularExpression::CaseInsensitiveOption);
+    title.remove(rx_the);
+    title.replace(QLatin1Char('&'), QStringLiteral(" and "));
+    static const QStringList romans { "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x" };
+    QStringList words = title.toLower().split(QRegularExpression(QStringLiteral("[^\\w]+")), Qt::SkipEmptyParts);
+    for (QString& w : words) {
+        const int r = romans.indexOf(w);
+        if (r >= 0 && words.size() > 1)
+            w = QString::number(r + 2);
+    }
     QString out;
-    for (const QChar c : title.toLower()) {
+    for (const QChar c : words.join(QString())) {
         if (c.isLetterOrNumber())
             out += c;
     }
     return out;
+}
+
+// every name a list entry can be found by: RA writes alternatives as "A | B"
+QStringList title_keys(const QString& title)
+{
+    QStringList keys;
+    for (const QString& part : title.split(QLatin1Char('|'))) {
+        const QString key = plain_title(part);
+        if (!key.isEmpty() && !keys.contains(key))
+            keys.append(key);
+    }
+    return keys;
 }
 
 // the ROM inside a .zip: the first file that isn't itself an archive
@@ -150,6 +174,35 @@ QByteArray rom_in_zip(const QString& path, QString& name)
     }
     return {};
 }
+// a console's list as RA sent it, into metadata/ra/console-<id>.json; how many games
+int save_list(int console, const QJsonDocument& doc)
+{
+    QJsonArray games;
+    for (const QJsonValue& v : doc.array()) {
+        const QJsonObject g = v.toObject();
+        games.append(QJsonObject {
+            { QStringLiteral("id"), g.value(QStringLiteral("ID")).toInt() },
+            { QStringLiteral("title"), g.value(QStringLiteral("Title")).toString() },
+            { QStringLiteral("icon"), g.value(QStringLiteral("ImageIcon")).toString() },
+            { QStringLiteral("achievements"), g.value(QStringLiteral("NumAchievements")).toInt() },
+            { QStringLiteral("points"), g.value(QStringLiteral("Points")).toInt() },
+            { QStringLiteral("hashes"), g.value(QStringLiteral("Hashes")).toArray() },
+        });
+    }
+    const QString folder = scraper::RetroAchievements::dir();
+    QDir().mkpath(folder);
+    QSaveFile file(folder % QStringLiteral("/console-") % QString::number(console) % QStringLiteral(".json"));
+    if (file.open(QIODevice::WriteOnly)) {
+        file.write(QJsonDocument(QJsonObject {
+            { QStringLiteral("fetched"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+            { QStringLiteral("console"), console },
+            { QStringLiteral("games"), games },
+        }).toJson(QJsonDocument::Compact));
+        file.commit();
+    }
+    return games.size();
+}
+
 } // namespace
 
 
@@ -203,6 +256,98 @@ QVariantMap RetroAchievements::console_list(int console)
     if (!file.open(QIODevice::ReadOnly))
         return {};
     return QJsonDocument::fromJson(file.readAll()).object().toVariantMap();
+}
+
+// one console's list, for picking a game by hand: the copy kept for a week,
+// or asked for now (done(error); empty when the list is there)
+void RetroAchievements::fetchList(int console, const QString& user, const QString& key, std::function<void(QString)> done)
+{
+    const QVariantMap cached = console_list(console);
+    const QDateTime fetched = QDateTime::fromString(cached.value(QStringLiteral("fetched")).toString(), Qt::ISODate);
+    if (fetched.isValid() && fetched.daysTo(QDateTime::currentDateTimeUtc()) < KEEP_DAYS) {
+        done({});
+        return;
+    }
+    if (!m_running) {
+        m_user = user.trimmed();
+        m_key = key.trimmed();
+    }
+    get(apiUrl(QStringLiteral("API_GetGameList.php"), { { QStringLiteral("i"), QString::number(console) }, { QStringLiteral("h"), QStringLiteral("1") } }),
+        [console, done, cached](int status, const QByteArray& body){
+        const QJsonDocument doc = QJsonDocument::fromJson(body);
+        if (status == 200 && doc.isArray()) {
+            Log::info(LOG_TAG, LOGMSG("Console %1: %2 games listed").arg(console).arg(save_list(console, doc)));
+            done({});
+            return;
+        }
+        // an old copy still does for picking
+        if (!cached.isEmpty()) {
+            done({});
+            return;
+        }
+        done(status == 401 ? tr("The username or key isn't accepted")
+             : status == 0 ? tr("No connection") : tr("RetroAchievements answered %1").arg(status));
+    });
+}
+
+// the games of a console's list that look like `query`, best first:
+// [{ id, title, achievements, points, icon }]
+QVariantList RetroAchievements::candidates(int console, const QString& query, int limit)
+{
+    const QVariantList games = console_list(console).value(QStringLiteral("games")).toList();
+    const QString q = plain_title(query);
+    const QStringList q_words = query.toLower().split(QRegularExpression(QStringLiteral("[^\\w]+")), Qt::SkipEmptyParts);
+    struct Scored { int score; QVariantMap game; };
+    std::vector<Scored> scored;
+    scored.reserve(static_cast<size_t>(games.size()));
+    for (const QVariant& v : games) {
+        const QVariantMap g = v.toMap();
+        const QString title = g.value(QStringLiteral("title")).toString();
+        int score = 0;
+        if (q.isEmpty()) {
+            score = 1;
+        }
+        else {
+            for (const QString& key : title_keys(title)) {
+                if (key == q) score = qMax(score, 1000);
+                else if (key.startsWith(q)) score = qMax(score, 600 - (key.size() - q.size()));
+                else if (q.startsWith(key) && key.size() >= 4) score = qMax(score, 500 - (q.size() - key.size()));
+                else if (key.contains(q)) score = qMax(score, 400 - (key.size() - q.size()));
+            }
+            if (score == 0 && !q_words.isEmpty()) {
+                // words in common
+                const QString lower = title.toLower();
+                int hits = 0;
+                for (const QString& w : q_words) {
+                    if (w.size() >= 2 && lower.contains(w))
+                        hits++;
+                }
+                if (hits > 0)
+                    score = 100 * hits / q_words.size();
+            }
+        }
+        if (score <= 0)
+            continue;
+        // hacks and homebrew after the real thing
+        if (title.startsWith(QLatin1Char('~')))
+            score -= 50;
+        scored.push_back({ score, QVariantMap {
+            { QStringLiteral("id"), g.value(QStringLiteral("id")) },
+            { QStringLiteral("title"), title },
+            { QStringLiteral("achievements"), g.value(QStringLiteral("achievements")) },
+            { QStringLiteral("points"), g.value(QStringLiteral("points")) },
+            { QStringLiteral("icon"), g.value(QStringLiteral("icon")) },
+        } });
+    }
+    std::stable_sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b){
+        if (a.score != b.score)
+            return a.score > b.score;
+        return a.game.value(QStringLiteral("title")).toString().compare(b.game.value(QStringLiteral("title")).toString(), Qt::CaseInsensitive) < 0;
+    });
+    QVariantList out;
+    for (size_t i = 0; i < scored.size() && out.size() < limit; i++)
+        out.append(scored[i].game);
+    return out;
 }
 
 QVariantMap RetroAchievements::state() const
@@ -299,6 +444,7 @@ void RetroAchievements::start(std::vector<Job> jobs, const QString& user, const 
             Match m;
             m.job = job;
             m.ra_id = job.ra_id;
+            m.progress_only = true;
             m_matches.push_back(std::move(m));
         }
         m_stage = tr("your progress");
@@ -378,29 +524,8 @@ void RetroAchievements::fetchLists(QList<int> consoles, std::function<void()> th
             fetchLists(consoles, then);
             return;
         }
-        QJsonArray games;
-        for (const QJsonValue& v : doc.array()) {
-            const QJsonObject g = v.toObject();
-            games.append(QJsonObject {
-                { QStringLiteral("id"), g.value(QStringLiteral("ID")).toInt() },
-                { QStringLiteral("title"), g.value(QStringLiteral("Title")).toString() },
-                { QStringLiteral("icon"), g.value(QStringLiteral("ImageIcon")).toString() },
-                { QStringLiteral("achievements"), g.value(QStringLiteral("NumAchievements")).toInt() },
-                { QStringLiteral("points"), g.value(QStringLiteral("Points")).toInt() },
-                { QStringLiteral("hashes"), g.value(QStringLiteral("Hashes")).toArray() },
-            });
-        }
-        QDir().mkpath(dir());
-        QSaveFile file(dir() % QStringLiteral("/console-") % QString::number(console) % QStringLiteral(".json"));
-        if (file.open(QIODevice::WriteOnly)) {
-            file.write(QJsonDocument(QJsonObject {
-                { QStringLiteral("fetched"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
-                { QStringLiteral("console"), console },
-                { QStringLiteral("games"), games },
-            }).toJson(QJsonDocument::Compact));
-            file.commit();
-        }
-        Log::info(LOG_TAG, LOGMSG("Console %1: %2 games listed").arg(console).arg(games.size()));
+        const int count = save_list(console, doc);
+        Log::info(LOG_TAG, LOGMSG("Console %1: %2 games listed").arg(console).arg(count));
         fetchLists(consoles, then);
     });
 }
@@ -454,6 +579,7 @@ void RetroAchievements::hashAndMatch()
         struct Entry { int id; QString title; QString icon; int achievements; int points; };
         QHash<int, QHash<QString, Entry>> by_hash;
         QHash<int, QHash<QString, Entry>> by_title;
+        QHash<int, QHash<int, Entry>> by_id;
         std::vector<Match> out;
         out.reserve(jobs.size());
         for (const Job& job : jobs) {
@@ -471,6 +597,7 @@ void RetroAchievements::hashAndMatch()
             if (!by_hash.contains(console)) {
                 QHash<QString, Entry> hashes;
                 QHash<QString, Entry> titles;
+                QHash<int, Entry> ids;
                 const QVariantList games = console_list(console).value(QStringLiteral("games")).toList();
                 for (const QVariant& v : games) {
                     const QVariantMap g = v.toMap();
@@ -479,12 +606,33 @@ void RetroAchievements::hashAndMatch()
                                     g.value(QStringLiteral("points")).toInt() };
                     for (const QVariant& h : g.value(QStringLiteral("hashes")).toList())
                         hashes.insert(h.toString().toLower(), e);
-                    const QString plain = plain_title(e.title);
-                    if (!plain.isEmpty() && !titles.contains(plain))
-                        titles.insert(plain, e);
+                    ids.insert(e.id, e);
+                    // hacks, homebrew and prototypes ("~Hack~ ...") never take a name match
+                    if (e.title.startsWith(QLatin1Char('~')))
+                        continue;
+                    for (const QString& key : title_keys(e.title)) {
+                        if (!titles.contains(key))
+                            titles.insert(key, e);
+                    }
                 }
                 by_hash.insert(console, hashes);
                 by_title.insert(console, titles);
+                by_id.insert(console, ids);
+            }
+            // picked by hand: kept as it is (its progress is still fetched)
+            if (job.keep && job.ra_id > 0) {
+                const auto it = by_id[console].constFind(job.ra_id);
+                m.ra_id = job.ra_id;
+                m.manual = true;
+                if (it != by_id[console].cend()) {
+                    m.ra_title = it->title;
+                    m.icon = it->icon;
+                    m.achievements = it->achievements;
+                    m.points = it->points;
+                }
+                out.push_back(std::move(m));
+                (*progress_count)++;
+                continue;
             }
             // the menus first: no reads while you're pressing buttons, and a
             // breath between files so the card isn't saturated
@@ -498,16 +646,21 @@ void RetroAchievements::hashAndMatch()
                 if (it != by_hash[console].cend())
                     found = &it.value();
             }
-            else {
-                // the file can't be hashed (a format rcheevos doesn't read, eg. .chd): by its name
-                const auto it = by_title[console].constFind(plain_title(job.title));
-                if (it != by_title[console].cend()) {
-                    found = &it.value();
-                    m.by_title = true;
+            // no hash (a format rcheevos doesn't read, eg. .chd), or a dump RA
+            // doesn't list (another region, a revision, a trimmed ISO): by its
+            // name, then by its file's name
+            if (!found) {
+                const QStringList names { job.title, QFileInfo(job.path).completeBaseName() };
+                for (const QString& name : names) {
+                    const auto it = by_title[console].constFind(plain_title(name));
+                    if (it != by_title[console].cend()) {
+                        found = &it.value();
+                        m.by_title = true;
+                        break;
+                    }
                 }
-                else {
+                if (!found && m.hash.isEmpty())
                     m.unsupported = true;
-                }
             }
             if (found) {
                 m.ra_id = found->id;
@@ -616,20 +769,30 @@ void RetroAchievements::writeAll(std::function<void()> then)
         if (m.unsupported && m.ra_id <= 0)
             continue;
         QVariantMap changes;
-        if (m.ra_id > 0) {
+        if (m.ra_id > 0 && m.progress_only) {
+            // a progress refresh: only what it learned (the match, its title
+            // and how it was found stay as they are)
+            if (!m.has_progress)
+                continue;
+            if (m.achievements > 0)
+                changes.insert(QStringLiteral("x-ra-achievements"), QString::number(m.achievements));
+        }
+        else if (m.ra_id > 0) {
             changes.insert(QStringLiteral("x-ra-id"), QString::number(m.ra_id));
-            changes.insert(QStringLiteral("x-ra-title"), m.ra_title);
+            if (!m.ra_title.isEmpty())
+                changes.insert(QStringLiteral("x-ra-title"), m.ra_title);
             changes.insert(QStringLiteral("x-ra-achievements"), QString::number(m.achievements));
             changes.insert(QStringLiteral("x-ra-points"), QString::number(m.points));
-            changes.insert(QStringLiteral("x-ra-match"), m.by_title ? QStringLiteral("title") : m.hash.isEmpty() ? QString() : QStringLiteral("hash"));
+            changes.insert(QStringLiteral("x-ra-match"), m.manual ? QStringLiteral("manual")
+                : m.by_title ? QStringLiteral("title") : QStringLiteral("hash"));
             if (!m.icon_file.isEmpty())
                 changes.insert(QStringLiteral("x-ra-icon"), QUrl::fromLocalFile(m.icon_file).toString());
-            if (m.has_progress) {
-                changes.insert(QStringLiteral("x-ra-earned"), QString::number(m.earned));
-                changes.insert(QStringLiteral("x-ra-earned-hardcore"), QString::number(m.earned_hardcore));
-            }
         }
-        else {
+        if (m.ra_id > 0 && m.has_progress) {
+            changes.insert(QStringLiteral("x-ra-earned"), QString::number(m.earned));
+            changes.insert(QStringLiteral("x-ra-earned-hardcore"), QString::number(m.earned_hardcore));
+        }
+        if (m.ra_id <= 0) {
             // checked, not on RA: said, so it isn't checked again until you ask
             changes.insert(QStringLiteral("x-ra-id"), QStringLiteral("0"));
             changes.insert(QStringLiteral("x-ra-match"), QStringLiteral("none"));

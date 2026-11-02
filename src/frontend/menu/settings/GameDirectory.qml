@@ -261,6 +261,12 @@ FocusScope {
         readonly property var rows: {
             var out = [];
             var i;
+            // every list A to Z, by the name shown
+            function az(list, key) {
+                return list.slice().sort(function(a, b) {
+                    return String(a[key]).localeCompare(String(b[key]), undefined, { "sensitivity": "base", "numeric": true });
+                });
+            }
             if (root.page === "main") {
                 var total = 0;
                 for (i = 0; i < root.systems.length; i++)
@@ -271,8 +277,9 @@ FocusScope {
                 out.push({ "kind": "esde", "text": qsTr("Import gamelist...") + api.tr, "value": qsTr("ES-DE: details, art, emulators") + api.tr,
                            "muted": !Internal.settings.esdeImportSupported });
                 out.push({ "kind": "section", "text": qsTr("Systems") + api.tr });
-                for (i = 0; i < root.systems.length; i++) {
-                    var s = root.systems[i];
+                var systemsAz = az(root.systems, "name");
+                for (i = 0; i < systemsAz.length; i++) {
+                    var s = systemsAz[i];
                     var where = s.folders.length > 0 ? root.shortFolder(s.folders[0]) + (s.folders.length > 1 ? " +" + (s.folders.length - 1) : "") : "";
                     out.push({ "kind": "system", "text": s.name, "entry": s,
                                "sub": (s.shortName !== "" && s.shortName !== s.name.toLowerCase()) ? "· " + s.shortName : "",
@@ -305,8 +312,9 @@ FocusScope {
                     ? qsTr("Next: pick the ROM folder for these %1 ›").arg(root.pickedCount) + api.tr
                     : qsTr("Tick your systems, then pick their ROM folder") + api.tr, "value": "" });
                 out.push({ "kind": "section", "text": qsTr("%1 systems").arg(root.known.length) + api.tr });
-                for (i = 0; i < root.known.length; i++) {
-                    var k = root.known[i];
+                var knownAz = az(root.known, "fullName");
+                for (i = 0; i < knownAz.length; i++) {
+                    var k = knownAz[i];
                     out.push({ "kind": "pick", "text": k.fullName, "name": k.name, "check": !!root.picked[k.name],
                                "value": k.shortName + (k.inDirectory ? " · " + qsTr("already in your directory") + api.tr
                                                                      : " · " + String(k.extensions).replace(/\./g, "").split(/\s+/).slice(0, 4).join(" ")),
@@ -318,8 +326,9 @@ FocusScope {
             out.push({ "kind": "section", "text": qsTr("ROM folder: %1 · A ticks a system").arg(root.romFolder) + api.tr });
             if (root.matches.length === 0)
                 out.push({ "kind": "info", "text": qsTr("No system folders found here (they're named like snes, psx, gba). Pick the folder that has them, or use Add systems and pick each folder.") + api.tr, "value": "" });
-            for (i = 0; i < root.matches.length; i++) {
-                var m = root.matches[i];
+            var matchesAz = az(root.matches, "fullName");
+            for (i = 0; i < matchesAz.length; i++) {
+                var m = matchesAz[i];
                 if (m.games > 0) {
                     var bits = [ root.shortFolder(m.folders[0]), (m.games === 1 ? qsTr("1 game") : qsTr("%1 games").arg(m.games)) + api.tr ];
                     if (m.ownMetadata) bits.push(qsTr("own metadata file found") + api.tr);
