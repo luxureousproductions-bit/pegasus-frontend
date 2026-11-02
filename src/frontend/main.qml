@@ -49,26 +49,6 @@ Window {
 
         readonly property real winScale: Math.min(width / 1280.0, height / 720.0)
 
-        // Pegasus X: the screen and the box the theme is given (Settings >
-        // Aspect ratio), for themes that adapt to the screen's shape:
-        //   global.display.aspect      the screen's width / height (1.78 for 16:9)
-        //   global.display.themeAspect the theme's box (the same, unless fitted)
-        //   global.display.tall        the box is taller than 3:2 (eg. 4:3, 1:1)
-        //   global.display.extraHeight how much taller the box is than 16:9, in px
-        //   global.display.mode        "fill", "16:9" or "4:3"
-        // Check `typeof global.display !== "undefined"` first: Pegasus has no such thing.
-        property QtObject display: QtObject {
-            readonly property real width: appWindow.width
-            readonly property real height: appWindow.height
-            readonly property real aspect: height > 0 ? width / height : 16 / 9
-            readonly property string mode: Internal.settings.aspectMode
-            readonly property real themeWidth: theme.width
-            readonly property real themeHeight: theme.height
-            readonly property real themeAspect: themeHeight > 0 ? themeWidth / themeHeight : 16 / 9
-            readonly property bool tall: themeAspect < 1.5
-            readonly property real extraHeight: Math.max(0, themeHeight - themeWidth * 9 / 16)
-        }
-
         property QtObject fonts: QtObject {
             readonly property string sans: sansFont.name
             readonly property string sansBold: sansBoldFont.name
@@ -98,13 +78,7 @@ Window {
 
         Loader {
             id: theme
-            // Pegasus X: the whole screen, or a 16:9 / 4:3 box in the middle
-            // (Settings > Aspect ratio); the window's black shows around it
-            readonly property real boxRatio: Internal.settings.aspectMode === "16:9" ? 16 / 9
-                                           : Internal.settings.aspectMode === "4:3" ? 4 / 3 : 0
-            anchors.centerIn: parent
-            width: boxRatio > 0 ? Math.min(parent.width, parent.height * boxRatio) : parent.width
-            height: boxRatio > 0 ? Math.min(parent.height, parent.width / boxRatio) : parent.height
+            anchors.fill: parent
 
             focus: true
             enabled: focus

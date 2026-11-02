@@ -102,14 +102,6 @@ FocusScope {
             section: "general"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Aspect ratio")
-            desc: QT_TR_NOOP("Themes made for 16:9 can look squished or cut off on taller screens (4:3, 3:2, square). Fit shows the theme exactly as designed in that shape, with bars around it.")
-            type: SettingsEntry.Type.Select
-            selectBox: aspectBox
-            selectValue: aspectBox.labelOf(Internal.settings.aspectMode)
-            section: "general"
-        },
-        SettingsEntry {
             label: QT_TR_NOOP("Pegasus X folder...")
             desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
             type: SettingsEntry.Type.Button
@@ -315,28 +307,6 @@ FocusScope {
 
         onClose: options.focus = true
         onSelect: Internal.settings.locales.currentIndex = index
-    }
-    MultivalueBox {
-        id: aspectBox
-        z: 3
-
-        model: ListModel {
-            ListElement { name: QT_TR_NOOP("Fill the screen"); value: "fill" }
-            ListElement { name: QT_TR_NOOP("Fit 16:9"); value: "16:9" }
-            ListElement { name: QT_TR_NOOP("Fit 4:3"); value: "4:3" }
-        }
-        function indexOf(mode) {
-            for (var i = 0; i < model.count; i++) {
-                if (model.get(i).value === mode)
-                    return i;
-            }
-            return 0;
-        }
-        function labelOf(mode) { return qsTr(model.get(indexOf(mode)).name) + api.tr; }
-        index: indexOf(Internal.settings.aspectMode)
-
-        onClose: options.focus = true
-        onSelect: Internal.settings.aspectMode = model.get(index).value
     }
     MultivalueBox {
         id: themeBox
