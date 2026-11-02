@@ -70,6 +70,9 @@ class Settings : public QObject {
     Q_PROPERTY(bool mergeAndroid READ mergeAndroid WRITE setMergeAndroid NOTIFY libraryRulesChanged)
     /// Pegasus X: a newer build looked for when Pegasus X starts (off unless turned on)
     Q_PROPERTY(bool checkUpdatesOnStart READ checkUpdatesOnStart WRITE setCheckUpdatesOnStart NOTIFY pegasusxSettingsChanged)
+    // Pegasus X: the shape the theme is given: "fill" (the whole screen),
+    // "16:9" or "4:3" (that box in the middle, bars around it)
+    Q_PROPERTY(QString aspectMode READ aspectMode WRITE setAspectMode NOTIFY pegasusxSettingsChanged)
     /// Pegasus X: the Pegasus X folder (settings, themes, metadata, logs, art)
     Q_PROPERTY(QString rootDir READ rootDir NOTIFY pegasusxSettingsChanged)
     Q_PROPERTY(QString defaultRootDir READ defaultRootDir CONSTANT)
@@ -98,6 +101,8 @@ public:
     QObject* updater();
     bool checkUpdatesOnStart() const;
     void setCheckUpdatesOnStart(bool);
+    QString aspectMode() const;
+    void setAspectMode(const QString&);
     QString rootDir() const;
     QString defaultRootDir() const;
     bool rootChosen() const;

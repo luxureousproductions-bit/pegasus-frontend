@@ -496,6 +496,23 @@ void Settings::setCheckUpdatesOnStart(bool value)
     emit pegasusxSettingsChanged();
 }
 
+QString Settings::aspectMode() const
+{
+    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    const QString mode = file.value(QStringLiteral("display/aspect"), QStringLiteral("fill")).toString();
+    return (mode == QLatin1String("16:9") || mode == QLatin1String("4:3")) ? mode : QStringLiteral("fill");
+}
+
+void Settings::setAspectMode(const QString& mode)
+{
+    if (mode == aspectMode())
+        return;
+    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+    file.setValue(QStringLiteral("display/aspect"), mode);
+    file.sync();
+    emit pegasusxSettingsChanged();
+}
+
 QObject* Settings::updater()
 {
     if (!m_updater)
