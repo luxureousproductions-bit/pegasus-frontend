@@ -410,6 +410,7 @@ public:
     Q_INVOKABLE QString firstExistingDir(const QStringList& paths) const;
     /// Every genre used in the library, A to Z
     Q_INVOKABLE QStringList libraryGenres(QObject* all_games) const;
+    Q_INVOKABLE QStringList libraryValues(QObject* all_games, const QString& field) const;
     /// Reads the games again from the cache (quick), applying the changes
     Q_INVOKABLE void reloadLibrary();
     /// Settings' "Reload all games": scans again and lands on the theme

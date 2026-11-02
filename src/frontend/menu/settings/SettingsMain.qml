@@ -281,7 +281,8 @@ FocusScope {
         width: root.width * 0.7
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: header.bottom
-        anchors.bottom: prompts.top
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: header.height
 
         displayMarginBeginning: header.height
         displayMarginEnd: header.height
@@ -294,14 +295,6 @@ FocusScope {
 
         section.property: "section"
         section.delegate: sectionTitle
-    }
-
-    PromptBar {
-        id: prompts
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        text: qsTr("A select · ◂ ▸ change · B back") + api.tr
     }
 
 

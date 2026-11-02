@@ -84,8 +84,9 @@ Rectangle {
     }
 
     width: parent ? parent.width : implicitWidth
-    implicitHeight: label.implicitHeight + vpx(26)
+    implicitHeight: text === "" ? 0 : label.implicitHeight + vpx(26)
     height: implicitHeight
+    visible: text !== ""
     color: rendered.keys ? "#1a1d1f" : "transparent"
 
     Rectangle {

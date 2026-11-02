@@ -339,6 +339,14 @@ FocusScope {
 
     // -- Another search name ------------------------------------------------------
 
+    // every game name in the library, read once
+    property var titleList: null
+    function titles() {
+        if (!titleList)
+            titleList = Internal.settings.libraryValues(api.allGames, "title");
+        return titleList;
+    }
+
     FocusScope {
         id: searchDialog
 
@@ -425,6 +433,9 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             keyH: vpx(40)
             target: searchInput
+            // the names of the games you have: a game is often filed under
+            // the name another copy of it already carries
+            suggestions: searchDialog.visible ? root.titles() : []
             onDone: searchDialog.finish()
         }
     }

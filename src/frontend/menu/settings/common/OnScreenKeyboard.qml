@@ -33,12 +33,21 @@ import QtQuick 2.6
 //
 // A types · X deletes · Y space · LB/RB move the cursor · LT/RT change page
 // · L3 capitals · Start done. B is left to the host (it closes the dialog).
+//
+// Pegasus X: suggestions. Give it a list of words (`suggestions`: genres you
+// have, developers, game names...) and the ones matching what's being typed
+// appear in a row above the keys, a few at a time: up from the top row goes
+// to them, left/right picks, A puts it in. With `suggestionSep` ("," or
+// "\n") the text is a list, and only the item the cursor is on is matched
+// and replaced; without it the whole text is.
 FocusScope {
     id: root
 
     property Item target: null
     property bool multiLine: false   // an Enter key next to the space bar
     property bool allowClipboard: true
+    property var suggestions: []     // words to offer (strings)
+    property string suggestionSep: ""  // "" whole text, "," or "\n" a list
     signal done
     signal leaveUp                   // the d-pad went up from the top row
     signal leaveDown                 // ... down from the bottom row
@@ -90,9 +99,10 @@ FocusScope {
     // -- Where the highlight is ---------------------------------------------------------
     // col -1 = left column, 0..9 = the grid, 10 = right column; row 0..3 the
     // letters, 4 the space bar, 5 the clipboard keys.
-    property int row: 1
+    property int row: 1              // -1: the suggestion row
     property int col: 0
     readonly property int clipRow: 5
+    property int sugIndex: 0         // which suggestion, when row is -1
 
     // the side columns hold three keys each; the lower two span two rows
     function sideSlot(r) { return r <= 0 ? 0 : (r <= 2 ? 1 : 2); }
@@ -183,21 +193,33 @@ FocusScope {
 
     // -- The controller -------------------------------------------------------------------
 
+    // up from the top row: the suggestions when there are any, else out
+    function goUp() {
+        if (sugBar.items.length > 0) {
+            row = -1;
+            if (sugIndex >= sugBar.items.length)
+                sugIndex = 0;
+        }
+        else root.leaveUp();
+    }
+
     Keys.onUpPressed: {
         event.accepted = true;
+        if (row === -1) { root.leaveUp(); return; }
         if (col === -1 || col === 10) {
             var s = sideSlot(row);
             if (row === clipRow) { row = 4; col = col === -1 ? 0 : 9; return; }
             if (s > 0) row = slotRow(s - 1);
-            else root.leaveUp();
+            else goUp();
             return;
         }
         if (row === clipRow) { row = 4; col = col === 0 ? 0 : 9; return; }
         if (row > 0) row--;
-        else root.leaveUp();
+        else goUp();
     }
     Keys.onDownPressed: {
         event.accepted = true;
+        if (row === -1) { row = 0; if (col === -1 || col === 10) row = slotRow(0); return; }
         if (col === -1 || col === 10) {
             var s = sideSlot(row);
             if (s < 2) row = slotRow(s + 1);
@@ -212,6 +234,7 @@ FocusScope {
     }
     Keys.onLeftPressed: {
         event.accepted = true;
+        if (row === -1) { if (sugIndex > 0) sugIndex--; return; }
         if (col === -1) return;
         if (row === clipRow) { if (col > 0) col--; return; }
         if (col === 10) { col = row === 4 ? (multiLine ? 8 : 9) : 9; return; }
@@ -224,6 +247,7 @@ FocusScope {
     }
     Keys.onRightPressed: {
         event.accepted = true;
+        if (row === -1) { if (sugIndex < sugBar.items.length - 1) sugIndex++; return; }
         if (col === 10) return;
         if (row === clipRow) { if (col < 1) col++; return; }
         if (col === -1) { col = 0; return; }
@@ -252,7 +276,12 @@ FocusScope {
             return;
         if (startKeys.indexOf(event.key) !== -1) { event.accepted = true; root.done(); return; }
         if (shiftKeys.indexOf(event.key) !== -1) { event.accepted = true; shifted = !shifted; return; }
-        if (api.keys.isAccept(event)) { event.accepted = true; press(keyAt(row, col)); return; }
+        if (api.keys.isAccept(event)) {
+            event.accepted = true;
+            if (row === -1) sugBar.apply(sugIndex);
+            else press(keyAt(row, col));
+            return;
+        }
         if (api.keys.isDetails(event)) { event.accepted = true; backspace(); return; }
         if (api.keys.isFilters(event)) { event.accepted = true; insert(" "); return; }
         if (api.keys.isPrevPage(event)) { event.accepted = true; caretLeft(); return; }
@@ -288,11 +317,163 @@ FocusScope {
         MouseArea { anchors.fill: parent }  // taps between keys stay here
     }
 
+    // -- Suggestions ---------------------------------------------------------------------
+
+    // what's typed: the whole text, or the list item the cursor is on
+    function termBounds() {
+        var t = target ? target.text : "";
+        var c = target ? target.cursorPosition : 0;
+        if (suggestionSep === "")
+            return { "start": 0, "end": t.length };
+        var start = t.lastIndexOf(suggestionSep, c - 1) + 1;
+        var end = t.indexOf(suggestionSep, c);
+        return { "start": start, "end": end < 0 ? t.length : end };
+    }
+
+    Connections {
+        target: root.target
+        function onTextChanged() { sugBar.update(); }
+        function onCursorPositionChanged() { sugBar.update(); }
+    }
+    onSuggestionsChanged: sugBar.update()
+    onTargetChanged: sugBar.update()
+
+    FontMetrics {
+        id: sugMetrics
+        font.family: globalFonts.sans
+        font.pixelSize: vpx(17)
+    }
+
     Column {
         id: layout
         x: root.panelPad
         y: root.panelPad
         spacing: root.keyGap
+
+        // the suggestions, a row of them above the keys (none: no row)
+        Item {
+            id: sugBar
+
+            property var items: []
+            property bool pending: false
+            readonly property var lowered: {
+                var out = [];
+                var src = root.suggestions || [];
+                for (var i = 0; i < src.length; i++)
+                    out.push(String(src[i]).toLowerCase());
+                return out;
+            }
+
+            visible: items.length > 0
+            width: root.gridW + (root.sideW + root.keyGap) * 2
+            height: vpx(42)
+
+            // once per change, after the key is handled
+            function update() {
+                if (pending)
+                    return;
+                pending = true;
+                Qt.callLater(refresh);
+            }
+            function refresh() {
+                pending = false;
+                var src = root.suggestions || [];
+                if (!root.target || src.length === 0) {
+                    if (items.length > 0) items = [];
+                    if (root.row === -1) root.row = 0;
+                    return;
+                }
+                var t = root.target.text;
+                var b = root.termBounds();
+                var typed = t.substring(b.start, b.end).trim().toLowerCase();
+                // the other items of a list: already there
+                var have = {};
+                if (root.suggestionSep !== "") {
+                    var lines = (t.substring(0, b.start) + t.substring(b.end)).split(root.suggestionSep);
+                    for (var l = 0; l < lines.length; l++)
+                        have[lines[l].trim().toLowerCase()] = true;
+                }
+                var starts = [], inside = [];
+                var max = 8;
+                for (var i = 0; i < lowered.length && starts.length < max; i++) {
+                    var g = lowered[i];
+                    if (have[g] || g === typed)
+                        continue;
+                    if (typed === "" || g.indexOf(typed) === 0)
+                        starts.push(src[i]);
+                    else if (inside.length < max && typed.length >= 2 && g.indexOf(typed) > 0)
+                        inside.push(src[i]);
+                }
+                var all = starts.concat(inside);
+                var next = [];
+                var used = 0;
+                for (var w = 0; w < all.length; w++) {
+                    var chip = Math.min(sugMetrics.advanceWidth(all[w]) + vpx(24), vpx(260)) + vpx(8);
+                    if (used + chip > width)
+                        break;
+                    used += chip;
+                    next.push(all[w]);
+                }
+                if (JSON.stringify(next) !== JSON.stringify(items))
+                    items = next;
+                if (root.sugIndex >= items.length)
+                    root.sugIndex = Math.max(0, items.length - 1);
+                if (items.length === 0 && root.row === -1)
+                    root.row = 0;
+            }
+            // the term becomes the suggestion; a list gets room for the next item
+            function apply(index) {
+                var name = items[index];
+                if (name === undefined || !root.target)
+                    return;
+                var t = root.target.text;
+                var b = root.termBounds();
+                var sep = root.suggestionSep;
+                var lead = (sep === "," && b.start > 0) ? " " : "";
+                var before = t.substring(0, b.start) + lead + name;
+                var after = sep === "" ? "" : (sep === "," ? ", " : "\n");
+                if (b.end >= t.length) {
+                    root.target.text = before + after;
+                    root.target.cursorPosition = before.length + after.length;
+                }
+                else {
+                    root.target.text = before + t.substring(b.end);
+                    root.target.cursorPosition = before.length + (sep === "" ? 0 : 1);
+                }
+                root.sugIndex = 0;
+                root.row = 0;
+            }
+
+            Row {
+                anchors.centerIn: parent
+                spacing: vpx(8)
+                Repeater {
+                    model: sugBar.items
+                    delegate: Rectangle {
+                        readonly property bool highlighted: root.activeFocus && root.row === -1 && index === root.sugIndex
+                        width: Math.min(sugText.implicitWidth + vpx(24), vpx(260))
+                        height: sugBar.height
+                        color: highlighted ? root.keyFillSel : root.keyFill
+                        border.color: root.keyFillSel
+                        border.width: highlighted ? 0 : vpx(1)
+                        Text {
+                            id: sugText
+                            width: Math.min(implicitWidth, vpx(236))
+                            text: modelData
+                            elide: Text.ElideRight
+                            color: parent.highlighted ? root.textSel : "#9dd"
+                            font.family: globalFonts.sans
+                            font.pixelSize: vpx(17)
+                            anchors.centerIn: parent
+                        }
+                        MouseArea {
+                            anchors.fill: parent
+                            onClicked: sugBar.apply(index)
+                        }
+                    }
+                }
+            }
+        }
 
         Row {
             spacing: root.keyGap

@@ -53,7 +53,7 @@ FocusScope {
     property var edits: ({})
     readonly property bool dirty: Object.keys(edits).length > 0
     property var savedTitles: ({})       // game path -> title saved this time
-    property var genres: []              // every genre in the library, for quick picks
+    property var pickLists: ({})         // genres, developers, publishers in the library: quick picks
 
     // Pegasus X: what the library looked like when Library opened; leaving with
     // the same (eg. hidden and shown again) reads nothing again
@@ -844,8 +844,8 @@ FocusScope {
 
     readonly property var gameFields: [
         { "key": "title", "label": qsTr("Title") + api.tr, "type": "text" },
-        { "key": "developer", "label": qsTr("Developer") + api.tr, "type": "list" },
-        { "key": "publisher", "label": qsTr("Publisher") + api.tr, "type": "list" },
+        { "key": "developer", "label": qsTr("Developer") + api.tr, "type": "list", "picks": true },
+        { "key": "publisher", "label": qsTr("Publisher") + api.tr, "type": "list", "picks": true },
         { "key": "genre", "label": qsTr("Genres") + api.tr, "type": "list", "picks": true },
         { "key": "description", "label": qsTr("Description") + api.tr, "type": "multi" },
         { "key": "launch", "label": qsTr("Emulator") + api.tr, "type": "command" },
@@ -2782,17 +2782,19 @@ FocusScope {
                 lineInput.text = text;
                 lineInput.cursorPosition = text.length;
             }
-            if (f.picks && root.genres.length === 0)
-                root.genres = Internal.settings.libraryGenres(api.allGames);
-            suggestBar.current = 0;
-            suggestBar.items = [];
+            if (f.picks && !root.pickLists[f.key]) {
+                var lists = root.pickLists;
+                lists[f.key] = Internal.settings.libraryValues(api.allGames, f.key);
+                root.pickLists = lists;
+            }
+            kb.suggestions = f.picks ? root.pickLists[f.key] : [];
+            kb.suggestionSep = f.picks ? (multiLine ? "\n" : ",") : "";
             kb.target = multiLine ? multiInput : lineInput;
             kb.multiLine = multiLine && !isCommand;
             kb.row = 1;
             kb.col = 0;
             focus = true;
             kb.focus = true;
-            suggestBar.update();
         }
         // the command, under a name, into the system's emulator list
         function saveToList() {
@@ -2883,155 +2885,7 @@ FocusScope {
             z: 1
             keyH: vpx(40)
             onDone: fieldDialog.finish()
-            onLeaveUp: (suggestBar.visible ? suggestBar : actionRow).focus = true
-        }
-
-        // genres you have, right above the keyboard, matching the line you're
-        // typing (a few at a time: no long row to scroll through)
-        FocusScope {
-            id: suggestBar
-
-            readonly property bool wanted: !!fieldDialog.field && !!fieldDialog.field.picks
-            readonly property var lowered: root.genres.map(function(x) { return String(x).toLowerCase(); })
-            property var items: []
-            property int current: 0
-            property bool pending: false
-
-            visible: wanted && items.length > 0
-            anchors.bottom: kb.top
-            anchors.bottomMargin: vpx(8)
-            anchors.horizontalCenter: kb.horizontalCenter
-            width: kb.width
-            height: vpx(42)
-            z: 1
-
-            // once per change of text or cursor, after the key is handled
-            function update() {
-                if (!wanted || pending)
-                    return;
-                pending = true;
-                Qt.callLater(refresh);
-            }
-            // genres: one line, comma separated (lineInput)
-            readonly property var input: fieldDialog.multiLine ? multiInput : lineInput
-            readonly property string sep: fieldDialog.multiLine ? "\n" : ","
-            function lineBounds() {
-                var t = input.text;
-                var c = input.cursorPosition;
-                var start = t.lastIndexOf(sep, c - 1) + 1;
-                var end = t.indexOf(sep, c);
-                return { "start": start, "end": end < 0 ? t.length : end };
-            }
-            function refresh() {
-                pending = false;
-                if (!wanted) {
-                    items = [];
-                    return;
-                }
-                var t = input.text;
-                var b = lineBounds();
-                var typed = t.substring(b.start, b.end).trim().toLowerCase();
-                // the other items: already in the list
-                var have = {};
-                var lines = (t.substring(0, b.start) + t.substring(b.end)).split(sep);
-                for (var l = 0; l < lines.length; l++)
-                    have[lines[l].trim().toLowerCase()] = true;
-                var starts = [], inside = [];
-                var max = 7;
-                for (var i = 0; i < lowered.length && starts.length < max; i++) {
-                    var g = lowered[i];
-                    if (have[g] || g === typed)
-                        continue;
-                    if (typed === "" || g.indexOf(typed) === 0)
-                        starts.push(root.genres[i]);
-                    else if (inside.length < max && g.indexOf(typed) > 0)
-                        inside.push(root.genres[i]);
-                }
-                var all = starts.concat(inside);
-                var next = [];
-                var used = 0;
-                for (var w = 0; w < all.length; w++) {
-                    var chip = Math.min(suggestMetrics.advanceWidth(all[w]) + vpx(24), vpx(220)) + vpx(8);
-                    if (used + chip > width)
-                        break;
-                    used += chip;
-                    next.push(all[w]);
-                }
-                if (JSON.stringify(next) !== JSON.stringify(items))
-                    items = next;
-                if (current >= items.length)
-                    current = Math.max(0, items.length - 1);
-                if (items.length === 0 && activeFocus)
-                    kb.focus = true;
-            }
-            // the line you're on becomes the genre, then a new line for the next
-            function apply(index) {
-                var name = items[index];
-                if (name === undefined)
-                    return;
-                var t = input.text;
-                var b = lineBounds();
-                // the item you're on becomes the genre, then room for the next
-                var lead = (sep === "," && b.start > 0) ? " " : "";
-                var before = t.substring(0, b.start) + lead + name;
-                var after = sep === "," ? ", " : "\n";
-                if (b.end >= t.length) {
-                    input.text = before + after;
-                    input.cursorPosition = before.length + after.length;
-                }
-                else {
-                    input.text = before + t.substring(b.end);
-                    input.cursorPosition = before.length + 1;
-                }
-                current = 0;
-                kb.focus = true;
-            }
-
-            Keys.onLeftPressed: { if (current > 0) current--; }
-            Keys.onRightPressed: { if (current < items.length - 1) current++; }
-            Keys.onUpPressed: actionRow.focus = true
-            Keys.onDownPressed: kb.focus = true
-            Keys.onPressed: {
-                if (api.keys.isAccept(event) && !event.isAutoRepeat) {
-                    event.accepted = true;
-                    apply(current);
-                }
-            }
-
-            FontMetrics {
-                id: suggestMetrics
-                font.family: globalFonts.sans
-                font.pixelSize: vpx(17)
-            }
-            Row {
-                anchors.centerIn: parent
-                spacing: vpx(8)
-                Repeater {
-                    model: suggestBar.items
-                    delegate: Rectangle {
-                        readonly property bool highlighted: suggestBar.activeFocus && index === suggestBar.current
-                        width: Math.min(suggestText.implicitWidth + vpx(24), vpx(220))
-                        height: suggestBar.height
-                        color: highlighted ? "#3aa" : "#333"
-                        border.color: "#3aa"
-                        border.width: highlighted ? 0 : vpx(1)
-                        Text {
-                            id: suggestText
-                            width: Math.min(implicitWidth, vpx(196))
-                            text: modelData
-                            elide: Text.ElideRight
-                            color: parent.highlighted ? "#111" : "#9dd"
-                            font.family: globalFonts.sans
-                            font.pixelSize: vpx(17)
-                            anchors.centerIn: parent
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: suggestBar.apply(index)
-                        }
-                    }
-                }
-            }
+            onLeaveUp: actionRow.focus = true
         }
 
         Rectangle {
@@ -3099,8 +2953,6 @@ FocusScope {
                         Keys.onReturnPressed: fieldDialog.finish()
                         Keys.onEnterPressed: fieldDialog.finish()
                         KeyNavigation.down: kb
-                        onTextChanged: suggestBar.update()
-                        onCursorPositionChanged: suggestBar.update()
                     }
                 }
 
@@ -3141,8 +2993,6 @@ FocusScope {
                             font.pixelSize: vpx(18)
                             wrapMode: TextEdit.Wrap
                             cursorVisible: fieldDialog.visible
-                            onTextChanged: suggestBar.update()
-                            onCursorPositionChanged: suggestBar.update()
                             onCursorRectangleChanged: multiFlick.ensureVisible(cursorRectangle)
                             activeFocusOnPress: false
                             // the d-pad leaves the box from its last line
@@ -3182,7 +3032,7 @@ FocusScope {
                             { "name": "savelist", "text": qsTr("Save to the list...") + api.tr } ]
                         : [ { "name": "cancel", "text": qsTr("Cancel") + api.tr },
                             { "name": "clear", "text": qsTr("Clear") + api.tr } ]
-                    KeyNavigation.down: suggestBar.visible ? suggestBar : kb
+                    KeyNavigation.down: kb
 
                     Keys.onPressed: {
                         if (api.keys.isAccept(event) && !event.isAutoRepeat) {

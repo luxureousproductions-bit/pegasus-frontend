@@ -3011,21 +3011,39 @@ QString Settings::firstExistingDir(const QStringList& paths) const
 
 QStringList Settings::libraryGenres(QObject* all_games) const
 {
+    return libraryValues(all_games, QStringLiteral("genre"));
+}
+
+// every distinct genre, developer, publisher or title in the library (`field`),
+// for the keyboard's suggestions
+QStringList Settings::libraryValues(QObject* all_games, const QString& field) const
+{
     QStringList out;
     const auto* const list = qobject_cast<model::ObjectListModel*>(all_games);
     if (!list)
+        return out;
+    const bool genres = field == QLatin1String("genre");
+    const bool developers = field == QLatin1String("developer");
+    const bool publishers = field == QLatin1String("publisher");
+    const bool titles = field == QLatin1String("title");
+    if (!genres && !developers && !publishers && !titles)
         return out;
     QSet<QString> seen;
     for (int i = 0; i < list->count(); i++) {
         const auto* const game = qobject_cast<model::Game*>(list->get(i));
         if (!game)
             continue;
-        for (const QString& genre : game->genreListConst()) {
-            const QString key = genre.trimmed().toLower();
-            if (key.isEmpty() || seen.contains(key) || key == QLatin1String("application") || key == QLatin1String("emulator"))
+        const QStringList values = titles ? QStringList { game->title() }
+            : genres ? game->genreListConst()
+            : developers ? game->developerListConst() : game->publisherListConst();
+        for (const QString& value : values) {
+            const QString key = value.trimmed().toLower();
+            if (key.isEmpty() || seen.contains(key))
+                continue;
+            if (genres && (key == QLatin1String("application") || key == QLatin1String("emulator")))
                 continue;
             seen.insert(key);
-            out.append(genre.trimmed());
+            out.append(value.trimmed());
         }
     }
     std::sort(out.begin(), out.end(), [](const QString& a, const QString& b) { return a.compare(b, Qt::CaseInsensitive) < 0; });

@@ -399,7 +399,7 @@ FocusScope {
 
     PromptBar {
         id: messageBar
-        text: root.message !== "" ? root.message : qsTr("A open · B back") + api.tr
+        text: root.message  // A/B need no telling here
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
