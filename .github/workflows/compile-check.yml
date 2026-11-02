@@ -3,10 +3,13 @@
 # elsewhere. The Windows build is zipped (pegasus-x-windows.zip: unzip and
 # run pegasus-fe.exe) as the run's artifact and on the pegasus-x-latest
 # release next to the APKs.
+#
+# Parked (Nov 2 2026): Android only until it's stable, so this runs only when
+# started by hand (Actions > Compile check > Run workflow). What desktop will
+# need is kept on the Project Board ("Desktop notes"). Started by hand, it
+# still puts the Windows zip on pegasus-x-latest for the updater.
 name: Compile check - Linux, Windows
 on:
-  push:
-    branches: [pegasus-x]
   workflow_dispatch:
 
 jobs:

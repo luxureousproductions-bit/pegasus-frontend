@@ -201,6 +201,10 @@ jobs:
           gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --title "Pegasus X build $BUILD" --notes "$NOTES" || true
           gh release edit "$TAG" --title "Pegasus X build $BUILD" --notes "$NOTES" --prerelease || true
           gh release upload "$TAG" "$APK" --clobber
+          # Pegasus X: the Windows zip is built only by hand now (compile-check
+          # is parked); an older zip left here would be offered to Windows as
+          # this newer build, over and over. Without it, Windows says up to date.
+          gh release delete-asset "$TAG" pegasus-x-windows.zip -y 2>/dev/null || true
           echo "::notice::Published build $BUILD ($APK) for the updater"
 
       # Pegasus X: a version tag (v1.0, v1.1-beta1, ...) publishes a GitHub
