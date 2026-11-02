@@ -349,15 +349,12 @@ FocusScope {
         }
     }
 
-    Text {
+    PromptBar {
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: vpx(16)
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.left: parent.left
+        anchors.right: parent.right
         text: (root.step > 1 ? qsTr("A choose · B previous step") : qsTr("A choose · B skip setup")) + api.tr
               + qsTr(" · Each step can be done later in Settings") + api.tr
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(16)
     }
 
     // the screen a step opens (Settings' own)

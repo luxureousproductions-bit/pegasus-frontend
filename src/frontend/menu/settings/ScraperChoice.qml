@@ -328,15 +328,12 @@ FocusScope {
         }
     }
 
-    Text {
+    PromptBar {
         id: hints
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: vpx(14)
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.left: parent.left
+        anchors.right: parent.right
         text: qsTr("A use this match · Y search another name · X skip this game · B stop") + api.tr
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(17)
     }
 
 

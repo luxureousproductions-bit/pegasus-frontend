@@ -143,6 +143,7 @@ FocusScope {
         if (picked.kind === "add") { linkDialog.openFor(); return; }
         if (picked.kind === "refresh") { message = ""; store.refresh(true); return; }
         if (!entry.installed) installIt(entry);
+        else if (entry.update && tab === "updates") installIt(entry);  // the Updates tab: A installs it
         else if (entry.current) message = qsTr("It's the theme in use.") + api.tr;
         else useIt(entry);
     }
@@ -341,14 +342,15 @@ FocusScope {
                 // what it is here, as Pegasus shows a value: on the right
                 Text {
                     id: badge
-                    readonly property string kind: !parent.e ? "" : parent.e.current ? "current"
-                        : parent.e.update ? "update" : parent.e.installed ? "installed" : ""
+                    // an update comes first: the theme in use can have one too
+                    readonly property string kind: !parent.e ? "" : parent.e.update ? "update"
+                        : parent.e.current ? "current" : parent.e.installed ? "installed" : ""
                     visible: kind !== ""
                     anchors.right: parent.right
                     anchors.rightMargin: vpx(16)
                     anchors.verticalCenter: parent.verticalCenter
                     width: visible ? implicitWidth : 0
-                    text: kind === "update" ? qsTr("Update") + api.tr
+                    text: kind === "update" ? (parent.e.current ? qsTr("Update · in use") : qsTr("Update")) + api.tr
                         : kind === "current" ? qsTr("In use") + api.tr : qsTr("Installed") + api.tr
                     color: kind === "update" ? "#fc6" : "#c0c0c0"
                     font.family: globalFonts.sans
@@ -530,14 +532,11 @@ FocusScope {
         }
     }
 
-    Text {
+    PromptBar {
         id: hints
         anchors.bottom: parent.bottom
-        anchors.bottomMargin: vpx(14)
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.9
-        horizontalAlignment: Text.AlignHCenter
-        wrapMode: Text.WordWrap
+        anchors.left: parent.left
+        anchors.right: parent.right
         text: {
             if (root.message !== "")
                 return root.message;
@@ -547,9 +546,11 @@ FocusScope {
                 parts.push(qsTr("A select") + api.tr);
             else if (!e.installed)
                 parts.push(qsTr("A install") + api.tr);
+            else if (e.update && root.tab === "updates")
+                parts.push(qsTr("A update") + api.tr);
             else if (!e.current)
                 parts.push(qsTr("A use it") + api.tr);
-            if (e && e.installed)
+            if (e && e.installed && !(e.update && root.tab === "updates"))
                 parts.push((e.update ? qsTr("Y update") : qsTr("Y download again")) + api.tr);
             if (e && (e.installed || e.custom))
                 parts.push((e.installed ? qsTr("X remove") : qsTr("X take off my links")) + api.tr);
@@ -559,9 +560,6 @@ FocusScope {
             parts.push(qsTr("B back") + api.tr);
             return parts.join("  ·  ");
         }
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(17)
     }
 
 

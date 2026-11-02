@@ -73,6 +73,35 @@ FocusScope {
 
     readonly property list<SettingsEntry> optionList: [
         SettingsEntry {
+            label: QT_TR_NOOP("Language")
+            type: SettingsEntry.Type.Select
+            selectBox: localeBox
+            selectValue: Internal.settings.locales.currentName
+            section: "general"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Theme")
+            type: SettingsEntry.Type.Select
+            selectBox: themeBox
+            selectValue: Internal.settings.themes.currentName
+            section: "general"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Theme downloader...")
+            desc: QT_TR_NOOP("Browse the Pegasus theme gallery with pictures, install and update themes, or add one from a GitHub link.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openThemeDownloader
+            section: "general"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Fullscreen mode")
+            desc: QT_TR_NOOP("On some platforms this setting may have no effect.")
+            type: SettingsEntry.Type.Bool
+            boolValue: Internal.settings.fullscreen
+            boolSetter: (val) => Internal.settings.fullscreen = val
+            section: "general"
+        },
+        SettingsEntry {
             label: QT_TR_NOOP("Pegasus X folder...")
             desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
             type: SettingsEntry.Type.Button
@@ -101,35 +130,6 @@ FocusScope {
             buttonAction: function() { Internal.settings.openUsageAccess(); }
             section: "pegasusx"
             enabled: Qt.platform.os === "android"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Language")
-            type: SettingsEntry.Type.Select
-            selectBox: localeBox
-            selectValue: Internal.settings.locales.currentName
-            section: "general"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Theme")
-            type: SettingsEntry.Type.Select
-            selectBox: themeBox
-            selectValue: Internal.settings.themes.currentName
-            section: "general"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Theme downloader...")
-            desc: QT_TR_NOOP("Browse the Pegasus theme gallery with pictures, install and update themes, or add one from a GitHub link.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openThemeDownloader
-            section: "general"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Fullscreen mode")
-            desc: QT_TR_NOOP("On some platforms this setting may have no effect.")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.fullscreen
-            boolSetter: (val) => Internal.settings.fullscreen = val
-            section: "general"
         },
 
         SettingsEntry {
@@ -281,8 +281,7 @@ FocusScope {
         width: root.width * 0.7
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.top: header.bottom
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: header.height
+        anchors.bottom: prompts.top
 
         displayMarginBeginning: header.height
         displayMarginEnd: header.height
@@ -295,6 +294,14 @@ FocusScope {
 
         section.property: "section"
         section.delegate: sectionTitle
+    }
+
+    PromptBar {
+        id: prompts
+        anchors.bottom: parent.bottom
+        anchors.left: parent.left
+        anchors.right: parent.right
+        text: qsTr("A select · ◂ ▸ change · B back") + api.tr
     }
 
 

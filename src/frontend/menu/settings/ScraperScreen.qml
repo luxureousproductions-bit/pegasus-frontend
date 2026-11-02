@@ -835,22 +835,15 @@ FocusScope {
         }
     }
 
-    Text {
+    PromptBar {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "main" ? qsTr("A select · ◂ ▸ change value · Start start scraping · B back") + api.tr
+            : root.page === "main" ? qsTr("A select · ◂ ▸ change · Start run the scraper · B back") + api.tr
             : root.page === "systems" ? qsTr("A pick a system · B back") + api.tr
-            : qsTr("A select · ◂ ▸ change value · B back") + api.tr
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(17)
-        wrapMode: Text.WordWrap
-        horizontalAlignment: Text.AlignHCenter
+            : qsTr("A select · ◂ ▸ change · B back") + api.tr
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.7
-        topPadding: vpx(10)
-        bottomPadding: vpx(16)
+        anchors.left: parent.left
+        anchors.right: parent.right
     }
 
 

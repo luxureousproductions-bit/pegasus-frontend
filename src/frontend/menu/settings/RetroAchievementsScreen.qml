@@ -397,20 +397,12 @@ FocusScope {
         }
     }
 
-    Text {
+    PromptBar {
         id: messageBar
         text: root.message !== "" ? root.message : qsTr("A open · B back") + api.tr
-        height: implicitHeight
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(17)
-        wrapMode: Text.WordWrap
-        horizontalAlignment: Text.AlignHCenter
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.7
-        topPadding: vpx(10)
-        bottomPadding: vpx(16)
+        anchors.left: parent.left
+        anchors.right: parent.right
     }
 
     // a yes/no with a short list

@@ -63,6 +63,7 @@
         <file>menu/settings/common/MultivalueBox.qml</file>
         <file>menu/settings/common/MultivalueOption.qml</file>
         <file>menu/settings/common/ScreenHeader.qml</file>
+        <file>menu/settings/common/PromptBar.qml</file>
         <file>menu/settings/common/SectionTitle.qml</file>
         <file>menu/settings/common/SimpleButton.qml</file>
         <file>menu/settings/common/Switch.qml</file>

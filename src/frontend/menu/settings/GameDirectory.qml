@@ -548,23 +548,15 @@ FocusScope {
         return parts.length >= 2 ? parts[parts.length - 2] + "/" + parts[parts.length - 1] : p;
     }
 
-    Text {
+    PromptBar {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "main" ? qsTr("A rescan or remove a system · Y remove · B back") + api.tr
+            : root.page === "main" ? qsTr("A rescan / remove · Y remove · B back") + api.tr
             : root.page === "add" ? qsTr("A tick · B back") + api.tr
-            : qsTr("A tick a system / pick a folder · Import at the bottom · B back") + api.tr
-        height: implicitHeight
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(17)
-        wrapMode: Text.WordWrap
-        horizontalAlignment: Text.AlignHCenter
+            : qsTr("A tick a system or pick the folder · Import is at the bottom · B back") + api.tr
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.7
-        topPadding: vpx(10)
-        bottomPadding: vpx(16)
+        anchors.left: parent.left
+        anchors.right: parent.right
     }
 
     // the ROM folder (for the picked systems), or one system's folder

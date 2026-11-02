@@ -2142,25 +2142,17 @@ FocusScope {
         }
     }
 
-    Text {
+    PromptBar {
         id: messageBar
         text: root.message !== "" ? root.message
-            : root.page === "collections" ? qsTr("A open · B back. Edits are saved in Pegasus metadata files, so every theme shows them.") + api.tr
-            : root.page === "hidden" ? qsTr("A shows it again.") + api.tr
+            : root.page === "collections" ? qsTr("A open · B back · Edits are saved in Pegasus metadata files, so every theme shows them") + api.tr
+            : root.page === "hidden" ? qsTr("A show it again · B back") + api.tr
             : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · B back") + api.tr
             : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr
-        height: implicitHeight
-        color: "#ddd"
-        font.family: globalFonts.sans
-        font.pixelSize: vpx(17)
-        wrapMode: Text.WordWrap
-        horizontalAlignment: Text.AlignHCenter
         anchors.bottom: parent.bottom
-        anchors.horizontalCenter: parent.horizontalCenter
-        width: parent.width * 0.7
-        topPadding: vpx(10)
-        bottomPadding: vpx(16)
+        anchors.left: parent.left
+        anchors.right: parent.right
     }
 
 
