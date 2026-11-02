@@ -2692,7 +2692,6 @@ FocusScope {
             pickFolders = false;
             list.focus = true;
         }
-        onNewFolderRequested: nameDialog.openFor(parent_path)
     }
 
 

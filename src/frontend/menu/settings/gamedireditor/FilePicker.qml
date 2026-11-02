@@ -15,6 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 
+import "../common"
 import QtQuick 2.8
 import Pegasus.FolderListModel 1.0
 
@@ -33,11 +34,11 @@ FocusScope {
     signal pick(string dir_path)
     signal pickFile(string file_path)  // Pegasus X: the picked file itself
     // Pegasus X: picking a folder instead of a file ("Use this folder"), and
-    // asking the host for a name to make a new one in the current folder
+    // making a new one in the current folder (named here, then opened)
     property bool pickFolders: false
     property bool allowNewFolder: true   // "Create new folder..." beside "Use this folder"
     signal pickFolder(string dir_path)
-    signal newFolderRequested(string parent_path)
+    signal newFolderRequested(string parent_path)  // (told after the picker made it itself)
     readonly property string currentFolder: folderModel.folder
 
     anchors.fill: parent
@@ -107,14 +108,30 @@ FocusScope {
     readonly property var folderButtons: !pickFolders ? []
         : allowNewFolder ? [ { "t": qsTr("Use this folder") + api.tr, "act": "use" }, { "t": qsTr("Create new folder...") + api.tr, "act": "new" } ]
         : [ { "t": qsTr("Use this folder") + api.tr, "act": "use" } ]
+    // a short note over the list ("Open a folder first", "Couldn't make it")
+    property string note: ""
+    Timer { id: noteTimer; interval: 3500; onTriggered: root.note = "" }
+    function say(text) {
+        note = text;
+        noteTimer.restart();
+    }
     function jump(entry) {
+        if (entry.act === "use" || entry.act === "new") {
+            // the drive list is no folder: open one first
+            if (root.onDrives) {
+                say(entry.act === "use" ? qsTr("Open a drive or a folder first, then pick \"Use this folder\".") + api.tr
+                                        : qsTr("Open a drive or a folder first: the new folder goes in it.") + api.tr);
+                list.focus = true;
+                return;
+            }
+        }
         if (entry.act === "use") {
             root.remember();
             root.pickFolder(folderModel.folder);
             return;
         }
         if (entry.act === "new") {
-            root.newFolderRequested(folderModel.folder);
+            newFolder.openIn(folderModel.folder);
             return;
         }
         if (entry.act === "up")
@@ -465,6 +482,146 @@ FocusScope {
                     elide: Text.ElideRight
                 }
             }
+        }
+    }
+
+    Rectangle {
+        visible: root.note !== ""
+        z: 3
+        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: vpx(70)
+        width: noteText.implicitWidth + vpx(40)
+        height: noteText.implicitHeight + vpx(24)
+        color: "#e8b06a"
+        Text {
+            id: noteText
+            anchors.centerIn: parent
+            width: Math.min(implicitWidth, root.width * 0.8)
+            text: root.note
+            color: "#1a1a1a"
+            font.family: globalFonts.sans
+            font.pixelSize: vpx(17)
+            wrapMode: Text.WordWrap
+            horizontalAlignment: Text.AlignHCenter
+        }
+    }
+
+    // -- A new folder: its name, then it's made and opened ----------------------------
+    FocusScope {
+        id: newFolder
+
+        property string parentPath: ""
+
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+        z: 4
+
+        function openIn(path) {
+            parentPath = path;
+            folderName.text = "";
+            folderKeyboard.row = 1;
+            folderKeyboard.col = 0;
+            focus = true;
+            folderKeyboard.focus = true;
+        }
+        function back() {
+            list.focus = true;
+        }
+        function finish() {
+            // no characters a folder name can't have
+            var name = folderName.text.trim().replace(new RegExp("[\\\\/:*?<>|\"]", "g"), "_");
+            if (name === "")
+                return;
+            var path = parentPath.replace(new RegExp("/+$"), "") + "/" + name;
+            if (!Internal.settings.makeDir(path)) {
+                root.say(qsTr("Couldn't make %1 here.").arg(name) + api.tr);
+                back();
+                return;
+            }
+            // into it, ready for "Use this folder"
+            folderModel.cd(path);
+            root.resetPosition();
+            root.newFolderRequested(parentPath);
+            root.say(qsTr("Made %1: \"Use this folder\" picks it.").arg(name) + api.tr);
+            list.focus = true;
+        }
+
+        Keys.onPressed: {
+            if (api.keys.isCancel(event) && !event.isAutoRepeat) {
+                event.accepted = true;
+                newFolder.back();
+            }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.5
+            MouseArea { anchors.fill: parent; onClicked: newFolder.back() }
+        }
+        Rectangle {
+            width: Math.min(parent.width * 0.7, vpx(800))
+            height: folderColumn.height + vpx(40)
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: vpx(30)
+            color: "#444"
+            MouseArea { anchors.fill: parent }
+            Column {
+                id: folderColumn
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: vpx(20)
+                spacing: vpx(12)
+                Text {
+                    width: parent.width
+                    text: qsTr("New folder in %1").arg(newFolder.parentPath) + api.tr
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(18)
+                    horizontalAlignment: Text.AlignHCenter
+                    elide: Text.ElideMiddle
+                }
+                Rectangle {
+                    width: parent.width
+                    height: vpx(52)
+                    color: "#333"
+                    border.color: "#3aa"
+                    border.width: vpx(2)
+                    TextInput {
+                        id: folderName
+                        anchors.fill: parent
+                        anchors.leftMargin: vpx(14)
+                        anchors.rightMargin: vpx(14)
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(20)
+                        clip: true
+                        cursorVisible: newFolder.visible
+                        activeFocusOnPress: false
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: qsTr("Start  make it and open it     B  cancel") + api.tr
+                    color: "#aaa"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(15)
+                    horizontalAlignment: Text.AlignHCenter
+                }
+            }
+        }
+        OnScreenKeyboard {
+            id: folderKeyboard
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: vpx(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            keyH: vpx(40)
+            target: folderName
+            onDone: newFolder.finish()
         }
     }
 
