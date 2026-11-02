@@ -67,19 +67,19 @@ Rectangle {
                     var bg = keys[labels[k]] || "#4a5054";
                     var fg = keys[labels[k]] ? "#161616" : "#e8ecee";
                     html += "<span style=\"background-color:" + bg + ";color:" + fg + ";font-weight:bold\">&nbsp;"
-                          + escape(labels[k]) + "&nbsp;</span>";
+                          + html(labels[k]) + "&nbsp;</span>";
                     if (k + 1 < labels.length)
                         html += "&nbsp;";
                 }
-                out.push(html + (rest !== "" ? "&nbsp;&nbsp;" + escape(rest) : ""));
+                out.push(html + (rest !== "" ? "&nbsp;&nbsp;" + html(rest) : ""));
             } else {
-                out.push(escape(part));
+                out.push(html(part));
             }
         }
         return { "html": out.join("&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"), "keys": found };
     }
 
-    function escape(s) {
+    function html(s) {
         return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
     }
 
