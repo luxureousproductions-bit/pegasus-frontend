@@ -487,7 +487,7 @@ void Settings::quitApp()
 bool Settings::checkUpdatesOnStart() const
 {
     const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
-    return file.value(QStringLiteral("updater/checkOnStart"), false).toBool();
+    return file.value(QStringLiteral("updater/checkOnStart"), true).toBool();
 }
 
 void Settings::setCheckUpdatesOnStart(bool value)

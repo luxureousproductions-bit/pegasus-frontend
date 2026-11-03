@@ -53,6 +53,11 @@ public:
 
     /// the list: from the copy kept for a week, else (or forced) online
     Q_INVOKABLE void refresh(bool force);
+    /// Pegasus X: only the installed themes, against their newest commit
+    /// (one small request each; the gallery isn't read): updatesChecked(names)
+    Q_INVOKABLE void checkUpdates();
+    /// the names of the installed themes with a newer version out
+    Q_INVOKABLE QStringList updateNames() const;
     /// [{ id, name, author, version, summary, description, pictures, url,
     ///    custom, installed, installedVersion, dir, update, current }]
     Q_INVOKABLE QVariantList themes() const;
@@ -68,6 +73,7 @@ signals:
     void loadingChanged();
     void installingChanged();
     void listChanged();
+    void updatesChecked(QStringList names);
     void refreshProgress(int done, int total);
     /// stage: "download" / "unpack"
     void installProgress(QString id, qint64 received, qint64 total, QString stage);
@@ -102,6 +108,7 @@ private:
     std::function<QString()> m_current_dir;
     std::vector<Entry> m_entries;
     bool m_loading = false;
+    bool m_checking = false;  ///< checkUpdates running
     int m_pending = 0;
     int m_done = 0;
     int m_total = 0;

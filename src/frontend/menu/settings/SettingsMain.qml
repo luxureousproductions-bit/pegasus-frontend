@@ -116,8 +116,8 @@ FocusScope {
             section: "pegasusx"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Check for updates when Pegasus X starts")
-            desc: QT_TR_NOOP("A short note on the theme when a newer build is out. Nothing is downloaded by itself.")
+            label: QT_TR_NOOP("Check for updates")
+            desc: QT_TR_NOOP("Pegasus X and your installed themes, when Pegasus X starts and every 6 hours. A note shows on the theme when something new is out; nothing is downloaded by itself.")
             type: SettingsEntry.Type.Bool
             boolValue: Internal.settings.checkUpdatesOnStart
             boolSetter: (val) => Internal.settings.checkUpdatesOnStart = val

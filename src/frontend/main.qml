@@ -289,6 +289,78 @@ Window {
         }
     }
 
+    // Pegasus X: updates found (Pegasus X, themes): a card in the corner of the
+    // theme for a few seconds, one after another; it waits while a menu or a
+    // game is open, and never takes a button press
+    Rectangle {
+        id: updateToast
+        property var queue: []
+        property var shown: null
+        readonly property bool canShow: content.focus && theme.focus && Qt.application.state === Qt.ApplicationActive
+        function add(title, where) {
+            var q = queue.slice();
+            q.push({ "title": title, "where": where });
+            queue = q;
+            next();
+        }
+        function next() {
+            if (shown || !canShow || queue.length === 0)
+                return;
+            var q = queue.slice();
+            shown = q.shift();
+            queue = q;
+            toastHide.restart();
+        }
+        onCanShowChanged: next()
+        Timer {
+            id: toastHide
+            interval: 8000
+            onTriggered: { updateToast.shown = null; toastGap.restart(); }
+        }
+        Timer { id: toastGap; interval: 600; onTriggered: updateToast.next() }
+
+        anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.margins: vpx(24)
+        width: Math.max(toastTitle.implicitWidth, toastWhere.implicitWidth) + vpx(70)
+        height: vpx(70)
+        z: 51
+        color: "#e6101410"
+        border.color: "#107c10"
+        border.width: vpx(2)
+        opacity: shown && canShow ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity { NumberAnimation { duration: 220 } }
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: vpx(8)
+            color: "#5dc21e"
+        }
+        Column {
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.left: parent.left
+            anchors.leftMargin: vpx(30)
+            spacing: vpx(4)
+            Text {
+                id: toastTitle
+                text: updateToast.shown ? updateToast.shown.title : ""
+                color: "#fff"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(18)
+                font.bold: true
+            }
+            Text {
+                id: toastWhere
+                text: updateToast.shown ? updateToast.shown.where : ""
+                color: "#b2e894"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(15)
+            }
+        }
+    }
+
     Loader {
         id: powerDialog
         anchors.fill: parent
@@ -431,27 +503,73 @@ Window {
             }
         }
 
-        // Pegasus X: "Check for updates when Pegasus X starts": a note on the
-        // theme when a newer build is out (nothing downloaded by itself)
+        // Pegasus X: "Check for updates": Pegasus X and the installed themes,
+        // a few seconds after the start and every 6 hours after. At the start a
+        // newer Pegasus X asks (Update now / Later); otherwise, and for themes,
+        // a note on the theme, once per new version (nothing downloaded by itself)
         Timer {
             id: updateCheck
             interval: 3000
-            onTriggered: Internal.settings.updater.check()
+            onTriggered: splashScreen.checkForUpdates()
         }
+        Timer {
+            id: updateCheckEvery
+            interval: 6 * 60 * 60 * 1000
+            repeat: true
+            running: splashScreen.startupScreenDone && Internal.settings.checkUpdatesOnStart
+            onTriggered: splashScreen.checkForUpdates()
+        }
+        property bool firstCheck: true
+        function checkForUpdates() {
+            if (!Internal.settings.checkUpdatesOnStart)
+                return;
+            Internal.settings.updater.check();
+            Internal.settings.themeStore.checkUpdates();
+        }
+        property int notifiedBuild: 0      // the newest build told about this session
+        property var notifiedThemes: ({})  // theme name -> true, told about this session
         Connections {
             target: Internal.settings.updater
             function onChanged() {
                 var u = Internal.settings.updater;
-                if (!updateCheck.running && Internal.settings.checkUpdatesOnStart && u.state === "available"
-                        && !splashScreen.updateNoteShown && !mainMenu.focus) {
-                    splashScreen.updateNoteShown = true;
-                    // Update now / Later
+                if (u.state === "uptodate" || u.state === "error")
+                    splashScreen.firstCheck = false;  // only the start's check asks
+                if (u.state !== "available" || !Internal.settings.checkUpdatesOnStart)
+                    return;
+                var latest = (u.info || {}).latest || 0;
+                if (latest <= splashScreen.notifiedBuild)
+                    return;
+                splashScreen.notifiedBuild = latest;
+                // the start: asked right away (Update now / Later)
+                if (splashScreen.firstCheck && !mainMenu.focus) {
+                    splashScreen.firstCheck = false;
                     updatePrompt.setSource("menu/settings/UpdatePrompt.qml");
                     updatePrompt.focus = true;
+                    return;
                 }
+                updateToast.add(qsTr("Pegasus X build %1 is out").arg(latest) + api.tr,
+                                qsTr("Settings > Check for updates") + api.tr);
             }
         }
-        property bool updateNoteShown: false
+        Connections {
+            target: Internal.settings.themeStore
+            function onUpdatesChecked(names) {
+                var fresh = [];
+                var told = splashScreen.notifiedThemes;
+                for (var i = 0; i < names.length; i++) {
+                    if (!told[names[i]]) {
+                        told[names[i]] = true;
+                        fresh.push(names[i]);
+                    }
+                }
+                splashScreen.notifiedThemes = told;
+                if (fresh.length === 0)
+                    return;
+                updateToast.add(fresh.length === 1 ? qsTr("Theme update: %1").arg(fresh[0]) + api.tr
+                                                   : qsTr("%1 theme updates: %2").arg(fresh.length).arg(fresh.join(", ")) + api.tr,
+                                qsTr("Settings > Theme downloader > Updates") + api.tr);
+            }
+        }
 
         function hideMaybe() {
             if (focus && !dataLoading && !skinLoading) {
@@ -460,7 +578,7 @@ Window {
                     startupScreenDone = true;
                     if (Internal.settings.startupScreen() !== "")
                         startupScreenTimer.start();
-                    // Pegasus X: a newer build looked for, if that's turned on
+                    // Pegasus X: a newer build and theme updates looked for, if that's turned on
                     if (Internal.settings.checkUpdatesOnStart)
                         updateCheck.start();
                     // the test environment: the art each game has (PEGASUSX_TEST_DUMP)

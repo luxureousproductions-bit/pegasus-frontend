@@ -626,6 +626,60 @@ void ThemeStore::finishRefresh()
     emit listChanged();
 }
 
+void ThemeStore::checkUpdates()
+{
+    if (m_loading || m_checking)
+        return;
+    if (m_entries.empty())
+        loadCache();
+    const QHash<QString, Installed> have = installed();
+    std::vector<Entry> todo;
+    for (const Entry& e : m_entries) {
+        if (have.contains(e.id()))
+            todo.push_back(e);
+    }
+    if (todo.empty()) {
+        emit updatesChecked(updateNames());
+        return;
+    }
+    m_checking = true;
+    auto left = std::make_shared<size_t>(todo.size());
+    for (const Entry& e : todo) {
+        const QString id = e.id();
+        get(QStringLiteral("https://github.com/%1/%2/commits/%3.atom").arg(e.owner, e.repo, e.ref()),
+            [this, id, left](int status, const QByteArray& body){
+                static const QRegularExpression rx(QStringLiteral("Commit/([0-9a-f]{40})"));
+                const QRegularExpressionMatch m = rx.match(QString::fromUtf8(body));
+                // by id: a gallery read meanwhile may have replaced the list
+                if (status == 200 && m.hasMatch()) {
+                    for (Entry& entry : m_entries) {
+                        if (entry.id() == id)
+                            entry.sha = m.captured(1);
+                    }
+                }
+                if (--(*left) > 0)
+                    return;
+                m_checking = false;
+                saveCache();
+                emit listChanged();
+                const QStringList names = updateNames();
+                Log::info(LOG_TAG, LOGMSG("Installed themes checked: %1").arg(names.isEmpty() ? QStringLiteral("all up to date") : names.join(QStringLiteral(", "))));
+                emit updatesChecked(names);
+            });
+    }
+}
+
+QStringList ThemeStore::updateNames() const
+{
+    QStringList out;
+    for (const QVariant& v : themes()) {
+        const QVariantMap t = v.toMap();
+        if (t.value(QStringLiteral("update")).toBool())
+            out.append(t.value(QStringLiteral("name")).toString());
+    }
+    return out;
+}
+
 QVariantList ThemeStore::themes() const
 {
     const QHash<QString, Installed> have = installed();
