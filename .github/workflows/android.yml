@@ -29,6 +29,13 @@ jobs:
       - uses: actions/checkout@v4
         with: {submodules: 'recursive', fetch-depth: 0, fetch-tags: true}
 
+      # Pegasus X: Qt 5.15's Gradle can't run on the newest Java the runner
+      # image now defaults to (Java 25: "Unsupported class file major
+      # version 69"); Java 17 is what it's made for
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
       - uses: nttld/setup-ndk@v1
         id: setup-ndk
         with:
