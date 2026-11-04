@@ -64,7 +64,6 @@ FocusScope {
     // Pegasus X: what the library looked like when Library opened; leaving with
     // the same (eg. hidden and shown again) reads nothing again
     property string libStart: ""
-    property bool scrapedHere: false
     function libState() {
         return JSON.stringify({ "h": Internal.settings.hiddenItems(), "k": Internal.settings.androidKinds(),
                                 "m": Internal.settings.mergeAndroid });
@@ -368,8 +367,6 @@ FocusScope {
             if (!root.collScraping)
                 return;
             root.keepPosition(function() { root.collScraping = false; });
-            if (state.saved > 0)
-                root.anySaved = true;
             root.message = qsTr("Done: %1 filled, %2 to check in Needs your check.").arg(state.saved || 0)
                 .arg((state.notFound || 0) + (state.failed || 0)) + api.tr;
             // the collection's rows show what was saved now
@@ -759,7 +756,6 @@ FocusScope {
                 return;
             root.keepPosition(function() { root.scrapingGame = false; });
             if (state.saved > 0) {
-                root.anySaved = true;
                 // the game was updated in place: its page shows what was saved now
                 if (root.page === "game" && root.game && root.game.obj) {
                     // the game's removed-art list was updated with it
@@ -1115,6 +1111,8 @@ FocusScope {
     }
     function localPath(url) {
         var s = String(url || "");
+        // "?v=<time>": added to a file written over, so themes read it again
+        s = s.replace(new RegExp("[?]v=[0-9]+$"), "");
         if (s.indexOf("file://") === 0)
             s = decodeURIComponent(s.substring(7));
         return s;
@@ -1369,7 +1367,7 @@ FocusScope {
             return;
         }
         Internal.settings.libraryOpen = false;
-        if (anySaved || scrapedHere || (libChanged && libState() !== libStart))
+        if (anySaved || (libChanged && libState() !== libStart))
             Internal.settings.reloadLibrary();
         root.close();
     }
@@ -1534,9 +1532,13 @@ FocusScope {
                 }
             }
         });
-        if (page !== "game")
-            anySaved = true;  // a collection's name or emulator: the library is read again on the way out
-        message = (page === "game" ? qsTr("Saved in %1. Themes show it right away.") : qsTr("Saved in %1. Every theme shows it once you leave Edit metadata."))
+        // a collection's name, short name or extensions: only a read gives
+        // themes the renamed collection (its emulator was applied above)
+        var renamed = page !== "game" && (("name" in merged) || ("shortname" in merged) || ("extensions" in merged)
+                                          || ((p2 + "name") in merged));
+        if (renamed)
+            anySaved = true;
+        message = (renamed ? qsTr("Saved in %1. Every theme shows it once you leave Library.") : qsTr("Saved in %1. Themes show it right away."))
             .arg(where.split("/").slice(-2).join("/")) + api.tr;
         loc = Internal.settings.metadataLocation(gameColl(), page === "game" ? (game.path || game.key) : "");
         return true;

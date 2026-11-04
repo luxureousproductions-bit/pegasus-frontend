@@ -142,19 +142,45 @@ void Assets::keep_one_per_kind()
     }
 }
 
+QString Assets::plainUrl(const QString& uri)
+{
+    // "file:///x.png?v=1699999999" -> "file:///x.png"
+    const int at = uri.lastIndexOf(QLatin1String("?v="));
+    if (at < 0)
+        return uri;
+    for (int i = at + 3; i < uri.size(); i++) {
+        if (!uri[i].isDigit())
+            return uri;
+    }
+    return uri.left(at);
+}
+
 void Assets::set_files(AssetType key, const QStringList& paths)
 {
     QStringList& target = m_asset_lists[key];
     QStringList icons;
+    QSet<QString> had;
     for (const QString& uri : qAsConst(target)) {
         if (uri.startsWith(QLatin1String("image://")))
             icons.append(uri);
+        else
+            had.insert(plainUrl(uri));
     }
     target.clear();
     for (const QString& path : paths) {
-        const QString uri = path.contains(QLatin1String("://")) ? path : QUrl::fromLocalFile(path).toString();
-        if (!uri.isEmpty() && !target.contains(uri))
-            target.append(uri);
+        QString uri = plainUrl(path.contains(QLatin1String("://")) ? path : QUrl::fromLocalFile(path).toString());
+        if (uri.isEmpty() || target.contains(uri))
+            continue;
+        // the same file as before, written over (scraped again, a picture
+        // put in its place): a QML Image keeps what it showed for a URL, so
+        // the file's time goes on the end and it's read again. (Not videos:
+        // the player takes the URL as it is.)
+        if (key != AssetType::VIDEO && key != AssetType::MUSIC && had.contains(uri) && uri.startsWith(QLatin1String("file:"))) {
+            const QFileInfo info(QUrl(uri).toLocalFile());
+            if (info.exists())
+                uri += QStringLiteral("?v=") % QString::number(info.lastModified().toSecsSinceEpoch());
+        }
+        target.append(uri);
     }
     target.append(icons);
 }

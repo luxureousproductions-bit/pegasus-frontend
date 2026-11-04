@@ -88,6 +88,9 @@ public:
     /// Pegasus X: one kind's files replaced (eg. after scraping a game), the
     /// app icons (image://) kept at the end
     void set_files(AssetType key, const QStringList& paths);
+    /// Pegasus X: a file URL without the "?v=<time>" set_files adds to a
+    /// file written over (what's kept in metadata, compared, shown as a name)
+    static QString plainUrl(const QString& uri);
     /// Pegasus X: one kind's files (Overrides.cpp lays files on top of them)
     const QStringList& get(AssetType) const;
     /// Pegasus X: after changing the lists of a loaded game in place
