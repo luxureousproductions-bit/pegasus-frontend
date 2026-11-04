@@ -19,6 +19,7 @@
 #include "PegasusAssets.h"
 #include <QStringBuilder>
 #include <QSet>
+#include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
 
