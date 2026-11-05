@@ -37,10 +37,18 @@ class QFile;
 // plain files (raw.githubusercontent.com: no GitHub API, so no hourly limit),
 // kept for a week. Installing downloads the repository's zip and unpacks the
 // theme into Pegasus' themes folder.
+//
+// A GitHub token (optional, Settings > Theme downloader > My links) reads
+// private repositories: with one set, what the plain files refuse is asked
+// of api.github.com with it ("Authorization: Bearer"), and a private
+// repository's zip comes from the API too. The token is sent to
+// api.github.com only (the zip's redirect to codeload is followed without
+// it), kept in the app's private settings alone, and never logged.
 class ThemeStore : public QObject {
     Q_OBJECT
     Q_PROPERTY(bool loading READ loading NOTIFY loadingChanged)
     Q_PROPERTY(bool installing READ installing NOTIFY installingChanged)
+    Q_PROPERTY(bool hasToken READ hasToken NOTIFY tokenChanged)
 
 public:
     explicit ThemeStore(QObject* parent = nullptr);
@@ -58,6 +66,12 @@ public:
     Q_INVOKABLE void checkUpdates();
     /// the names of the installed themes with a newer version out
     Q_INVOKABLE QStringList updateNames() const;
+
+    /// the GitHub token: whether one is kept, and its last characters to
+    /// tell it by ("...ab12"); setting it empty clears it
+    bool hasToken() const { return !token().isEmpty(); }
+    Q_INVOKABLE QString tokenHint() const;
+    Q_INVOKABLE void setToken(const QString& token);
     /// [{ id, name, author, version, summary, description, pictures, url,
     ///    custom, installed, installedVersion, dir, update, current }]
     Q_INVOKABLE QVariantList themes() const;
@@ -74,6 +88,7 @@ signals:
     void installingChanged();
     void listChanged();
     void updatesChecked(QStringList names);
+    void tokenChanged();
     void refreshProgress(int done, int total);
     /// stage: "download" / "unpack"
     void installProgress(QString id, qint64 received, qint64 total, QString stage);
@@ -124,10 +139,19 @@ private:
     void saveCache() const;
     QHash<QString, Installed> installed() const;
 
-    void get(const QString& url, std::function<void(int status, const QByteArray& body)> done);
+    using Done = std::function<void(int status, const QByteArray& body)>;
+    void get(const QString& url, Done done);
+    /// api.github.com with the token (none: without); `accept`: the Accept
+    /// header. Redirects aren't followed: `redirect` gets the Location, if any
+    void apiGet(const QString& path, Done done, const QByteArray& accept = QByteArray(),
+                std::function<void(const QString& location)> redirect = nullptr);
+    QString token() const;
+    /// what to tell about GitHub's answer; with a token, 401/403/404 are its
+    QString statusText(int status) const;
     void fetchInfo(size_t index, std::function<void()> done);
     void fetchSha(size_t index, std::function<void()> done);
     void download(size_t index, const QString& id, const QString& folder);
+    void fetchZip(size_t index, const QString& id, const QString& folder, const QString& url);
     void finishRefresh();
     void unpack(const QString& id, const QString& zip_path, const QString& sha, const QString& folder);
 };

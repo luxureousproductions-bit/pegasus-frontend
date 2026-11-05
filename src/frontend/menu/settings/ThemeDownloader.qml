@@ -79,9 +79,12 @@ FocusScope {
         }
         if (tab === "all" || tab === "links")
             out.push({ "kind": "add", "entry": null });
+        if (tab === "links")
+            out.push({ "kind": "token", "entry": null });
         out.push({ "kind": "refresh", "entry": null });
         return out;
     }
+    readonly property bool hasToken: store.hasToken
     readonly property var picked: (list.currentIndex >= 0 && list.currentIndex < rows.length) ? rows[list.currentIndex] : null
     readonly property var entry: picked && picked.kind === "theme" ? picked.entry : null
 
@@ -141,6 +144,7 @@ FocusScope {
         if (!picked)
             return;
         if (picked.kind === "add") { linkDialog.openFor(); return; }
+        if (picked.kind === "token") { tokenDialog.openFor(); return; }
         if (picked.kind === "refresh") { message = ""; store.refresh(true); return; }
         if (!entry.installed) installIt(entry);
         else if (entry.update && tab === "updates") installIt(entry);  // the Updates tab: A installs it
@@ -152,6 +156,11 @@ FocusScope {
             installIt(entry);
     }
     function removeIt() {
+        if (picked && picked.kind === "token" && root.hasToken) {
+            store.setToken("");
+            message = qsTr("GitHub token cleared.") + api.tr;
+            return;
+        }
         if (!entry)
             return;
         if (entry.installed)
@@ -319,6 +328,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Math.min(implicitWidth, parent.width - badge.width - vpx(40))
                     text: modelData.kind === "add" ? qsTr("Add a theme from a GitHub link...") + api.tr
+                        : modelData.kind === "token" ? qsTr("GitHub token (for private theme repos)...") + api.tr
                         : modelData.kind === "refresh" ? qsTr("Check for new themes and updates") + api.tr
                         : parent.e.name
                     color: "#eee"
@@ -332,8 +342,9 @@ FocusScope {
                     anchors.right: badge.left
                     anchors.rightMargin: vpx(8)
                     anchors.baseline: rowName.baseline
-                    visible: modelData.kind === "theme"
-                    text: parent.e ? parent.e.author : ""
+                    visible: modelData.kind === "theme" || modelData.kind === "token"
+                    text: modelData.kind === "token" ? (root.hasToken ? qsTr("set (%1)").arg(root.store.tokenHint()) + api.tr : qsTr("not set") + api.tr)
+                        : parent.e ? parent.e.author : ""
                     color: "#999"
                     font.family: globalFonts.sans
                     font.pixelSize: vpx(15)
@@ -523,6 +534,8 @@ FocusScope {
             text: !root.picked ? ""
                 : root.picked.kind === "add"
                     ? qsTr("Any Pegasus theme on GitHub, including one you're making: paste or type its link, eg. github.com/owner/theme, or github.com/owner/theme/tree/branch for a branch. It stays in My links, and updates show up like the others'.") + api.tr
+                : root.picked.kind === "token"
+                    ? qsTr("A GitHub personal access token lets Pegasus X read your private theme repositories in My links (updates and downloads). It's kept in this app's private storage on this device only, sent to api.github.com only, and never written to logs, themes or backups. A fine-grained token with Contents: read on the repository is enough. X clears it.") + api.tr
                     : qsTr("The list is read again from the Pegasus theme gallery (it's kept for a week otherwise), and your installed themes are checked for updates.") + api.tr
             color: "#999"
             font.family: globalFonts.sans
@@ -542,7 +555,12 @@ FocusScope {
                 return root.message;
             var parts = [];
             var e = root.entry;
-            if (!e)
+            if (root.picked && root.picked.kind === "token") {
+                parts.push(qsTr("A set the token") + api.tr);
+                if (root.hasToken)
+                    parts.push(qsTr("X clear it") + api.tr);
+            }
+            else if (!e)
                 parts.push(qsTr("A select") + api.tr);
             else if (!e.installed)
                 parts.push(qsTr("A install") + api.tr);
@@ -812,6 +830,161 @@ FocusScope {
             keyH: vpx(40)
             target: linkInput
             onDone: linkDialog.finish()
+        }
+    }
+
+
+    // -- The GitHub token (private theme repositories) ---------------------------
+    // typed or pasted, shown masked; Start keeps it, X clears it, B leaves it as it was
+
+    FocusScope {
+        id: tokenDialog
+
+        anchors.fill: parent
+        enabled: focus
+        visible: focus
+        z: 5
+
+        function openFor() {
+            tokenInput.text = "";
+            tokenKeyboard.row = 1;
+            tokenKeyboard.col = 0;
+            focus = true;
+            tokenKeyboard.focus = true;
+        }
+        function finish() {
+            var t = tokenInput.text.trim();
+            tokenInput.text = "";
+            list.focus = true;
+            if (t === "")
+                return;
+            root.store.setToken(t);
+            root.message = qsTr("GitHub token set (%1). Private repositories in My links are read with it.").arg(root.store.tokenHint()) + api.tr;
+        }
+        function clear() {
+            tokenInput.text = "";
+            list.focus = true;
+            if (!root.hasToken)
+                return;
+            root.store.setToken("");
+            root.message = qsTr("GitHub token cleared.") + api.tr;
+        }
+
+        Keys.onPressed: {
+            if (event.isAutoRepeat)
+                return;
+            if (api.keys.isCancel(event)) {
+                event.accepted = true;
+                tokenInput.text = "";
+                list.focus = true;
+            }
+            else if (api.keys.isDetails(event) && !tokenKeyboard.activeFocus) {
+                event.accepted = true;
+                tokenDialog.clear();
+            }
+        }
+        Keys.onDownPressed: tokenKeyboard.focus = true
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000"
+            opacity: 0.6
+            MouseArea { anchors.fill: parent }
+        }
+        Rectangle {
+            id: tokenTitle
+            width: Math.min(parent.width * 0.75, vpx(860))
+            height: vpx(20) * 2.25
+            anchors.horizontalCenter: parent.horizontalCenter
+            y: vpx(30)
+            color: "#333"
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.left: parent.left
+                anchors.leftMargin: vpx(15)
+                text: qsTr("GitHub token (for private theme repos)") + api.tr
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(20)
+                font.bold: true
+            }
+        }
+        Rectangle {
+            width: tokenTitle.width
+            height: tokenColumn.height + vpx(36)
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: tokenTitle.bottom
+            color: "#555"
+            Column {
+                id: tokenColumn
+                anchors.top: parent.top
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: vpx(18)
+                spacing: vpx(12)
+                Rectangle {
+                    width: parent.width
+                    height: vpx(52)
+                    color: "#333"
+                    TextInput {
+                        id: tokenInput
+                        anchors.fill: parent
+                        anchors.leftMargin: vpx(14)
+                        anchors.rightMargin: vpx(14)
+                        verticalAlignment: TextInput.AlignVCenter
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(20)
+                        clip: true
+                        echoMode: TextInput.Password
+                        cursorVisible: tokenDialog.visible
+                        activeFocusOnPress: false
+                        inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: (root.hasToken ? qsTr("A token is set (%1). Typing a new one replaces it.").arg(root.store.tokenHint()) + "  ·  "
+                                         : "")
+                          + qsTr("Start keeps it  ·  paste works (the keyboard's clipboard key)") + api.tr
+                    color: "#aaa"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(14)
+                    horizontalAlignment: Text.AlignHCenter
+                    wrapMode: Text.WordWrap
+                }
+                Rectangle {
+                    id: clearButton
+                    visible: root.hasToken
+                    width: clearText.implicitWidth + vpx(40)
+                    height: vpx(40)
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    color: clearMouse.pressed ? "#a44" : "#733"
+                    Text {
+                        id: clearText
+                        anchors.centerIn: parent
+                        text: qsTr("Clear the token  (X)") + api.tr
+                        color: "#fff"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(16)
+                    }
+                    MouseArea {
+                        id: clearMouse
+                        anchors.fill: parent
+                        onClicked: tokenDialog.clear()
+                    }
+                }
+            }
+        }
+        OnScreenKeyboard {
+            id: tokenKeyboard
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: vpx(12)
+            anchors.horizontalCenter: parent.horizontalCenter
+            keyH: vpx(40)
+            target: tokenInput
+            onDone: tokenDialog.finish()
+            onLeaveUp: tokenDialog.focus = true
         }
     }
 }

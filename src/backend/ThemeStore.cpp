@@ -37,6 +37,8 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
+#include <QSettings>
+#include <QStandardPaths>
 #include <QStringBuilder>
 #include <QUrl>
 #include <QtConcurrent/QtConcurrent>
@@ -449,6 +451,80 @@ QHash<QString, ThemeStore::Installed> ThemeStore::installed() const
     return out;
 }
 
+// the token: in the app's private data, not with the settings that move
+// with the Pegasus X folder, nor in anything backed up
+namespace {
+QString token_file()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + QStringLiteral("/pegasusx-private.ini");
+}
+} // namespace
+
+QString ThemeStore::token() const
+{
+    const QSettings file(token_file(), QSettings::IniFormat);
+    return file.value(QStringLiteral("github/token")).toString().trimmed();
+}
+
+QString ThemeStore::tokenHint() const
+{
+    const QString t = token();
+    return t.size() > 4 ? QStringLiteral("...") % t.right(4) : QString();
+}
+
+void ThemeStore::setToken(const QString& value)
+{
+    const QString t = value.trimmed();
+    QDir().mkpath(QFileInfo(token_file()).path());
+    QSettings file(token_file(), QSettings::IniFormat);
+    if (t.isEmpty())
+        file.remove(QStringLiteral("github/token"));
+    else
+        file.setValue(QStringLiteral("github/token"), t);
+    file.sync();
+    Log::info(LOG_TAG, t.isEmpty() ? LOGMSG("GitHub token cleared") : LOGMSG("GitHub token set"));
+    emit tokenChanged();
+}
+
+QString ThemeStore::statusText(int status) const
+{
+    if (hasToken() && (status == 401 || status == 403 || status == 404))
+        return tr("Token missing access or expired.");
+    if (status == 404)
+        return tr("GitHub doesn't have it (404): check the link and branch.");
+    if (status == 0)
+        return tr("No connection.");
+    return tr("GitHub answered %1.").arg(status);
+}
+
+void ThemeStore::apiGet(const QString& path, Done done, const QByteArray& accept, std::function<void(const QString&)> redirect)
+{
+    if (!m_net)
+        m_net = new QNetworkAccessManager(this);
+    QNetworkRequest request{QUrl(QStringLiteral("https://api.github.com") % path)};
+    // never followed by Qt: a redirect (the zip's, to codeload) is handed
+    // back and fetched without the token
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setTransferTimeout(30000);
+    request.setRawHeader("Accept", accept.isEmpty() ? QByteArray("application/vnd.github+json") : accept);
+    request.setRawHeader("X-GitHub-Api-Version", "2022-11-28");
+    const QString t = token();
+    if (!t.isEmpty())
+        request.setRawHeader("Authorization", "Bearer " + t.toUtf8());
+    QNetworkReply* const reply = m_net->get(request);
+    connect(reply, &QNetworkReply::finished, this, [reply, done, redirect]{
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QString location = reply->attribute(QNetworkRequest::RedirectionTargetAttribute).toUrl().toString();
+        const QByteArray body = reply->readAll();
+        reply->deleteLater();
+        if (status >= 300 && status < 400 && !location.isEmpty() && redirect) {
+            redirect(location);
+            return;
+        }
+        done(status, body);
+    });
+}
+
 void ThemeStore::get(const QString& url, std::function<void(int, const QByteArray&)> done)
 {
     if (!m_net)
@@ -553,12 +629,8 @@ void ThemeStore::fetchInfo(size_t index, std::function<void()> done)
 {
     const Entry e = m_entries[index];
     const QString raw = QStringLiteral("https://raw.githubusercontent.com/%1/%2/%3/").arg(e.owner, e.repo, e.ref());
-    get(raw + QStringLiteral("theme.cfg"), [this, index, raw, done](int status, const QByteArray& body){
-        if (index >= m_entries.size()) {
-            done();
-            return;
-        }
-        if (status == 200) {
+    const auto take_cfg = [this, index](int status, const QByteArray& body){
+        if (status == 200 && index < m_entries.size()) {
             const QHash<QString, QString> cfg = parse_cfg(QString::fromUtf8(body));
             Entry& entry = m_entries[index];
             entry.name = cfg.value(QStringLiteral("name"));
@@ -567,6 +639,29 @@ void ThemeStore::fetchInfo(size_t index, std::function<void()> done)
             entry.summary = cfg.value(QStringLiteral("summary"));
             entry.description = cfg.value(QStringLiteral("description"));
         }
+    };
+    get(raw + QStringLiteral("theme.cfg"), [this, index, raw, done, take_cfg, e](int status, const QByteArray& body){
+        if (index >= m_entries.size()) {
+            done();
+            return;
+        }
+        // a private repository (with a token): its files through the API
+        if (status != 200 && e.custom && hasToken()) {
+            const QString ref = e.branch.isEmpty() ? QString() : QStringLiteral("?ref=") % e.branch;
+            apiGet(QStringLiteral("/repos/%1/%2/contents/theme.cfg%3").arg(e.owner, e.repo, ref),
+                   [this, index, done, take_cfg, e, ref](int st, const QByteArray& b){
+                take_cfg(st, b);
+                if (st != 200)
+                    Log::warning(LOG_TAG, LOGMSG("%1: %2").arg(e.id(), statusText(st)));
+                // the README's pictures are private too: none shown
+                if (index < m_entries.size() && !installed().value(m_entries[index].id()).dir.isEmpty())
+                    fetchSha(index, done);
+                else
+                    done();
+            }, "application/vnd.github.raw");
+            return;
+        }
+        take_cfg(status, body);
         // README.md, else its other spellings
         auto names = std::make_shared<QStringList>(QStringList { QStringLiteral("README.md"), QStringLiteral("README.MD"), QStringLiteral("readme.md"), QStringLiteral("Readme.md") });
         auto try_next = std::make_shared<std::function<void()>>();
@@ -601,11 +696,25 @@ void ThemeStore::fetchSha(size_t index, std::function<void()> done)
 {
     const Entry e = m_entries[index];
     get(QStringLiteral("https://github.com/%1/%2/commits/%3.atom").arg(e.owner, e.repo, e.ref()),
-        [this, index, done](int status, const QByteArray& body){
+        [this, index, done, e](int status, const QByteArray& body){
             static const QRegularExpression rx(QStringLiteral("Commit/([0-9a-f]{40})"));
             const QRegularExpressionMatch m = rx.match(QString::fromUtf8(body));
-            if (status == 200 && m.hasMatch() && index < m_entries.size())
+            if (status == 200 && m.hasMatch() && index < m_entries.size()) {
                 m_entries[index].sha = m.captured(1);
+                done();
+                return;
+            }
+            // a private repository (with a token): the API knows its newest commit
+            if (status != 200 && e.custom && hasToken()) {
+                apiGet(QStringLiteral("/repos/%1/%2/commits/%3").arg(e.owner, e.repo, e.ref()),
+                       [this, index, done](int st, const QByteArray& b){
+                    const QString sha = QJsonDocument::fromJson(b).object().value(QStringLiteral("sha")).toString();
+                    if (st == 200 && sha.size() == 40 && index < m_entries.size())
+                        m_entries[index].sha = sha;
+                    done();
+                });
+                return;
+            }
             done();
         });
 }
@@ -644,19 +753,10 @@ void ThemeStore::checkUpdates()
     }
     m_checking = true;
     auto left = std::make_shared<size_t>(todo.size());
-    for (const Entry& e : todo) {
-        const QString id = e.id();
-        get(QStringLiteral("https://github.com/%1/%2/commits/%3.atom").arg(e.owner, e.repo, e.ref()),
-            [this, id, left](int status, const QByteArray& body){
-                static const QRegularExpression rx(QStringLiteral("Commit/([0-9a-f]{40})"));
-                const QRegularExpressionMatch m = rx.match(QString::fromUtf8(body));
-                // by id: a gallery read meanwhile may have replaced the list
-                if (status == 200 && m.hasMatch()) {
-                    for (Entry& entry : m_entries) {
-                        if (entry.id() == id)
-                            entry.sha = m.captured(1);
-                    }
-                }
+    for (size_t i = 0; i < m_entries.size(); i++) {
+        if (!have.contains(m_entries[i].id()))
+            continue;
+        fetchSha(i, [this, left]{
                 if (--(*left) > 0)
                     return;
                 m_checking = false;
@@ -813,7 +913,7 @@ void ThemeStore::install(const QString& id)
         return;
     }
     const Entry& e = m_entries[index];
-    get(QStringLiteral("https://api.github.com/repos/%1/%2").arg(e.owner, e.repo),
+    apiGet(QStringLiteral("/repos/%1/%2").arg(e.owner, e.repo),
         [with_folder](int status, const QByteArray& body){
             const QString branch = status == 200
                 ? QJsonDocument::fromJson(body).object().value(QStringLiteral("default_branch")).toString()
@@ -829,9 +929,35 @@ void ThemeStore::download(size_t index, const QString& id, const QString& folder
         if (m_installing != id || index >= m_entries.size())
             return;
         const Entry e = m_entries[index];
-        const QString url = e.branch.isEmpty()
+        const QString plain_url = e.branch.isEmpty()
             ? QStringLiteral("https://github.com/%1/%2/archive/HEAD.zip").arg(e.owner, e.repo)
             : QStringLiteral("https://github.com/%1/%2/archive/refs/heads/%3.zip").arg(e.owner, e.repo, e.branch);
+        const auto fail = [this, id](const QString& why){
+            m_installing.clear();
+            emit installingChanged();
+            emit installFinished(id, false, why, QString());
+        };
+        if (e.custom && hasToken()) {
+            // the API answers with where the zip is (codeload, with its own
+            // access in the address): fetched from there, without the token
+            apiGet(QStringLiteral("/repos/%1/%2/zipball%3").arg(e.owner, e.repo, e.branch.isEmpty() ? QString() : QLatin1Char('/') % e.branch),
+                   [this, fail](int status, const QByteArray&){
+                       fail(status == 200 ? tr("GitHub gave no download address.") : statusText(status));
+                   }, QByteArray(),
+                   [this, index, id, folder](const QString& location){
+                       if (m_installing == id && index < m_entries.size())
+                           fetchZip(index, id, folder, location);
+                   });
+            return;
+        }
+        fetchZip(index, id, folder, plain_url);
+    });
+}
+
+void ThemeStore::fetchZip(size_t index, const QString& id, const QString& folder, const QString& url)
+{
+    {
+        const Entry e = m_entries[index];
         QDir().mkpath(storeDir());
         const QString zip_path = storeDir() + QStringLiteral("/download.zip");
         delete m_zip;
@@ -869,14 +995,12 @@ void ThemeStore::download(size_t index, const QString& id, const QString& folder
                 QFile::remove(zip_path);
                 m_installing.clear();
                 emit installingChanged();
-                emit installFinished(id, false, aborted ? tr("Stopped.")
-                    : status == 404 ? tr("GitHub doesn't have it (404): check the link and branch.")
-                    : status == 0 ? tr("No connection.") : tr("GitHub answered %1.").arg(status), QString());
+                emit installFinished(id, false, aborted ? tr("Stopped.") : statusText(status), QString());
                 return;
             }
             unpack(id, zip_path, sha, folder);
         });
-    });
+    }
 }
 
 void ThemeStore::cancelInstall()
