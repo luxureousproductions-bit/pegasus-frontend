@@ -1,0 +1,28 @@
+# Pegasus X game directory: Nintendo SNES (Super Nintendo)
+# Made by Pegasus X from ES-DE (/home/runner/work/_temp/px/storage/ES-DE).
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/storage/ROMs/snes
+
+collection: Nintendo SNES (Super Nintendo)
+shortname: snes
+
+game: Super Mario World
+file: /home/runner/work/_temp/px/storage/ROMs/snes/Super Mario World (USA).sfc
+sort-by: Super Mario World (USA)
+developer: Nintendo EAD
+publisher: Nintendo
+genre: Platform
+players: 2
+release: 1990-11-21
+description: Mario and Yoshi in Dinosaur Land. (from the ES-DE gamelist)
+assets.box_front: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/covers/Super Mario World (USA).png
+  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/3dboxes/Super Mario World (USA).png
+assets.cartridge: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/physicalmedia/Super Mario World (USA).png
+assets.logo: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/marquees/Super Mario World (USA).png
+assets.screenshot: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/screenshots/Super Mario World (USA).png
+assets.steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/miximages/Super Mario World (USA).png
+assets.titlescreen: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/titlescreens/Super Mario World (USA).png
+
+game: The Legend of Zelda - A Link to the Past (USA)
+file: /home/runner/work/_temp/px/storage/ROMs/snes/The Legend of Zelda - A Link to the Past (USA).sfc
+

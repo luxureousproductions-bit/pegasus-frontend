@@ -1,0 +1,3 @@
+2026-11-05T16:14:33 [i] Scraper: Scraping 1 games into `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media` (source: screenscraper, interactive: no, overwrite: yes, ScreenScraper login: missing, LaunchBox database: missing)
+2026-11-05T16:14:33 [i] Scraper: Collection `Nintendo SNES (Super Nintendo)`: system `snes`
+2026-11-05T16:14:33 [i] qml: [test] scraping "Super Mario World" in "Nintendo SNES (Super Nintendo)": started
