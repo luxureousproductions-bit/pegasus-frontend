@@ -25,6 +25,20 @@
 #include <QtAndroidExtras/QAndroidJniObject>
 #endif
 
+#include <QDir>
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLocale>
+#include <QStorageInfo>
+#include <QSysInfo>
+#ifdef Q_OS_ANDROID
+#include "platform/AndroidHelpers.h"
+#include <QtAndroidExtras/QAndroidJniObject>
+#include <QtAndroidExtras/QtAndroid>
+#endif
+
 #include <cmath>
 
 
@@ -93,12 +107,198 @@ namespace model {
 DeviceInfo::DeviceInfo(QObject* parent)
     : QObject(parent)
     , m_battery { BatteryStatus::Unknown, NAN, 0 }
+    , m_bat_temp(NAN)
 {
     poll_battery();
     connect(&m_battery_poll, &QTimer::timeout, this, &DeviceInfo::poll_battery);
     m_battery_poll.start(30 * 1000);
+
+    // Pegasus X: the clock, right on each minute
+    m_clock.setSingleShot(true);
+    m_clock.setTimerType(Qt::PreciseTimer);
+    connect(&m_clock, &QTimer::timeout, this, &DeviceInfo::tick_clock);
+
+#ifdef Q_OS_ANDROID
+    // Android tells SystemStatus about changes; here, only "anything new?"
+    QAndroidJniObject::callStaticMethod<void>("org/pegasus_frontend/android/SystemStatus", "start",
+        "(Landroid/content/Context;)V", QtAndroid::androidContext().object());
+    connect(&m_status_poll, &QTimer::timeout, this, &DeviceInfo::poll_status);
+    m_status_poll.start(500);
+    poll_status();
+#else
+    const QString fmt = QLocale::system().timeFormat(QLocale::ShortFormat);
+    m_24h = !fmt.contains(QLatin1String("ap"), Qt::CaseInsensitive);
+    m_model = QSysInfo::prettyProductName();
+#endif
+    tick_clock();
+    read_storage();
+
+    // nothing read while Pegasus X is in the background (a game is running);
+    // everything again when it's back
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, &DeviceInfo::on_app_state);
 }
 
+void DeviceInfo::on_app_state(Qt::ApplicationState state)
+{
+    if (state == Qt::ApplicationActive) {
+#ifdef Q_OS_ANDROID
+        m_status_poll.start(500);
+        poll_status();
+#endif
+        poll_battery();
+        tick_clock();
+        read_storage();
+    }
+    else {
+        m_status_poll.stop();
+        m_clock.stop();
+    }
+}
+
+QString DeviceInfo::clockText() const
+{
+    return m_now.time().toString(m_24h ? QStringLiteral("HH:mm") : QStringLiteral("h:mm AP"));
+}
+
+void DeviceInfo::tick_clock()
+{
+    QDateTime current = QDateTime::currentDateTime();
+    const QTime t = current.time();
+    current.setTime(QTime(t.hour(), t.minute()));
+    const bool moved = current != m_now;
+    m_now = current;
+    // the next one right on the minute (a little after, never before)
+    const int ms_left = 60000 - (t.second() * 1000 + t.msec()) + 30;
+    m_clock.start(ms_left);
+    if (moved) {
+        emit clockChanged();
+        // once a minute: free space
+        if (t.second() < 2)
+            read_storage();
+    }
+}
+
+void DeviceInfo::read_storage()
+{
+    QVariantList out;
+#ifdef Q_OS_ANDROID
+    const QStringList roots = android::storage_paths();
+#else
+    QStringList roots { QStorageInfo::root().rootPath() };
+    const QString home_root = QStorageInfo(QDir::homePath()).rootPath();
+    if (!roots.contains(home_root))
+        roots.append(home_root);
+#endif
+    int sd = 0;
+    for (const QString& path : roots) {
+        const QStorageInfo info(path);
+        if (!info.isValid() || !info.isReady() || info.bytesTotal() <= 0)
+            continue;
+#ifdef Q_OS_ANDROID
+        const bool removable = !path.startsWith(QLatin1String("/storage/emulated"));
+        const QString name = !removable ? QStringLiteral("Internal storage")
+            : (sd++ == 0 ? QStringLiteral("SD card") : QStringLiteral("SD card %1").arg(sd));
+#else
+        const bool removable = false;
+        const QString name = info.displayName();
+        Q_UNUSED(sd);
+#endif
+        out.append(QVariantMap {
+            { QStringLiteral("name"), name },
+            { QStringLiteral("path"), path },
+            { QStringLiteral("free"), static_cast<double>(info.bytesAvailable()) },
+            { QStringLiteral("total"), static_cast<double>(info.bytesTotal()) },
+            { QStringLiteral("removable"), removable },
+        });
+    }
+    if (out != m_storage) {
+        m_storage = out;
+        emit storageChanged();
+    }
+}
+
+void DeviceInfo::poll_status()
+{
+#ifdef Q_OS_ANDROID
+    static constexpr auto CLASS = "org/pegasus_frontend/android/SystemStatus";
+    const int version = QAndroidJniObject::callStaticMethod<jint>(CLASS, "version");
+    if (version == m_status_version)
+        return;
+    m_status_version = version;
+    const QString json = QAndroidJniObject::callStaticObjectMethod(CLASS, "state", "()Ljava/lang/String;").toString();
+    const QJsonObject o = QJsonDocument::fromJson(json.toUtf8()).object();
+    if (o.isEmpty())
+        return;
+
+    const bool wifi_on = o.value(QStringLiteral("wifiOn")).toBool();
+    const int wifi_level = o.value(QStringLiteral("wifiLevel")).toInt();
+    const int wifi_rssi = o.value(QStringLiteral("wifiRssi")).toInt(-127);
+    const QString network = o.value(QStringLiteral("network")).toString(QStringLiteral("none"));
+    const bool internet = o.value(QStringLiteral("internet")).toBool();
+    const bool airplane = o.value(QStringLiteral("airplane")).toBool();
+    if (wifi_on != m_wifi_on || wifi_level != m_wifi_level || wifi_rssi != m_wifi_rssi
+            || network != m_network || internet != m_internet || airplane != m_airplane) {
+        m_wifi_on = wifi_on;
+        m_wifi_level = wifi_level;
+        m_wifi_rssi = wifi_rssi;
+        m_network = network;
+        m_internet = internet;
+        m_airplane = airplane;
+        emit networkChanged();
+    }
+
+    const int vol_max = qMax(1, o.value(QStringLiteral("volumeMax")).toInt(1));
+    const qreal volume = qBound(0.0, o.value(QStringLiteral("volume")).toInt() / static_cast<qreal>(vol_max), 1.0);
+    const bool muted = o.value(QStringLiteral("muted")).toBool();
+    const QString output = o.value(QStringLiteral("output")).toString(QStringLiteral("speaker"));
+    if (!qFuzzyCompare(volume + 1, m_volume + 1) || muted != m_muted || output != m_output) {
+        m_volume = volume;
+        m_muted = muted;
+        m_output = output;
+        emit soundChanged();
+    }
+
+    const double temp_raw = o.value(QStringLiteral("batteryTemp")).toDouble(-1000);
+    const qreal temp = temp_raw <= -999 ? NAN : temp_raw;
+    const QString source = o.value(QStringLiteral("batterySource")).toString();
+    const QString health = o.value(QStringLiteral("batteryHealth")).toString();
+    const bool temp_same = (std::isnan(temp) && std::isnan(m_bat_temp)) || qFuzzyCompare(temp + 1, m_bat_temp + 1);
+    if (!temp_same || source != m_bat_source || health != m_bat_health) {
+        m_bat_temp = temp;
+        m_bat_source = source;
+        m_bat_health = health;
+        emit batteryDetailsChanged();
+    }
+
+    const int thermal = o.value(QStringLiteral("thermal")).toInt();
+    if (thermal != m_thermal) {
+        m_thermal = thermal;
+        emit thermalChanged();
+    }
+
+    const bool dark = o.value(QStringLiteral("dark")).toBool();
+    const QString model = o.value(QStringLiteral("model")).toString();
+    if (dark != m_dark || model != m_model) {
+        m_dark = dark;
+        m_model = model;
+        emit systemChanged();
+    }
+
+    const QVariantList pads = o.value(QStringLiteral("gamepads")).toArray().toVariantList();
+    if (pads != m_gamepads) {
+        m_gamepads = pads;
+        emit gamepadsChanged();
+    }
+
+    const bool h24 = o.value(QStringLiteral("h24")).toBool(true);
+    if (h24 != m_24h) {
+        m_24h = h24;
+        emit clockChanged();
+    }
+    // the system's clock may have been set: line the minute up again
+    tick_clock();
+#endif
+}
 void DeviceInfo::poll_battery()
 {
     BatteryInfo new_info = query_battery();
