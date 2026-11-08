@@ -290,6 +290,14 @@ void DeviceInfo::poll_status()
         emit gamepadsChanged();
     }
 
+    const bool bt_on = o.value(QStringLiteral("btOn")).toBool();
+    const QVariantList bt_devices = o.value(QStringLiteral("btDevices")).toArray().toVariantList();
+    if (bt_on != m_bt_on || bt_devices != m_bt_devices) {
+        m_bt_on = bt_on;
+        m_bt_devices = bt_devices;
+        emit bluetoothChanged();
+    }
+
     const bool h24 = o.value(QStringLiteral("h24")).toBool(true);
     if (h24 != m_24h) {
         m_24h = h24;

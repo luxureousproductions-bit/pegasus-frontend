@@ -16,6 +16,9 @@
 
 package org.pegasus_frontend.android;
 
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothClass;
+import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks;
 import android.content.Context;
@@ -43,17 +46,23 @@ import android.view.InputDevice;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 
 // Pegasus X: what Android says about the device, for themes (api.device):
 // Wi-Fi and the network, volume and where the sound goes, the battery's
 // temperature and source, how hot the device runs, dark mode, the clock's
-// 12/24-hour setting, and the controllers (and their batteries, Android 12+).
+// 12/24-hour setting, the controllers (and their batteries, Android 12+), and
+// Bluetooth: on or off, and what's connected (name, kind, battery when told).
 //
 // Android tells us when any of it changes (broadcasts and callbacks, on the
 // main thread); each change bumps `version`. Pegasus X reads version() now
 // and then (a cheap call) and state() only when it moved. Nothing here needs
 // a permission prompt (ACCESS_WIFI_STATE and ACCESS_NETWORK_STATE are normal
-// ones); the Wi-Fi network's name isn't read (that needs location).
+// ones; BLUETOOTH too, as the app targets Android 11: no "Nearby devices"
+// prompt, even on Android 12+); the Wi-Fi network's name isn't read (that
+// needs location).
 public class SystemStatus {
     private static Context s_ctx;
     private static boolean s_started = false;
@@ -80,6 +89,11 @@ public class SystemStatus {
     private static boolean s_dark = false;
     private static boolean s_24h = false;
     private static String s_gamepads = "[]";
+    // Bluetooth: on/off, and the devices connected now, by address
+    private static boolean s_bt_on = false;
+    private static final Map<String, BluetoothDevice> s_bt_connected = new LinkedHashMap<>();
+    private static final Map<String, Integer> s_bt_battery = new LinkedHashMap<>();
+    private static String s_bt_devices = "[]";
 
     private static void changed() { s_version++; }
 
@@ -122,6 +136,7 @@ public class SystemStatus {
                     // once a minute: what has no event of its own
                     readGamepads();
                     readClock();
+                    readBluetoothBatteries();
                 }
                 else if (a.equals(Intent.ACTION_TIME_CHANGED) || a.equals(Intent.ACTION_TIMEZONE_CHANGED)) {
                     readClock();
@@ -142,6 +157,24 @@ public class SystemStatus {
                 readBattery(sticky);
         } catch (Exception e) {
             // some builds refuse one action or another: the rest still works
+        }
+
+        // -- Bluetooth: on/off, devices connecting and leaving, their battery
+        //    (that last one Android sends without documenting it; most do)
+        final IntentFilter bt_filter = new IntentFilter();
+        bt_filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        bt_filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
+        bt_filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+        bt_filter.addAction("android.bluetooth.device.action.BATTERY_LEVEL_CHANGED");
+        try {
+            ctx.registerReceiver(new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context c, Intent intent) {
+                    onBluetooth(intent);
+                }
+            }, bt_filter);
+        } catch (Exception e) {
+            // no Bluetooth here
         }
 
         // -- the network in use: Wi-Fi / mobile / none, internet or not,
@@ -217,6 +250,7 @@ public class SystemStatus {
         readAirplane();
         readSound();
         readGamepads();
+        readBluetoothStart();
         readClock();
         readDark(ctx.getResources().getConfiguration());
         changed();
@@ -396,6 +430,131 @@ public class SystemStatus {
         }
     }
 
+    // -- Bluetooth -------------------------------------------------------------------
+
+    private static synchronized void readBluetoothStart() {
+        try {
+            final BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
+            if (adapter == null)
+                return;
+            s_bt_on = adapter.isEnabled();
+            // what's connected already: the paired devices that say so
+            // (BluetoothDevice.isConnected() isn't public: by reflection)
+            if (s_bt_on) {
+                for (BluetoothDevice d : adapter.getBondedDevices()) {
+                    try {
+                        final Object on = BluetoothDevice.class.getMethod("isConnected").invoke(d);
+                        if (on instanceof Boolean && (Boolean) on)
+                            s_bt_connected.put(d.getAddress(), d);
+                    } catch (Exception e) {
+                        // not told: it shows once it connects again
+                    }
+                }
+            }
+            readBluetoothBatteries();
+            writeBluetooth();
+        } catch (Exception e) {
+            // no Bluetooth, or not allowed
+        }
+    }
+
+    private static synchronized void onBluetooth(Intent intent) {
+        try {
+            final String a = intent.getAction();
+            if (BluetoothAdapter.ACTION_STATE_CHANGED.equals(a)) {
+                final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_OFF);
+                s_bt_on = state == BluetoothAdapter.STATE_ON;
+                if (!s_bt_on) {
+                    s_bt_connected.clear();
+                    s_bt_battery.clear();
+                }
+            }
+            else {
+                final BluetoothDevice d = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
+                if (d == null)
+                    return;
+                if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(a)) {
+                    s_bt_connected.put(d.getAddress(), d);
+                }
+                else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(a)) {
+                    s_bt_connected.remove(d.getAddress());
+                    s_bt_battery.remove(d.getAddress());
+                }
+                else {
+                    final int level = intent.getIntExtra("android.bluetooth.device.extra.BATTERY_LEVEL", -1);
+                    s_bt_battery.put(d.getAddress(), level);
+                }
+            }
+            writeBluetooth();
+        } catch (Exception e) {
+            // not allowed
+        }
+    }
+
+    // a connected device's battery, when it tells (BluetoothDevice.getBatteryLevel() isn't public)
+    private static synchronized void readBluetoothBatteries() {
+        boolean moved = false;
+        for (BluetoothDevice d : s_bt_connected.values()) {
+            try {
+                final Object level = BluetoothDevice.class.getMethod("getBatteryLevel").invoke(d);
+                if (level instanceof Integer) {
+                    final Integer old = s_bt_battery.put(d.getAddress(), (Integer) level);
+                    if (old == null || !old.equals(level))
+                        moved = true;
+                }
+            } catch (Exception e) {
+                // not told
+            }
+        }
+        if (moved)
+            writeBluetooth();
+    }
+
+    private static String kindOf(BluetoothDevice d) {
+        try {
+            final BluetoothClass c = d.getBluetoothClass();
+            if (c == null)
+                return "other";
+            switch (c.getMajorDeviceClass()) {
+                case BluetoothClass.Device.Major.AUDIO_VIDEO: return "audio";
+                case BluetoothClass.Device.Major.PHONE: return "phone";
+                case BluetoothClass.Device.Major.COMPUTER: return "computer";
+                case BluetoothClass.Device.Major.WEARABLE: return "wearable";
+                case BluetoothClass.Device.Major.PERIPHERAL: {
+                    final int dev = c.getDeviceClass();
+                    if ((dev & 0x40) != 0) return "keyboard";   // keyboard bit
+                    if ((dev & 0x80) != 0) return "mouse";      // pointing bit
+                    return "controller";                        // joystick, gamepad, remote...
+                }
+                default: return "other";
+            }
+        } catch (Exception e) {
+            return "other";
+        }
+    }
+
+    private static synchronized void writeBluetooth() {
+        try {
+            final JSONArray list = new JSONArray();
+            for (BluetoothDevice d : s_bt_connected.values()) {
+                final JSONObject o = new JSONObject();
+                String name = null;
+                try { name = d.getName(); } catch (Exception e) { /* not allowed */ }
+                o.put("name", name != null ? name : d.getAddress());
+                o.put("kind", kindOf(d));
+                final Integer level = s_bt_battery.get(d.getAddress());
+                o.put("battery", level != null && level >= 0 && level <= 100 ? level : -1);
+                list.put(o);
+            }
+            final String json = list.toString();
+            if (!json.equals(s_bt_devices))
+                s_bt_devices = json;
+            changed();
+        } catch (Exception e) {
+            // unknown
+        }
+    }
+
     // -- for Pegasus X ---------------------------------------------------------------
 
     @SuppressWarnings("deprecation")
@@ -420,6 +579,8 @@ public class SystemStatus {
             o.put("h24", s_24h);
             o.put("model", (Build.MANUFACTURER + " " + Build.MODEL).trim());
             o.put("gamepads", new JSONArray(s_gamepads));
+            o.put("btOn", s_bt_on);
+            o.put("btDevices", new JSONArray(s_bt_devices));
             return o.toString();
         } catch (Exception e) {
             return "{}";

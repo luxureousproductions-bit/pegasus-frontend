@@ -65,6 +65,11 @@ class DeviceInfo : public QObject {
     Q_PROPERTY(QVariantList gamepads READ gamepads NOTIFY gamepadsChanged)
     /// [{ name, path, free, total (bytes), removable }], read each minute
     Q_PROPERTY(QVariantList storage READ storage NOTIFY storageChanged)
+    // Bluetooth
+    Q_PROPERTY(bool bluetoothEnabled READ bluetoothEnabled NOTIFY bluetoothChanged)
+    Q_PROPERTY(bool bluetoothConnected READ bluetoothConnected NOTIFY bluetoothChanged)  ///< anything connected
+    /// [{ name, kind (audio, controller, keyboard, mouse, phone, computer, wearable, other), battery (0..100, -1: not told) }]
+    Q_PROPERTY(QVariantList bluetoothDevices READ bluetoothDevices NOTIFY bluetoothChanged)
 
 public:
     explicit DeviceInfo(QObject* parent = nullptr);
@@ -112,6 +117,9 @@ public:
     QString deviceModel() const { return m_model; }
     QVariantList gamepads() const { return m_gamepads; }
     QVariantList storage() const { return m_storage; }
+    bool bluetoothEnabled() const { return m_bt_on; }
+    bool bluetoothConnected() const { return !m_bt_devices.isEmpty(); }
+    QVariantList bluetoothDevices() const { return m_bt_devices; }
 
 signals:
     void batteryStatusChanged();
@@ -124,6 +132,7 @@ signals:
     void systemChanged();
     void gamepadsChanged();
     void storageChanged();
+    void bluetoothChanged();
 
 private slots:
     void poll_battery();
@@ -154,6 +163,8 @@ private:
     QString m_model;
     QVariantList m_gamepads;
     QVariantList m_storage;
+    bool m_bt_on = false;
+    QVariantList m_bt_devices;
 
     void poll_status();
     void tick_clock();

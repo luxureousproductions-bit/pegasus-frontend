@@ -98,6 +98,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Pegasus X: Wi-Fi on/off and signal for themes (a normal permission, no prompt) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <!-- Pegasus X: Bluetooth on/off and what's connected, for themes (a normal
+         permission while the app targets Android 11: no prompt) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
