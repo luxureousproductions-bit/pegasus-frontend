@@ -290,6 +290,42 @@ void RetroAchievements::fetchList(int console, const QString& user, const QStrin
     });
 }
 
+// the versions RA unlocks for, of one game: [{ md5, name, labels }]
+void RetroAchievements::fetchHashes(int game_id, const QString& user, const QString& key,
+                                    std::function<void(QVariantList, QString)> done)
+{
+    if (!m_running) {
+        m_user = user.trimmed();
+        m_key = key.trimmed();
+    }
+    if (m_user.isEmpty() || m_key.isEmpty()) {
+        done({}, tr("Your RetroAchievements username and key are needed (Settings > RetroAchievements)."));
+        return;
+    }
+    get(apiUrl(QStringLiteral("API_GetGameHashes.php"), { { QStringLiteral("i"), QString::number(game_id) } }),
+        [done](int status, const QByteArray& body){
+            const QJsonArray results = QJsonDocument::fromJson(body).object().value(QStringLiteral("Results")).toArray();
+            if (status != 200) {
+                done({}, status == 401 ? tr("The username or key isn't accepted")
+                         : status == 0 ? tr("No connection") : tr("RetroAchievements answered %1").arg(status));
+                return;
+            }
+            QVariantList out;
+            for (const QJsonValue& v : results) {
+                const QJsonObject o = v.toObject();
+                QStringList labels;
+                for (const QJsonValue& l : o.value(QStringLiteral("Labels")).toArray())
+                    labels.append(l.toString());
+                out.append(QVariantMap {
+                    { QStringLiteral("md5"), o.value(QStringLiteral("MD5")).toString().toLower() },
+                    { QStringLiteral("name"), o.value(QStringLiteral("Name")).toString() },
+                    { QStringLiteral("labels"), labels.join(QStringLiteral(", ")) },
+                });
+            }
+            done(out, {});
+        });
+}
+
 // the games of a console's list that look like `query`, best first:
 // [{ id, title, achievements, points, icon }]
 QVariantList RetroAchievements::candidates(int console, const QString& query, int limit)
@@ -620,6 +656,14 @@ void RetroAchievements::hashAndMatch()
                 by_id.insert(console, ids);
             }
             // picked by hand: kept as it is (its progress is still fetched)
+            // the menus first: no reads while you're pressing buttons, and a
+            // breath between files so the card isn't saturated
+            while (!stop->load() && uptime().elapsed() - g_last_input_ms.load() < 1500)
+                QThread::msleep(100);
+            QThread::msleep(15);
+            m.hash = hash_file(console, job.path);
+            // picked by hand: kept as it is (its progress is still fetched);
+            // the file's version checked against the picked game's
             if (job.keep && job.ra_id > 0) {
                 const auto it = by_id[console].constFind(job.ra_id);
                 m.ra_id = job.ra_id;
@@ -630,16 +674,18 @@ void RetroAchievements::hashAndMatch()
                     m.achievements = it->achievements;
                     m.points = it->points;
                 }
+                if (m.hash.isEmpty()) {
+                    m.version = QStringLiteral("unknown");
+                }
+                else {
+                    const auto h = by_hash[console].constFind(m.hash.toLower());
+                    m.version = (h != by_hash[console].cend() && h->id == job.ra_id)
+                        ? QStringLiteral("supported") : QStringLiteral("wrong");
+                }
                 out.push_back(std::move(m));
                 (*progress_count)++;
                 continue;
             }
-            // the menus first: no reads while you're pressing buttons, and a
-            // breath between files so the card isn't saturated
-            while (!stop->load() && uptime().elapsed() - g_last_input_ms.load() < 1500)
-                QThread::msleep(100);
-            QThread::msleep(15);
-            m.hash = hash_file(console, job.path);
             const Entry* found = nullptr;
             if (!m.hash.isEmpty()) {
                 const auto it = by_hash[console].constFind(m.hash.toLower());
@@ -662,6 +708,11 @@ void RetroAchievements::hashAndMatch()
                 if (!found && m.hash.isEmpty())
                     m.unsupported = true;
             }
+            // RA unlocks only for the versions it lists: a hash it doesn't is
+            // the game, but not one achievements work with
+            if (found)
+                m.version = !m.by_title ? QStringLiteral("supported")
+                          : m.hash.isEmpty() ? QStringLiteral("unknown") : QStringLiteral("wrong");
             if (found) {
                 m.ra_id = found->id;
                 m.ra_title = found->title;
@@ -785,6 +836,7 @@ void RetroAchievements::writeAll(std::function<void()> then)
             changes.insert(QStringLiteral("x-ra-points"), QString::number(m.points));
             changes.insert(QStringLiteral("x-ra-match"), m.manual ? QStringLiteral("manual")
                 : m.by_title ? QStringLiteral("title") : QStringLiteral("hash"));
+            changes.insert(QStringLiteral("x-ra-version"), m.version);
             if (!m.icon_file.isEmpty())
                 changes.insert(QStringLiteral("x-ra-icon"), QUrl::fromLocalFile(m.icon_file).toString());
         }
@@ -793,6 +845,7 @@ void RetroAchievements::writeAll(std::function<void()> then)
             changes.insert(QStringLiteral("x-ra-earned-hardcore"), QString::number(m.earned_hardcore));
         }
         if (m.ra_id <= 0) {
+            changes.insert(QStringLiteral("x-ra-version"), QString());
             // checked, not on RA: said, so it isn't checked again until you ask
             changes.insert(QStringLiteral("x-ra-id"), QStringLiteral("0"));
             changes.insert(QStringLiteral("x-ra-match"), QStringLiteral("none"));

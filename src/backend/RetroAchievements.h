@@ -78,6 +78,8 @@ public:
     static QVariantMap console_list(int console);
     /// the games of a console's list looking like `query`, best first: [{ id, title, achievements, points, icon }]
     static QVariantList candidates(int console, const QString& query, int limit = 60);
+    /// the versions (files) RA unlocks achievements for, of one game: done([{ md5, name, labels }], error)
+    void fetchHashes(int game_id, const QString& user, const QString& key, std::function<void(QVariantList, QString)> done);
     /// makes sure a console's list is here (kept a week, else asked for): done(error), empty when it is
     void fetchList(int console, const QString& user, const QString& key, std::function<void(QString)> done);
 
@@ -110,6 +112,7 @@ private:
         bool unsupported = false;
         bool by_title = false;
         bool manual = false;        ///< picked by hand, kept
+        QString version;            ///< the file: supported (RA lists its hash), wrong (it doesn't), unknown (not hashed)
         bool progress_only = false; ///< only the progress was asked for
         QString icon_file;         ///< the icon downloaded, when it was
         bool progress_known = false;

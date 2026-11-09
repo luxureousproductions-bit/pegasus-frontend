@@ -156,6 +156,10 @@ FocusScope {
                           : qsTr("%1 with achievements · %2 without · %3 not on RetroAchievements · %4 unknown")
                                 .arg(st.withAchievements || 0).arg((st.matched || 0) - (st.withAchievements || 0)).arg(st.notFound || 0).arg(st.unsupported || 0) + api.tr,
                    "ok": (st.withAchievements || 0) > 0 });
+        if ((st.wrongVersion || 0) > 0)
+            out.push({ "kind": "info", "text": qsTr("Need another version") + api.tr,
+                       "value": qsTr("%1 games have achievements on RA, but RA doesn't support your file. Library > a collection > Matches lists them.").arg(st.wrongVersion) + api.tr,
+                       "warn": true });
         out.push({ "kind": "progress", "text": qsTr("Your progress") + api.tr,
                    "value": (st.total || 0) > 0 ? qsTr("%1 of %2 achievements earned · A fetches it again").arg(st.earned).arg(st.total) + api.tr
                                                 : qsTr("fetched when your games are matched") + api.tr });

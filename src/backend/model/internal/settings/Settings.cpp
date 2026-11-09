@@ -2659,6 +2659,19 @@ int Settings::raConsoleOf(QObject* game_obj, const QString& collection_name) con
     return coll ? scraper::RetroAchievements::console_for(scraper::Scraper::system_of(coll->name(), coll->shortName())) : 0;
 }
 
+void Settings::raLoadHashes(QObject* game_obj)
+{
+    auto* const game = qobject_cast<model::Game*>(game_obj);
+    const int id = game ? ra_extra(*game, "ra-id").toInt() : 0;
+    if (id <= 0) {
+        emit raHashesReady(id, {}, tr("Not matched with RetroAchievements."));
+        return;
+    }
+    const QVariantMap s = raSettings();
+    ra().fetchHashes(id, s.value(QStringLiteral("user")).toString(), s.value(QStringLiteral("key")).toString(),
+                     [this, id](QVariantList hashes, QString error){ emit raHashesReady(id, hashes, error); });
+}
+
 void Settings::raLoadList(QObject* game, const QString& collection_name)
 {
     const int console = raConsoleOf(game, collection_name);
@@ -2787,7 +2800,7 @@ QString Settings::raStart(QObject* collections, bool only_new, bool progress_onl
 QVariantMap Settings::raStatus(QObject* collections) const
 {
     QVariantMap out;
-    int games = 0, checked = 0, matched = 0, with = 0, not_found = 0, earned = 0, total = 0;
+    int games = 0, checked = 0, matched = 0, with = 0, not_found = 0, earned = 0, total = 0, wrong = 0;
     const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
     QSet<QString> seen;
     for (int i = 0; list && i < list->count(); i++) {
@@ -2810,6 +2823,8 @@ QVariantMap Settings::raStatus(QObject* collections) const
             }
             matched++;
             const int n = ra_extra(*game, "ra-achievements").toInt();
+            if (n > 0 && ra_extra(*game, "ra-version") == QLatin1String("wrong"))
+                wrong++;
             if (n > 0) {
                 with++;
                 total += n;
@@ -2824,6 +2839,7 @@ QVariantMap Settings::raStatus(QObject* collections) const
     out.insert(QStringLiteral("notFound"), not_found);
     out.insert(QStringLiteral("unsupported"), checked - matched - not_found);
     out.insert(QStringLiteral("earned"), earned);
+    out.insert(QStringLiteral("wrongVersion"), wrong);  ///< on RA with achievements, but not this file
     out.insert(QStringLiteral("total"), total);
     // the cached lists
     int lists = 0;

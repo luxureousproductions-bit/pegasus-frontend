@@ -347,6 +347,8 @@ public:
     Q_INVOKABLE QString raSetMatch(QObject* game, const QString& collection_name, const QVariantMap& pick);
     /// the RA console id of a game in a collection (0: none)
     Q_INVOKABLE int raConsoleOf(QObject* game, const QString& collection_name) const;
+    /// the versions RA unlocks for, of a matched game: raHashesReady(id, [{ md5, name, labels }], error)
+    Q_INVOKABLE void raLoadHashes(QObject* game);
     Q_INVOKABLE void raStop();
     /// the cached game lists removed (downloaded again on the next match)
     Q_INVOKABLE void raForgetLists();
@@ -478,6 +480,7 @@ signals:
     void raFinished(QVariantMap result);
     void raLoginChecked(QVariantMap result);
     void raListReady(QString error);
+    void raHashesReady(int id, QVariantList hashes, QString error);
     void libraryHousekeepingReady(QVariantMap result);
     void emulatorCollectionsReady(QVariantList collections);
     void collectionDetailsReady(QString collection, QVariantMap details);

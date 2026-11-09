@@ -220,6 +220,15 @@ FocusScope {
     // -- RetroAchievements ----------------------------------------------------------
     property bool raChecking: false
     property var raExtra: null   // the open game's x-ra-* fields after a check here (its file's, not the loaded ones)
+    // the versions RA unlocks for, of the open game (asked for with A on "Your version")
+    property var raHashes: null  // { id, loading, list: [{ md5, name, labels }], error }
+    function loadRaHashes() {
+        var id = parseInt(raField("ra-id") || "0", 10);
+        if (id <= 0 || (raHashes && raHashes.id === id && raHashes.loading))
+            return;
+        keepPosition(function() { root.raHashes = { "id": id, "loading": true, "list": [], "error": "" }; });
+        Internal.settings.raLoadHashes(game.obj);
+    }
     // a game's x-ra-* field as loaded (extra["ra-id"] is a list of one)
     function raField(key) {
         if (!game || !game.obj || !game.obj.extra)
@@ -262,14 +271,18 @@ FocusScope {
     // the open collection: matched / not found / not checked
     property bool raCollRunning: false
     function raCollCounts() {
-        var c = { "matched": 0, "missing": 0, "unchecked": 0, "total": 0 };
+        var c = { "matched": 0, "missing": 0, "unchecked": 0, "total": 0, "wrong": 0 };
         for (var i = 0; i < games.length; i++) {
             if (!games[i].obj || String(games[i].path || "").indexOf("android:") === 0)
                 continue;
             var id = raOf(games[i].obj, "ra-id");
             c.total++;
             if (id === "") c.unchecked++;
-            else if (parseInt(id, 10) > 0) c.matched++;
+            else if (parseInt(id, 10) > 0) {
+                c.matched++;
+                if (raOf(games[i].obj, "ra-version") === "wrong" && parseInt(raOf(games[i].obj, "ra-achievements") || "0", 10) > 0)
+                    c.wrong++;
+            }
             else c.missing++;
         }
         return c;
@@ -295,6 +308,13 @@ FocusScope {
     }
     Connections {
         target: Internal.settings
+        function onRaHashesReady(id, hashes, error) {
+            if (!root.raHashes || root.raHashes.id !== id)
+                return;
+            root.keepPosition(function() {
+                root.raHashes = { "id": id, "loading": false, "list": hashes, "error": error };
+            });
+        }
         function onRaFinished(result) {
             if (root.raCollRunning) {
                 root.keepPosition(function() { root.raCollRunning = false; });
@@ -1273,6 +1293,7 @@ FocusScope {
     function openGame(entry) {
         building = true;
         raExtra = null;
+        raHashes = null;
         game = entry;
         launchInfo = isAndroidCollection(collObj) ? Internal.settings.gameLaunchInfo(entry.obj) : ({});
         orig = readGame(entry.obj);
@@ -1669,7 +1690,7 @@ FocusScope {
                 return out;
             }
             if (root.page === "ramatches") {
-                var gone = [], found = [];
+                var gone = [], found = [], wrongs = [];
                 for (i = 0; i < root.games.length; i++) {
                     var rg = root.games[i];
                     if (!rg.obj || String(rg.path || "").indexOf("android:") === 0)
@@ -1681,7 +1702,15 @@ FocusScope {
                         rrow.sub = root.raOf(rg.obj, "ra-title") + " · " + root.raHowText(rhow);
                         rrow.value = qsTr("%1 achievements").arg(root.raOf(rg.obj, "ra-achievements") || "0") + api.tr;
                         rrow.done = rhow === "manual";
-                        found.push(rrow);
+                        if (root.raOf(rg.obj, "ra-version") === "wrong" && parseInt(root.raOf(rg.obj, "ra-achievements") || "0", 10) > 0) {
+                            rrow.kind = "rawronggame";
+                            rrow.value = qsTr("another version needed") + api.tr;
+                            rrow.warn = true;
+                            rrow.done = false;
+                            wrongs.push(rrow);
+                        }
+                        else
+                            found.push(rrow);
                     }
                     else {
                         rrow.value = rid === "" ? qsTr("not checked") + api.tr
@@ -1695,6 +1724,10 @@ FocusScope {
                 if (gone.length === 0)
                     out.push({ "kind": "info", "text": qsTr("None") + api.tr, "value": "" });
                 out = out.concat(gone);
+                if (wrongs.length > 0) {
+                    out.push({ "kind": "section", "text": qsTr("On RA, but not this version · A opens the game to see the ones RA supports") + api.tr });
+                    out = out.concat(wrongs);
+                }
                 out.push({ "kind": "section", "text": qsTr("Matched · A changes it") + api.tr });
                 return out.concat(found);
             }
@@ -1835,6 +1868,39 @@ FocusScope {
                                         + " · " + qsTr("%1 points").arg(root.raField("ra-points") || "0") + api.tr,
                                "done": raN > 0 && raEarned !== "" && parseInt(raEarned, 10) >= raN,
                                "warn": false });
+                if (parseInt(raId || "0", 10) > 0) {
+                    var ver = root.raField("ra-version");
+                    var yourHash = root.raField("ra-hash");
+                    out.push({ "kind": "raversion", "text": qsTr("Your version") + api.tr,
+                               "sub": yourHash !== "" ? qsTr("your file's hash %1").arg(yourHash) + api.tr : "",
+                               "value": ver === "supported" ? qsTr("one RA supports: achievements unlock") + api.tr
+                                      : ver === "wrong" ? qsTr("not one RA supports: achievements won't unlock · A shows the ones it does") + api.tr
+                                      : ver === "unknown" ? qsTr("couldn't be checked: this file type can't be hashed (eg. .chd)") + api.tr
+                                      : qsTr("not known yet: A on the game above checks it again") + api.tr,
+                               "done": ver === "supported", "warn": ver === "wrong",
+                               "muted": ver !== "supported" && ver !== "wrong" });
+                    var rh = root.raHashes;
+                    if (rh && rh.id === parseInt(raId, 10)) {
+                        if (rh.loading)
+                            out.push({ "kind": "info", "text": qsTr("Versions RA supports") + api.tr, "value": qsTr("asking RetroAchievements...") + api.tr });
+                        else if (rh.error !== "")
+                            out.push({ "kind": "info", "text": qsTr("Versions RA supports") + api.tr, "value": rh.error, "warn": true });
+                        else if (rh.list.length === 0)
+                            out.push({ "kind": "info", "text": qsTr("Versions RA supports") + api.tr, "value": qsTr("none listed") + api.tr });
+                        else {
+                            for (var hv = 0; hv < rh.list.length && hv < 12; hv++) {
+                                var hh = rh.list[hv];
+                                var yours = yourHash !== "" && hh.md5 === yourHash.toLowerCase();
+                                out.push({ "kind": "info", "text": hv === 0 ? qsTr("Versions RA supports") + api.tr : "",
+                                           "sub": hh.name !== "" ? hh.name : hh.md5,
+                                           "value": (yours ? qsTr("yours · ") + api.tr : "") + (hh.labels !== "" ? hh.labels : hh.md5.substring(0, 8)),
+                                           "done": yours });
+                            }
+                            if (rh.list.length > 12)
+                                out.push({ "kind": "info", "text": "", "value": qsTr("and %1 more").arg(rh.list.length - 12) + api.tr });
+                        }
+                    }
+                }
                 out.push({ "kind": "rapick", "text": qsTr("Pick the game on RetroAchievements...") + api.tr,
                            "value": root.raField("ra-match") === "manual" ? qsTr("picked by hand: kept by every match") + api.tr
                                   : qsTr("wrong or missing? choose it from RA's list") + api.tr,
@@ -1902,10 +1968,11 @@ FocusScope {
                                "value": root.raCollRunning ? qsTr("matching...") + api.tr
                                       : qsTr("%1 of %2 matched").arg(rc.matched).arg(rc.total) + api.tr });
                     out.push({ "kind": "ramatchlist", "text": qsTr("Matches...") + api.tr,
-                               "value": rc.missing + rc.unchecked > 0
-                                      ? qsTr("%1 not found · %2 not checked").arg(rc.missing).arg(rc.unchecked) + api.tr
-                                      : qsTr("all matched") + api.tr,
-                               "warn": rc.missing > 0 });
+                               "value": (rc.wrong > 0 ? qsTr("%1 wrong version · ").arg(rc.wrong) + api.tr : "")
+                                      + (rc.missing + rc.unchecked > 0
+                                         ? qsTr("%1 not found · %2 not checked").arg(rc.missing).arg(rc.unchecked) + api.tr
+                                         : qsTr("all matched") + api.tr),
+                               "warn": rc.missing > 0 || rc.wrong > 0 });
                 }
                 out.push({ "kind": "section", "text": qsTr("Show") + api.tr });
                 out.push({ "kind": "missingfilter", "text": qsTr("Games to list") + api.tr,
@@ -2084,6 +2151,8 @@ FocusScope {
             }
             else if (row.kind === "racheck")
                 root.raCheckThisGame();
+            else if (row.kind === "raversion")
+                root.loadRaHashes();
             else if (row.kind === "rapick")
                 raPicker.openFor(root.game.obj, root.current("title") || root.game.title);
             else if (row.kind === "racoll")
@@ -2092,6 +2161,10 @@ FocusScope {
                 root.openRaMatches();
             else if (row.kind === "ramatchgame")
                 raPicker.openFor(row.entry.obj, row.entry.title);
+            else if (row.kind === "rawronggame") {
+                root.openGame(row.entry);
+                root.loadRaHashes();
+            }
             else if (row.kind === "scrapegame")
                 root.scrapeThisGame();
             else if (row.kind === "scrapecoll")
