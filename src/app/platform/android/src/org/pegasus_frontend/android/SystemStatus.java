@@ -97,6 +97,18 @@ public class SystemStatus {
 
     private static void changed() { s_version++; }
 
+    // Pegasus X frees the theme's cached graphics and unused QML components
+    // (FrontendLayer::releaseMemory); registered by FrontendLayer at startup
+    private static native void nativeLowMemory();
+
+    private static void lowMemory() {
+        try {
+            nativeLowMemory();
+        } catch (UnsatisfiedLinkError e) {
+            // not registered (yet): nothing to free
+        }
+    }
+
     public static int version() { return s_version; }
 
     public static synchronized void start(final Context context) {
@@ -243,7 +255,7 @@ public class SystemStatus {
         // -- dark mode changes
         ctx.registerComponentCallbacks(new ComponentCallbacks() {
             @Override public void onConfigurationChanged(Configuration config) { readDark(config); }
-            @Override public void onLowMemory() {}
+            @Override public void onLowMemory() { lowMemory(); }
         });
 
         readWifi();

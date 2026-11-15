@@ -17,6 +17,7 @@
 
 #include "FrontendLayer.h"
 
+#include "Log.h"
 #include "Paths.h"
 #include "imggen/BlurhashProvider.h"
 #include "utils/DiskCachedNAM.h"
@@ -24,11 +25,17 @@
 #ifdef Q_OS_ANDROID
 #include "platform/AndroidAppIconProvider.h"
 #include "platform/AndroidPdfProvider.h"
+#include <QtAndroidExtras/QAndroidJniEnvironment>
+#include <QtAndroidExtras/QAndroidJniObject>
+#include <jni.h>
 #endif
 
+#include <QGuiApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQmlNetworkAccessManagerFactory>
+#include <QQuickWindow>
+#include <atomic>
 
 
 namespace {
@@ -43,6 +50,47 @@ QNetworkAccessManager* DiskCachedNAMFactory::create(QObject* parent)
     return utils::create_disc_cached_nam(parent);
 }
 
+#ifdef Q_OS_ANDROID
+// Pegasus X: SystemStatus.java's onLowMemory() calls this, on Android's
+// main thread; the release itself runs on Qt's, queued
+std::atomic<FrontendLayer*> g_frontend { nullptr };
+
+void JNICALL native_low_memory(JNIEnv*, jclass)
+{
+    FrontendLayer* const frontend = g_frontend.load();
+    if (frontend) {
+        QMetaObject::invokeMethod(frontend, [frontend]{
+            frontend->releaseMemory(QStringLiteral("Android is low on memory"));
+        }, Qt::QueuedConnection);
+    }
+}
+
+void register_low_memory_callback()
+{
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+    const JNINativeMethod methods[] {
+        { "nativeLowMemory", "()V", reinterpret_cast<void*>(native_low_memory) },
+    };
+    // the class through Qt's class loader (an instance: Qt 5 has no findClass)
+    const QAndroidJniObject status("org/pegasus_frontend/android/SystemStatus");
+    QAndroidJniEnvironment env;
+    if (!status.isValid()) {
+        env->ExceptionClear();
+        Log::warning(LOGMSG("Frontend: no low-memory callback (SystemStatus not found)"));
+        return;
+    }
+    const jclass cls = env->GetObjectClass(status.object<jobject>());
+    if (env->RegisterNatives(cls, methods, sizeof(methods) / sizeof(methods[0])) < 0) {
+        env->ExceptionClear();
+        Log::warning(LOGMSG("Frontend: no low-memory callback (RegisterNatives failed)"));
+    }
+    env->DeleteLocalRef(cls);
+}
+#endif
+
 } // namespace
 
 
@@ -53,6 +101,18 @@ FrontendLayer::FrontendLayer(QObject* const api_public, QObject* const api_priva
     , m_engine(nullptr)
 {
     // Note: the pointer to the Api is non-owning and constant during the runtime
+
+    // Pegasus X: out of sight (a game runs, the home screen is shown): the
+    // theme stays loaded, its caches go. Nothing more when it's back: what's
+    // needed is made again as it's drawn.
+    connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state){
+        if (state == Qt::ApplicationHidden || state == Qt::ApplicationSuspended)
+            releaseMemory(QStringLiteral("Pegasus X is in the background"));
+    });
+#ifdef Q_OS_ANDROID
+    g_frontend.store(this);
+    register_low_memory_callback();
+#endif
 }
 
 void FrontendLayer::rebuild()
@@ -92,6 +152,25 @@ void FrontendLayer::teardown()
 
     m_engine->deleteLater();
     m_engine = nullptr;
+}
+
+FrontendLayer::~FrontendLayer()
+{
+#ifdef Q_OS_ANDROID
+    g_frontend.store(nullptr);
+#endif
+}
+
+void FrontendLayer::releaseMemory(const QString& why)
+{
+    if (!m_engine)
+        return;
+    for (QObject* const root : m_engine->rootObjects()) {
+        if (auto* const window = qobject_cast<QQuickWindow*>(root))
+            window->releaseResources();
+    }
+    m_engine->trimComponentCache();
+    Log::info(LOGMSG("Frontend: released cached graphics and unused QML components (%1)").arg(why));
 }
 
 void FrontendLayer::clearCache()

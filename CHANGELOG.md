@@ -5,6 +5,27 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-15
 
+### Free memory while a game runs
+
+- **What:** when Pegasus X goes into the background (`applicationStateChanged`
+  to `ApplicationHidden` or `ApplicationSuspended`, e.g. a game launched), the
+  theme stays loaded as before, but its caches are let go:
+  `QQuickWindow::releaseResources()` on the theme's window (the scene graph's
+  unused graphics) and `trimComponentCache()` on the QML engine (components
+  nothing uses). Nothing extra happens when Pegasus X is back
+  (`ApplicationActive`); what's needed is made again as it's drawn. Android's
+  low-memory signal (`SystemStatus.java`, `onLowMemory()`) triggers the same
+  release. Each release is logged ("Frontend: released cached graphics and
+  unused QML components (...)").
+- **Why:** with the theme kept loaded during games (instant return), its
+  cached graphics stayed in memory too, which leaves less for the emulator and
+  makes it likelier that Android stops Pegasus X in the background.
+- **Not changed:** the theme isn't torn down or reloaded, and session
+  tracking (play time, `Backend::onProcessLaunched`) is untouched.
+- **Files:** `src/backend/FrontendLayer.h`, `src/backend/FrontendLayer.cpp`,
+  `src/app/platform/android/src/org/pegasus_frontend/android/SystemStatus.java`.
+- **Commit:** "Free the theme's caches while a game runs".
+
 ### Clear stale settings locks at startup
 
 - **What:** at startup, before the backend is created, any leftover

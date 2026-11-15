@@ -36,12 +36,20 @@ class FrontendLayer : public QObject {
 
 public:
     explicit FrontendLayer(QObject* const api_public, QObject* const api_private, QObject* parent = nullptr);
+    ~FrontendLayer() override;
 
     void rebuild();
     void teardown();
 
     void clearCache();
     bool isLoaded() const { return m_engine != nullptr; }
+
+    /// Pegasus X: while Pegasus X is out of sight (a game runs) or Android is
+    /// short of memory, the loaded theme stays as it is, but what the window
+    /// and the QML engine only keep as a cache is let go: the scene graph's
+    /// unused graphics (QQuickWindow::releaseResources) and the components
+    /// nothing uses (trimComponentCache). `why` goes in the log.
+    void releaseMemory(const QString& why);
 
 signals:
     void rebuildComplete();
