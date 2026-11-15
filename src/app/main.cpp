@@ -15,6 +15,7 @@
 // along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 
+#include "backend/AppSettings.h"
 #include "backend/Backend.h"
 #include "backend/Log.h"
 #include "backend/Paths.h"
@@ -22,6 +23,8 @@
 
 #include <QCommandLineParser>
 #include <QDebug>
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QIcon>
@@ -45,6 +48,7 @@ backend::CliArgs handle_cli_args(QGuiApplication&);
 bool request_runtime_permissions();
 bool portable_txt_present();
 void start_shutdown_watchdog();
+QStringList clear_stale_settings_locks();
 
 int main(int argc, char *argv[])
 {
@@ -88,9 +92,19 @@ int main(int argc, char *argv[])
     backend::CliArgs cli_args = handle_cli_args(app);
     cli_args.portable |= portable_txt_present();
 
+    // Pegasus X: settings locks left by a crash or a kill, before anything
+    // opens the settings. The settings folder is decided once, at its first
+    // use, and depends on portable mode: that's known now (Backend sets the
+    // same value again).
+    AppSettings::general.portable = cli_args.portable;
+    const QStringList stale_locks = clear_stale_settings_locks();
+
     int result = 0;
     {
         backend::Backend backend(cli_args);
+        // the log is open now
+        for (const QString& line : stale_locks)
+            Log::warning(LOGMSG("Startup: %1").arg(line));
         backend.start();
         result = app.exec();
 
@@ -104,6 +118,30 @@ int main(int argc, char *argv[])
     Log::info(LOGMSG("Shutdown complete"));
     Log::close();
     return result;
+}
+
+// Pegasus X: QSettings guards a settings file with "<file>.lock" (and, while
+// removing a stale one, "<file>.lock.rmlock"). On Android's external storage
+// flock() isn't available (ENOSYS), and Qt 5.15 only takes a lock over as
+// stale when flock() works; QSettings::sync() waits for the lock with no
+// time limit. So a lock left by a crash or a kill would hold every later
+// settings save forever. Pegasus X runs as a single instance: any such lock
+// at startup is a leftover, and is removed. What happened, for the log.
+QStringList clear_stale_settings_locks()
+{
+    QStringList out;
+    const QDir dir(paths::writableConfigDir());
+    const QStringList names = dir.entryList({ QStringLiteral("*.ini.lock"), QStringLiteral("*.ini.lock.rmlock") },
+                                            QDir::Files | QDir::Hidden | QDir::System);
+    for (const QString& name : names) {
+        const QString path = dir.filePath(name);
+        const QString line = QFile::remove(path)
+            ? QStringLiteral("removed a stale settings lock: %1").arg(path)
+            : QStringLiteral("couldn't remove a stale settings lock: %1").arg(path);
+        qInfo().noquote() << line;  // the log file isn't open yet: logcat now, the log after
+        out.append(line);
+    }
+    return out;
 }
 
 void start_shutdown_watchdog()
