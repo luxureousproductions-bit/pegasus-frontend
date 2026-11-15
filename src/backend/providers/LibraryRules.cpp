@@ -772,6 +772,21 @@ void dedupe_collections(std::vector<model::Collection*>& collections, std::vecto
         delete game;
 }
 
+bool mark_user_art(model::Game& game)
+{
+    if (!game_key(game).startsWith(QLatin1String("android:")))
+        return false;
+    static const QString field = QStringLiteral("pegasusx-user-art");
+    const QStringList kinds = game.assets().localFirstKinds();
+    QVariantMap& extra = game.extraMapMut();
+    if (kinds.isEmpty())
+        return extra.remove(field) > 0;
+    if (extra.value(field).toStringList() == kinds)
+        return false;
+    extra.insert(field, kinds);
+    return true;
+}
+
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
 {
     // what's laid on top of the metadata files: ES-DE's data for your own
@@ -812,6 +827,8 @@ void apply_library_rules(std::vector<model::Collection*>& collections, std::vect
                 game->extraMapMut().insert(QStringLiteral("box3d"), boxes);
             }
         }
+        // which of an Android app's art is yours (for themes)
+        mark_user_art(*game);
     }
     apply_hidden(collections, games);
     apply_default_launches(collections);

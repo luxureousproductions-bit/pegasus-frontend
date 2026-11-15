@@ -24,6 +24,8 @@
 #include <QFileInfo>
 
 #include <QUrl>
+#include <utility>
+#include <vector>
 
 
 namespace model {
@@ -186,9 +188,12 @@ void Assets::set_files(AssetType key, const QStringList& paths)
     target.append(icons);
 }
 
-void Assets::remove_listed(const QStringList& entries)
+namespace {
+// Pegasus X: the kinds of art by the names metadata uses (pegasusx-hidden-art,
+// pegasusx-user-art), in one order
+const std::vector<std::pair<QString, AssetType>>& art_kind_names()
 {
-    static const HashMap<QString, AssetType> kinds {
+    static const std::vector<std::pair<QString, AssetType>> names {
         { QStringLiteral("box_front"), AssetType::BOX_FRONT },
         { QStringLiteral("box_back"), AssetType::BOX_BACK },
         { QStringLiteral("box_spine"), AssetType::BOX_SPINE },
@@ -210,6 +215,25 @@ void Assets::remove_listed(const QStringList& entries)
         { QStringLiteral("titlescreen"), AssetType::TITLESCREEN },
         { QStringLiteral("video"), AssetType::VIDEO },
     };
+    return names;
+}
+} // namespace
+
+QStringList Assets::localFirstKinds() const
+{
+    QStringList out;
+    for (const auto& kind : art_kind_names()) {
+        const auto list = m_asset_lists.find(kind.second);
+        if (list != m_asset_lists.cend() && !list->second.isEmpty()
+            && list->second.constFirst().startsWith(QLatin1String("file:")))
+            out.append(kind.first);
+    }
+    return out;
+}
+
+void Assets::remove_listed(const QStringList& entries)
+{
+    static const HashMap<QString, AssetType> kinds(art_kind_names().cbegin(), art_kind_names().cend());
     // the file itself, by its whole path: art from the scraper and from
     // your media folder have the same names (covers/Game.png and
     // media/box2dfront/Game.png), so a name alone hid both

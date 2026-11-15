@@ -1743,8 +1743,12 @@ QString Settings::saveGameMetadata(const QString& collection_name, const QString
         apply_scraped(*game, changes);
         // art you removed: off the loaded game too
         const QStringList hidden = changes.value(QStringLiteral("x-pegasusx-hidden-art")).toStringList();
-        if (!hidden.isEmpty())
+        if (!hidden.isEmpty()) {
             game->assetsMut().remove_listed(hidden);
+            // which of an Android app's art is yours, without the removed
+            if (providers::library::mark_user_art(*game))
+                game->notifyExtraChanged();
+        }
     }
     return error;
 #else
@@ -2066,8 +2070,12 @@ void apply_scraped(model::Game& game, const QVariantMap& changes)
     }
     // themes bound to the game read again only what changed (a details
     // change can re-sort a theme's lists: not for art or extra fields alone)
-    if (assets)
+    if (assets) {
         game.assetsMut().notifyChanged();
+        // which of an Android app's art is yours (pegasusx-user-art)
+        if (providers::library::mark_user_art(game))
+            extra = true;
+    }
     if (details)
         game.notifyDataChanged();
     if (extra)

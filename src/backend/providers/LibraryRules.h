@@ -70,5 +70,12 @@ void set_merge_android_enabled(bool);
 
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games);
 
+/// An imported Android app (first file android:<package>): its extra field
+/// "pegasusx-user-art" lists the kinds of art whose first picture is a local
+/// file, the pictures you picked (the import itself only adds
+/// image://androidicons/ icons and Play Store web links); no field when
+/// there's none. Other games are left alone. True if the field changed.
+bool mark_user_art(model::Game& game);
+
 } // namespace library
 } // namespace providers

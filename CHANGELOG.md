@@ -5,6 +5,31 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-15
 
+### Tell themes which art of an Android app is yours
+
+- **What:** an imported Android app (first file `android:<package>`) gets the
+  extra field `pegasusx-user-art`: the kinds of art whose first picture is a
+  local file (a `file:` URL), named as in `pegasusx-hidden-art` (`box_front`,
+  `logo`, `background`, `screenshot`, ...). Those are the pictures you picked
+  in Settings > Library. No field when there's none; other games never get
+  it. It's set in `apply_library_rules` (after `keep_one_per_kind` and the
+  `box3d` step), which runs after both a GameDataCache restore and a full
+  scan. When you save art in Settings > Library (or scrape the app), it's
+  set again on the loaded game, also after art you removed is taken off, and
+  themes are told (`extraChanged`) without a restart.
+- **Why:** the Android import adds the launcher icon
+  (`image://androidicons/<package>`) and Play Store web links after your art,
+  so a theme could only guess from the URL which picture was yours. Play
+  Store images are web links, so they're never listed.
+- **Not changed:** asset order, `keep_one_per_kind`, the launcher icon in
+  `assets.tile`, the Play Store lookup, launching. The kind names now come
+  from one list shared with `remove_listed` (same names, same matching).
+- **Files:** `src/backend/model/gaming/Assets.h`,
+  `src/backend/model/gaming/Assets.cpp`, `src/backend/providers/LibraryRules.h`,
+  `src/backend/providers/LibraryRules.cpp`,
+  `src/backend/model/internal/settings/Settings.cpp`.
+- **Commit:** "Android apps: mark the art you picked for themes".
+
 ### Free memory while a game runs
 
 - **What:** when Pegasus X goes into the background (`applicationStateChanged`

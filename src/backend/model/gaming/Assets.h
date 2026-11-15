@@ -85,6 +85,9 @@ public:
     /// "<kind>|<file>" (kind as in metadata: screenshot, box_front, ...);
     /// matched by file name, so the same picture listed elsewhere goes too
     void remove_listed(const QStringList& entries);
+    /// Pegasus X: the kinds (named as in remove_listed) whose first picture
+    /// is a local file (file: URL), in a fixed order
+    QStringList localFirstKinds() const;
     /// Pegasus X: one kind's files replaced (eg. after scraping a game), the
     /// app icons (image://) kept at the end
     void set_files(AssetType key, const QStringList& paths);
