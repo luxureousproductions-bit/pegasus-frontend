@@ -1063,6 +1063,19 @@ FocusScope {
         }
         return null;
     }
+    // an imported Android app (first file android:<package>): its logo slot
+    // is its "Icon", and shows the app's launcher icon (the same image as
+    // assets.tile) until you pick a logo. Only shown: the icon is never
+    // put in edits, so it's never written to metadata or assets.logo
+    function androidIconOf(key) {
+        if (page !== "game" || artBase(key) !== "art:logo" || !game
+                || String(game.path || "").indexOf("android:") !== 0)
+            return "";
+        return "image://androidicons/" + String(game.path).substring(8);
+    }
+    function artLabel(kind) {
+        return (kind[0] === "art:logo" && androidIconOf(kind[0]) !== "") ? qsTr("Icon") + api.tr : kind[1];
+    }
     // the keys of one kind, in order (files the game has, and ones you added)
     function artKeysOf(base) {
         var found = {};
@@ -1911,15 +1924,22 @@ FocusScope {
                 for (i = 0; i < root.artKinds.length; i++) {
                     var kind = root.artKinds[i];
                     var kindKeys = root.artKeysOf(kind[0]);
+                    // an Android app's Icon: shown with no logo of yours too
+                    var appIcon = root.androidIconOf(kind[0]);
+                    if (appIcon !== "" && kindKeys.length === 0)
+                        kindKeys = [kind[0] + "#0"];
+                    var kindText = root.artLabel(kind);
                     for (var kk = 0; kk < kindKeys.length; kk++) {
                         var akey = kindKeys[kk];
                         var art = root.current(akey);
-                        if (art === "" && !(akey in root.edits))
+                        var iconShown = appIcon !== "" && art === "" && akey === kind[0] + "#0";
+                        if (art === "" && !(akey in root.edits) && !iconShown)
                             continue;
-                        var isIcon = String(art).indexOf("image://") === 0;
-                        out.push({ "kind": "art", "text": kindKeys.length > 1 ? kind[1] + " " + (kk + 1) : kind[1],
-                                   "key": akey, "icon": isIcon,
-                                   "value": art === "" ? qsTr("removed") + api.tr : isIcon ? qsTr("the app's icon") + api.tr : root.fileName(art),
+                        var isIcon = iconShown || String(art).indexOf("image://") === 0;
+                        out.push({ "kind": "art", "text": kindKeys.length > 1 ? kindText + " " + (kk + 1) : kindText,
+                                   "key": akey, "icon": isIcon, "appIcon": iconShown ? appIcon : "",
+                                   "value": iconShown ? ((akey in root.edits) ? qsTr("the app's icon (your logo removed)") + api.tr : qsTr("the app's icon") + api.tr)
+                                          : art === "" ? qsTr("removed") + api.tr : isIcon ? qsTr("the app's icon") + api.tr : root.fileName(art),
                                    "muted": art === "" || isIcon, "edited": akey in root.edits, "done": akey in root.saved });
                     }
                 }
@@ -2203,7 +2223,7 @@ FocusScope {
                 if (row.field.key && root.undoEdit(row.field.key))
                     root.message = qsTr("Undone.") + api.tr;
             }
-            else if (row.kind === "art" && !row.icon) {
+            else if (row.kind === "art" && (!row.icon || (row.appIcon && (row.key in root.edits)))) {
                 if (!root.undoEdit(row.key))
                     root.setEdit(row.key, "");
             }
@@ -2403,6 +2423,9 @@ FocusScope {
                 if (themeFile !== "")
                     return { "file": themeFile, "title": row.text + qsTr(" · the theme's own") + api.tr };
             }
+            // an Android app's Icon with no logo of yours: the launcher icon
+            if (own === "" && row.appIcon)
+                return { "file": row.appIcon, "title": row.text, "edited": !!row.edited };
             return { "file": own, "title": row.text, "edited": !!row.edited, "own": true };
         }
         if (page === "game") {
@@ -2412,7 +2435,7 @@ FocusScope {
                 for (var k = 0; k < keys.length; k++) {
                     var f = String(current(keys[k]) || "");
                     if (f !== "")
-                        return { "file": f, "title": artKind(keys[k])[1], "edited": keys[k] in edits };
+                        return { "file": f, "title": artLabel(artKind(keys[k])), "edited": keys[k] in edits };
                 }
             }
             return { "file": "", "title": "" };
@@ -2732,7 +2755,7 @@ FocusScope {
         for (var i = 0; i < artKinds.length; i++) {
             var base = artKinds[i][0];
             entries.push({ "act": base + "#0",
-                           "text": hasArt(base) ? qsTr("%1 (replaces the one there)").arg(artKinds[i][1]) + api.tr : artKinds[i][1] });
+                           "text": hasArt(base) ? qsTr("%1 (replaces the one there)").arg(artLabel(artKinds[i])) + api.tr : artLabel(artKinds[i]) });
         }
         chooser.openFor(qsTr("What kind?") + api.tr, entries, function(act) { root.pickArt(act); });
     }

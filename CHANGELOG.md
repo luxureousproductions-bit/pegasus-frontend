@@ -5,6 +5,26 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-15
 
+### "Icon" in Library game info for Android apps
+
+- **What:** in Settings > Library game info (the metadata editor), an
+  imported Android app (first file `android:<package>`) has its logo slot
+  labelled "Icon" instead of "Logo", also in "Add or replace art...". With no
+  logo of yours, the slot shows the app's launcher icon
+  (`image://androidicons/<package>`, the same image as `assets.tile`), in the
+  row and in the preview. A picture you pick there replaces it and is saved
+  as the logo, as logos are saved now. Removing it brings the icon back in
+  the slot (X on the row then undoes the removal, as before).
+- **Why:** an app's icon is what stands for its logo, so the slot shows it
+  rather than nothing.
+- **Not changed:** the icon is only shown: it's never written to the
+  metadata file or `assets.logo`, so `pegasusx-user-art` lists `logo` only
+  for a logo you picked. Every other game keeps "Logo" and its behaviour.
+  Asset order, `keep_one_per_kind`, `assets.tile`, the Play Store lookup and
+  launching are untouched.
+- **Files:** `src/frontend/menu/settings/MetadataEditor.qml` only.
+- **Commit:** "Library: show an Android app's icon as its Icon".
+
 ### Tell themes which art of an Android app is yours
 
 - **What:** an imported Android app (first file `android:<package>`) gets the
