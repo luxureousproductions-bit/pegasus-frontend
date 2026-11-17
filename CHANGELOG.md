@@ -3,6 +3,42 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-16
+
+### A game listed in two metadata files stays in both collections
+
+- **What:** when a metadata file lists a game file (a ROM) that a block read
+  earlier already has (eg. your own file, then a system's file), the game is
+  now added to that file's collections too (`add_to_file_collections` in
+  `Metadata::apply_game_entry`, file branch only). With no launch command of
+  its own, it gets that collection's, as any game in it does. The rest of the
+  block works as before: it only fills the game's gaps, or notes an import
+  conflict. The game cache's schema goes to 3.
+- **Why:** the second block only filled the first game's gaps, so the game
+  was left out of the second file's collections. Eg. a ROM in a collection of
+  yours (no launch line) and in the SNES file showed only in yours, and a game
+  directory written from that library didn't list it in the SNES file.
+- **Not changed:** your details and your own launch command still win (the
+  second block only fills gaps). Android apps and other URIs are untouched
+  (the URI branch stays as it was). Games are still matched by file, never by
+  title: the SNES and DS Chrono Trigger stay two games. A library where no ROM
+  is listed twice loads as before; with the cache schema at 3, the first start
+  after the update does one full scan. The game directory, its migration and
+  the same-title dedupe in LibraryRules are unchanged. One edge: a single
+  file with two `collection:` headers that lists the same ROM under both now
+  puts it in both.
+- **Tests:** `test_PegasusProvider::game_in_two_files` (fixture
+  `tests/backend/providers/pegasus/data/dupcoll`): one ROM in your file and
+  in the SNES file is in both collections with SNES's launch command; your
+  own launch command and details stay; the DS Chrono Trigger is a game of its
+  own; an Android app in your file and in the import stays only in yours.
+- **Files:** `src/backend/providers/pegasus_metadata/PegasusMetadata.cpp`,
+  `src/backend/providers/GameDataCache.cpp`,
+  `tests/backend/providers/pegasus/test_PegasusProvider.cpp`,
+  `tests/backend/providers/pegasus/data/data.qrc`,
+  `tests/backend/providers/pegasus/data/dupcoll/`.
+- **Commit:** "Metafiles: a game listed in two files stays in both collections".
+
 ## 2026-11-15
 
 ### "Icon" in Library game info for Android apps

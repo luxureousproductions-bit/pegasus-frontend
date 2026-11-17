@@ -1,0 +1,9 @@
+collection: My SNES picks
+
+game: Chrono Trigger (my own file)
+file: :/dupcoll/snes/Chrono Trigger (USA).sfc
+description: Written in my own metadata file.
+
+game: Super Mario World (my own file)
+file: :/dupcoll/snes/Super Mario World (USA).sfc
+launch: my-emulator "{file.path}"

@@ -69,5 +69,13 @@
         <file>autoparenting/game2.ext</file>
         <file>autoparenting/game3.ext</file>
         <file>entryless/metadata.txt</file>
+        <file>dupcoll/mine/metadata.txt</file>
+        <file>dupcoll/myapps/metadata.txt</file>
+        <file>dupcoll/snes/metadata.txt</file>
+        <file>dupcoll/snes/Chrono Trigger (USA).sfc</file>
+        <file>dupcoll/snes/Super Mario World (USA).sfc</file>
+        <file>dupcoll/nds/metadata.txt</file>
+        <file>dupcoll/nds/Chrono Trigger (USA).nds</file>
+        <file>dupcoll/android/metadata.txt</file>
     </qresource>
 </RCC>

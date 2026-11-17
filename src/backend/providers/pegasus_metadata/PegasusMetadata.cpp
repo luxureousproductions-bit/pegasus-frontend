@@ -31,6 +31,7 @@
 #include "providers/pegasus_metadata/PegasusFilter.h"
 #include "types/AssetType.h"
 #include "utils/PathTools.h"
+#include "utils/StdHelpers.h"
 
 #include <QDir>
 #include <QUrl>
@@ -52,6 +53,22 @@ QStringList tokenize_by_comma(const QString& str)
 
 namespace providers {
 namespace pegasus {
+
+namespace {
+// Pegasus X: a game file another block already has is listed in this file's
+// collections too (eg. a system's, besides one of yours), so the game is in
+// each of them, and gets their launch command when it has none of its own
+void add_to_file_collections(const ParserState& ps, model::Game& game, SearchContext& sctx)
+{
+    const auto& coll_games = sctx.current_collection_games();
+    for (model::Collection* const coll : ps.all_colls) {
+        const auto it = coll_games.find(coll);
+        if (it != coll_games.cend() && VEC_CONTAINS(it->second, &game))
+            continue;
+        sctx.game_add_to(game, *coll);
+    }
+}
+} // namespace
 
 ParserState::ParserState(const QString& path_ref)
     : path(path_ref)
@@ -343,6 +360,9 @@ void Metadata::apply_game_entry(ParserState& ps, const metafile::Entry& entry, S
                         continue;
                     }
                     if (game_ptr != nullptr && game_ptr != ps.cur_game) {
+                        // Pegasus X: it stays in this file's collections too.
+                        // Only for game files: an app (URI) stays where it was found first
+                        add_to_file_collections(ps, *game_ptr, sctx);
                         // Pegasus X: an ES-DE import's game your own file has: used on top of it later
                         if (providers::overrides::is_import_file(ps.path))
                             providers::overrides::note_import_conflict(ps.path);

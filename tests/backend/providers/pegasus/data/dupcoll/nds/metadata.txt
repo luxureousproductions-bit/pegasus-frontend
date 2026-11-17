@@ -1,0 +1,6 @@
+collection: Nintendo DS
+shortname: nds
+launch: melonds "{file.path}"
+
+game: Chrono Trigger
+file: Chrono Trigger (USA).nds

@@ -133,6 +133,7 @@ private slots:
     void relative_files_with_dirs();
     void autoparenting();
     void entryless_games();
+    void game_in_two_files();
 };
 
 void test_PegasusProvider::empty()
@@ -658,6 +659,83 @@ void test_PegasusProvider::entryless_games()
 
     QCOMPARE(collections.size(), 0);
     QCOMPARE(games.size(), 0);
+}
+
+
+// Pegasus X: a ROM listed in your own file (a collection of yours, without a
+// launch command) and in a system's file (with one) is in both collections,
+// and launches with the system's command when yours has none. Your details
+// and your own launch command still win. Two ROMs with one title (SNES, DS)
+// stay two games, and an Android app (a URI) stays where it was found first
+void test_PegasusProvider::game_in_two_files()
+{
+    providers::SearchContext sctx({
+        QStringLiteral(":/dupcoll/mine"),
+        QStringLiteral(":/dupcoll/myapps"),
+        QStringLiteral(":/dupcoll/snes"),
+        QStringLiteral(":/dupcoll/nds"),
+        QStringLiteral(":/dupcoll/android"),
+    });
+    QTest::ignoreMessage(QtWarningMsg, "The collection 'Android' has no valid games, ignored");
+    providers::pegasus::PegasusProvider().run(sctx);
+    const auto [collections, games] = sctx.finalize(this);
+
+    const model::Collection* const mine = get_collection_ptr(collections, QStringLiteral("My SNES picks"));
+    const model::Collection* const snes = get_collection_ptr(collections, QStringLiteral("Nintendo SNES"));
+    const model::Collection* const nds = get_collection_ptr(collections, QStringLiteral("Nintendo DS"));
+    const model::Collection* const myapps = get_collection_ptr(collections, QStringLiteral("My Apps"));
+    QVERIFY(mine);
+    QVERIFY(snes);
+    QVERIFY(nds);
+    QVERIFY(myapps);
+    // the Android import's collection has no game of its own left
+    QVERIFY(!has_collection(collections, QStringLiteral("Android")));
+    QCOMPARE(collections.size(), 4);
+    QCOMPARE(games.size(), 4);
+
+    const QString snes_chrono = QStringLiteral(":/dupcoll/snes/Chrono Trigger (USA).sfc");
+    const QString snes_smw = QStringLiteral(":/dupcoll/snes/Super Mario World (USA).sfc");
+    const QString nds_chrono = QStringLiteral(":/dupcoll/nds/Chrono Trigger (USA).nds");
+
+    // in both collections, your details first, the system's launch command
+    const model::Game& chrono = get_game_by_file_path(games, snes_chrono);
+    QCOMPARE(chrono.title(), QStringLiteral("Chrono Trigger (my own file)"));
+    QCOMPARE(chrono.description(), QStringLiteral("Written in my own metadata file."));
+    QCOMPARE(chrono.developerStr(), QStringLiteral("Square"));
+    QCOMPARE(chrono.launchCmd(), QStringLiteral("snes9x \"{file.path}\""));
+    QCOMPARE(chrono.collectionsModel()->count(), 2);
+    QVERIFY(has_game_file(mine->gameList()->entries(), snes_chrono));
+    QVERIFY(has_game_file(snes->gameList()->entries(), snes_chrono));
+
+    // your own launch command stays
+    const model::Game& smw = get_game_by_file_path(games, snes_smw);
+    QCOMPARE(smw.title(), QStringLiteral("Super Mario World (my own file)"));
+    QCOMPARE(smw.launchCmd(), QStringLiteral("my-emulator \"{file.path}\""));
+    QCOMPARE(smw.collectionsModel()->count(), 2);
+    QVERIFY(has_game_file(mine->gameList()->entries(), snes_smw));
+    QVERIFY(has_game_file(snes->gameList()->entries(), snes_smw));
+
+    QCOMPARE(mine->gameList()->count(), 2);
+    QCOMPARE(snes->gameList()->count(), 2);
+
+    // the DS game of the same name is a game of its own, only in DS
+    const model::Game& ds_chrono = get_game_by_file_path(games, nds_chrono);
+    QVERIFY(&ds_chrono != &chrono);
+    QCOMPARE(ds_chrono.title(), QStringLiteral("Chrono Trigger"));
+    QCOMPARE(ds_chrono.launchCmd(), QStringLiteral("melonds \"{file.path}\""));
+    QCOMPARE(ds_chrono.collectionsModel()->count(), 1);
+    QCOMPARE(ds_chrono.collectionsModel()->entries().front(), nds);
+    QCOMPARE(nds->gameList()->count(), 1);
+    QVERIFY(!has_game_file(snes->gameList()->entries(), nds_chrono));
+    QVERIFY(!has_game_file(nds->gameList()->entries(), snes_chrono));
+
+    // an app in your file and in an import: as before, yours and only yours
+    const model::Game* const app = get_game_ptr_by_title(games, QStringLiteral("My Own App Name"));
+    QVERIFY(app);
+    QCOMPARE(app->description(), QStringLiteral("From the Android import."));
+    QCOMPARE(app->collectionsModel()->count(), 1);
+    QCOMPARE(app->collectionsModel()->entries().front(), myapps);
+    QVERIFY(!get_game_ptr_by_title(games, QStringLiteral("Example App")));
 }
 
 

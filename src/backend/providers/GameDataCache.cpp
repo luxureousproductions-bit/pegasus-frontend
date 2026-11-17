@@ -44,7 +44,9 @@
 
 namespace {
 // 2: games and collections keep their extra (x-) fields
-constexpr int CACHE_SCHEMA_VERSION = 2;
+// 3: a game file listed in two metadata files keeps both collections
+//    (one full scan, so a cache saved without them isn't restored)
+constexpr int CACHE_SCHEMA_VERSION = 3;
 
 QJsonArray string_list_to_json(const QStringList& values)
 {

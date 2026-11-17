@@ -1,0 +1,6 @@
+collection: Android
+shortname: android
+
+game: Example App
+file: android:com.example.app
+description: From the Android import.

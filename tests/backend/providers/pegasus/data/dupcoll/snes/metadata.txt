@@ -1,0 +1,11 @@
+collection: Nintendo SNES
+shortname: snes
+launch: snes9x "{file.path}"
+
+game: Chrono Trigger
+file: Chrono Trigger (USA).sfc
+description: From the SNES import.
+developer: Square
+
+game: Super Mario World
+file: Super Mario World (USA).sfc

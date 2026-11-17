@@ -1,0 +1,4 @@
+collection: My Apps
+
+game: My Own App Name
+file: android:com.example.app
