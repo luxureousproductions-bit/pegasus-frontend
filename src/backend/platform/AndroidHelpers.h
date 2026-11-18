@@ -50,6 +50,7 @@ QStringList android_app_list();
 void request_saf_permission(const std::function<void()>&);
 
 QString run_am_call(const QStringList&);
+int run_script(const QStringList&);
 QString to_content_uri(const QString&);
 QString to_document_uri(const QString&);
 /// Pegasus X: Android's installer for a downloaded APK (the updater): "" when

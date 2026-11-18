@@ -3,6 +3,37 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-17
+
+### Event scripts run on Android
+
+- **What:** port of original Pegasus' commit 3702598c ("Executes .sh for
+  Android, like other platforms", #1195). On Android, the files in a settings
+  folder's `scripts/<event>/` folders (`game-start`, `game-end`, `quit`,
+  `config-changed`, `settings-changed`, `controls-changed`, ...) are run by
+  `/system/bin/sh <file> <args>` through `MainActivity.runScript` (Java
+  `ProcessBuilder`, the script's output goes to logcat as `Pegasus/script`).
+  Any readable file counts there, since files on Android storage can't be
+  marked executable. `lastrun.log` shows "Running `<event>` scripts..." and
+  each script, as on desktop.
+- **Why:** on Android only executable files were looked for, and shared
+  storage has none, so no script ever ran.
+- **Not changed:** desktop still runs executable files only, with
+  `QProcess::execute`. Where scripts are looked for and when each event fires
+  are unchanged. As in original Pegasus, on Android `game-end` only fires
+  when a launch fails (a successful launch hands over to the emulator and
+  isn't waited for), and the scripts run one after another, waited for.
+- **Tests:** `test_ScriptRunner` (new, desktop): an executable `game-start`
+  script runs with the game's path, a file that isn't executable doesn't,
+  and an event with no folder runs nothing.
+- **Files:** `src/backend/ScriptRunner.cpp`,
+  `src/backend/platform/AndroidHelpers.h`,
+  `src/backend/platform/AndroidHelpers.cpp`,
+  `src/app/platform/android/src/org/pegasus_frontend/android/MainActivity.java`,
+  `tests/backend/scriptrunner/`, `tests/backend/backend.pro`,
+  `tests/CMakeLists.txt`.
+- **Commit:** "Android: run event scripts (port of original Pegasus 3702598c)".
+
 ## 2026-11-16
 
 ### A game listed in two metadata files stays in both collections

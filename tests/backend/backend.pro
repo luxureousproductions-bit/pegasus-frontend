@@ -5,5 +5,6 @@ SUBDIRS += \
     configfile \
     model \
     processlauncher \
+    scriptrunner \
     providers \
     utils \
