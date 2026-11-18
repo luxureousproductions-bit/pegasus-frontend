@@ -22,6 +22,7 @@
 #include "model/gaming/Collection.h"
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
+#include "providers/LibraryRules.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusProvider.h"
 #include "utils/HashMap.h"
@@ -134,6 +135,7 @@ private slots:
     void autoparenting();
     void entryless_games();
     void game_in_two_files();
+    void duplicate_files();
 };
 
 void test_PegasusProvider::empty()
@@ -736,6 +738,51 @@ void test_PegasusProvider::game_in_two_files()
     QCOMPARE(app->collectionsModel()->count(), 1);
     QCOMPARE(app->collectionsModel()->entries().front(), myapps);
     QVERIFY(!get_game_ptr_by_title(games, QStringLiteral("Example App")));
+}
+
+// Pegasus X: one game file name (name and extension) under two paths is a
+// duplicate, whichever collections and sources have it (a metadata file, a
+// ROM folder scan). The same path in two collections isn't, nor is the same
+// name with another extension, nor two URIs. Nothing is changed by the check
+void test_PegasusProvider::duplicate_files()
+{
+    providers::SearchContext sctx({
+        QStringLiteral(":/dupfiles/mine"),
+        QStringLiteral(":/dupfiles/snes"),
+        QStringLiteral(":/dupfiles/copies"),
+        QStringLiteral(":/dupfiles/backup"),
+        QStringLiteral(":/dupfiles/gog"),
+    });
+    providers::pegasus::PegasusProvider().run(sctx);
+    const auto [collections, games] = sctx.finalize(this);
+
+    const QString snes_chrono = QStringLiteral(":/dupfiles/snes/Chrono Trigger (USA).sfc");
+    const QString copy_chrono = QStringLiteral(":/dupfiles/copies/Chrono Trigger (USA).sfc");
+    QVERIFY(has_game_file(games, snes_chrono));
+    QVERIFY(has_game_file(games, copy_chrono));
+    QCOMPARE(static_cast<int>(games.size()), 6);
+    QCOMPARE(static_cast<int>(collections.size()), 5);
+
+    const std::vector<providers::library::DuplicateFile> dups = providers::library::find_duplicate_files(games);
+    QCOMPARE(static_cast<int>(dups.size()), 1);
+    QCOMPARE(dups.front().name, QStringLiteral("Chrono Trigger (USA).sfc"));
+    QCOMPARE(static_cast<int>(dups.front().copies.size()), 2);
+    QCOMPARE(dups.front().copies.at(0)->path(), copy_chrono);
+    QCOMPARE(dups.front().copies.at(1)->path(), snes_chrono);
+
+    // the same path in two collections is one game (build 2216)
+    const model::Game& chrono = get_game_by_file_path(games, snes_chrono);
+    QCOMPARE(chrono.collectionsModel()->count(), 2);
+
+    // only noted: the games and collections are as they were
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("duplicate game file `Chrono Trigger \\(USA\\).sfc`, 2 copies")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("`:/dupfiles/copies/Chrono Trigger \\(USA\\).sfc` · game `Chrono Trigger \\(USA\\)` · in Copies · from a ROM folder scan")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("`:/dupfiles/snes/Chrono Trigger \\(USA\\).sfc` · game `Chrono Trigger \\(my own file\\)` · in .* · from a metadata file")));
+    QTest::ignoreMessage(QtWarningMsg, QRegularExpression(QStringLiteral("1 game file names are used by more than one file")));
+    providers::library::log_duplicate_files(games);
+    QCOMPARE(static_cast<int>(games.size()), 6);
+    QCOMPARE(chrono.collectionsModel()->count(), 2);
+    QCOMPARE(get_game_by_file_path(games, copy_chrono).collectionsModel()->count(), 1);
 }
 
 

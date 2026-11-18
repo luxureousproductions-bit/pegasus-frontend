@@ -77,5 +77,14 @@
         <file>dupcoll/nds/metadata.txt</file>
         <file>dupcoll/nds/Chrono Trigger (USA).nds</file>
         <file>dupcoll/android/metadata.txt</file>
+        <file>dupfiles/snes/metadata.txt</file>
+        <file>dupfiles/snes/Chrono Trigger (USA).sfc</file>
+        <file>dupfiles/mine/metadata.txt</file>
+        <file>dupfiles/copies/metadata.txt</file>
+        <file>dupfiles/copies/Chrono Trigger (USA).sfc</file>
+        <file>dupfiles/copies/Super Mario World (USA).smc</file>
+        <file>dupfiles/backup/metadata.txt</file>
+        <file>dupfiles/backup/Super Mario World (USA).sfc</file>
+        <file>dupfiles/gog/metadata.txt</file>
     </qresource>
 </RCC>

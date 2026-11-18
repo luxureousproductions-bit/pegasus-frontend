@@ -49,6 +49,7 @@
 #include <QSettings>
 #include <QStringBuilder>
 #include <algorithm>
+#include <map>
 
 
 namespace {
@@ -787,8 +788,68 @@ bool mark_user_art(model::Game& game)
     return true;
 }
 
+std::vector<DuplicateFile> find_duplicate_files(const std::vector<model::Game*>& games)
+{
+    // name -> path -> file (a path is one file, whatever lists it)
+    std::map<QString, std::map<QString, const model::GameFile*>> by_name;
+    for (const model::Game* const game : games) {
+        for (const model::GameFile* const file : game->filesModel()->entries()) {
+            if (!file->uri().isEmpty())
+                continue;  // an app or another URI entry
+            const QString path = file->path();
+            if (path.isEmpty())
+                continue;
+            by_name[file->fileinfo().fileName()].emplace(path, file);
+        }
+    }
+
+    std::vector<DuplicateFile> out;
+    for (const auto& name_paths : by_name) {
+        if (name_paths.second.size() < 2)
+            continue;
+        DuplicateFile dup { name_paths.first, {} };
+        for (const auto& path_file : name_paths.second)
+            dup.copies.push_back(path_file.second);
+        out.push_back(std::move(dup));
+    }
+    return out;
+}
+
+void log_duplicate_files(const std::vector<model::Game*>& games)
+{
+    const std::vector<DuplicateFile> dups = find_duplicate_files(games);
+    if (dups.empty())
+        return;
+
+    for (const DuplicateFile& dup : dups) {
+        Log::warning(LOGMSG("Library: duplicate game file `%1`, %2 copies (only noted, nothing was changed):")
+            .arg(dup.name)
+            .arg(dup.copies.size()));
+        for (const model::GameFile* const file : dup.copies) {
+            const model::Game& game = *file->parentGame();
+            QStringList colls;
+            for (const model::Collection* const coll : game.collectionsModel()->entries())
+                colls.append(coll->name());
+            const QStringList source = game.extraMap().value(QStringLiteral("pegasusx-source")).toStringList();
+            const QString from = source.isEmpty()
+                ? QStringLiteral("a ROM folder scan or another provider (no metadata entry)")
+                : source.first() == QLatin1String("esde")
+                ? QStringLiteral("an ES-DE import")
+                : QStringLiteral("a metadata file");
+            Log::warning(LOGMSG("Library:   `%1` · game `%2` · in %3 · from %4")
+                .arg(file->path(), game.title(),
+                     colls.isEmpty() ? QStringLiteral("no collection") : colls.join(QStringLiteral(", ")),
+                     from));
+        }
+    }
+    Log::warning(LOGMSG("Library: %1 game file names are used by more than one file (see above)")
+        .arg(dups.size()));
+}
+
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games)
 {
+    // the same ROM file name under two paths, in every game found: only noted
+    log_duplicate_files(games);
     // what's laid on top of the metadata files: ES-DE's data for your own
     // games, then your edits and scraped data (Overrides.cpp)
     // the old layers (imports-fill, overrides), only until the game directory

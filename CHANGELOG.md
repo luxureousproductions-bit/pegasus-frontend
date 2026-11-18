@@ -5,6 +5,37 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-17
 
+### Duplicate game files are noted in the log
+
+- **What:** each time the library is read (a full scan or the game cache),
+  game files with the same file name and extension under different paths
+  are written to `lastrun.log` as warnings, across all collections and
+  sources (Pegasus metadata files, ES-DE imports, ROM folder scans). For each
+  name: "Library: duplicate game file `<name>`, <n> copies (only noted,
+  nothing was changed):", then one line per copy with its path, its game's
+  title, its collections, and where it came from ("a metadata file", "an ES-DE
+  import", or "a ROM folder scan or another provider (no metadata entry)"),
+  and at the end how many names have copies. Names are compared exactly,
+  case included.
+- **Why:** the same ROM in two places (eg. an imported copy and a folder
+  copy) can show twice or launch the wrong copy; the log shows it before it
+  causes trouble.
+- **Not changed:** nothing is removed, merged, hidden or moved. The same
+  path in two collections is one game (since build 2216), so not a
+  duplicate. Apps and other URI entries aren't checked. Imports, migration,
+  `gamedirectory/`, launching and the theme are untouched.
+- **Tests:** `test_PegasusProvider::duplicate_files` (fixture
+  `tests/backend/providers/pegasus/data/dupfiles`): one name under two paths
+  (a metadata file and a ROM folder scan) is the only duplicate; the same
+  path in two collections, the same name with another extension and two
+  URIs aren't; the games and collections are the same after the check.
+- **Files:** `src/backend/providers/LibraryRules.h`,
+  `src/backend/providers/LibraryRules.cpp`,
+  `tests/backend/providers/pegasus/test_PegasusProvider.cpp`,
+  `tests/backend/providers/pegasus/data/data.qrc`,
+  `tests/backend/providers/pegasus/data/dupfiles/`.
+- **Commit:** "Library: note duplicate game files in the log".
+
 ### Event scripts run on Android
 
 - **What:** port of original Pegasus' commit 3702598c ("Executes .sh for

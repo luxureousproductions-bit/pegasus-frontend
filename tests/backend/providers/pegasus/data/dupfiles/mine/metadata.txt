@@ -1,0 +1,4 @@
+collection: My SNES picks
+
+game: Chrono Trigger (my own file)
+file: :/dupfiles/snes/Chrono Trigger (USA).sfc

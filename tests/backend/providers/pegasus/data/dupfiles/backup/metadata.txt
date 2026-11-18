@@ -1,0 +1,7 @@
+collection: Backup
+
+game: Super Mario World
+file: Super Mario World (USA).sfc
+
+game: Steam game
+file: steam:rungameid/123

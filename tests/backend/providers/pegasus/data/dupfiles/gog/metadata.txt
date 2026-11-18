@@ -1,0 +1,4 @@
+collection: GOG
+
+game: GOG game
+file: gog:rungameid/123

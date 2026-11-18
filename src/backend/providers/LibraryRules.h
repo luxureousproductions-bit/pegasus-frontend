@@ -24,6 +24,7 @@
 
 namespace model { class Collection; }
 namespace model { class Game; }
+namespace model { class GameFile; }
 
 
 // Pegasus X: changes to the found library before any theme sees it. They're
@@ -69,6 +70,22 @@ bool merge_android_enabled();
 void set_merge_android_enabled(bool);
 
 void apply_library_rules(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games);
+
+/// One game file name (name and extension) used by more than one file:
+/// eg. the same ROM copied into two folders, or an ES-DE import and a ROM
+/// folder that both have it. Copies sorted by path.
+struct DuplicateFile {
+    QString name;
+    std::vector<const model::GameFile*> copies;
+};
+/// Game files with the same name and extension under different paths, across
+/// all collections and sources (Pegasus metadata, ES-DE imports, ROM folders).
+/// The same path in more than one collection is one file, not a duplicate.
+/// Apps and other URI entries aren't checked. Sorted by name.
+std::vector<DuplicateFile> find_duplicate_files(const std::vector<model::Game*>& games);
+/// The same, written to the log (lastrun.log) as warnings: each name, and
+/// for each copy its path, game, collections and source. Nothing is changed.
+void log_duplicate_files(const std::vector<model::Game*>& games);
 
 /// An imported Android app (first file android:<package>): its extra field
 /// "pegasusx-user-art" lists the kinds of art whose first picture is a local
