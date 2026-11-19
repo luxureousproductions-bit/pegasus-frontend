@@ -96,7 +96,8 @@ FocusScope {
 
         spacing: vpx(15)
         displayMarginBeginning: header.height + anchors.topMargin
-        highlightMoveDuration: 150
+        // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+        highlightMoveDuration: 0
         highlightRangeMode: ListView.ApplyRange
         preferredHighlightBegin: height * 0.25
         preferredHighlightEnd: height * 0.75

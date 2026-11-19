@@ -237,7 +237,8 @@ FocusScope {
         highlightRangeMode: ListView.ApplyRange
         preferredHighlightBegin: height * 0.3
         preferredHighlightEnd: height * 0.7
-        highlightMoveDuration: 150
+        // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+        highlightMoveDuration: 0
 
         function selectable(i) {
             return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info";

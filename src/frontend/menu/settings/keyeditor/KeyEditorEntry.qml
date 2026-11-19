@@ -110,6 +110,8 @@ FocusScope {
 
         model: entries[root.eventId].keys
         delegate: keyDelegate
+        // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+        highlightMoveDuration: 0
 
         visible: hasKeys
         enabled: hasKeys

@@ -3,6 +3,39 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-19
+
+### Built-in menus keep up with a held D-pad
+
+- **What:** every list in Pegasus X's own menus moves focus at once
+  (`highlightMoveDuration: 0`): Settings, Game directory, the Library /
+  metadata editor (its rows, art strip, emulator and value chooser, dialog
+  buttons), the Scraper pages and their chooser, RetroAchievements, the key
+  and gamepad editors, the small value pop-ups (MultivalueBox), the folder
+  picker's shortcuts and first-start setup. Lists that kept the current row
+  in a band (ApplyRange) still do, now without a slide. On the Scraper's
+  running page, the rows that change while scraping (progress, counts, the
+  last game's picture, the last games) are read live by the rows themselves
+  (`liveRow`), so a progress update no longer rebuilds the whole list; it's
+  rebuilt only when Stop turns into Done, the first picture arrives, or a
+  game is added to the last games (at most 8).
+- **Why:** on Android the D-pad repeat comes from Android itself (Qt's
+  gamepad module turns each key-down, repeats included, into a new Up/Down
+  press, about 20 a second once it repeats). A 150 ms slide (300 ms in the
+  gamepad editor; Qt's default speed where nothing was set) restarted on
+  every press, so the list trailed behind focus and kept moving after the
+  D-pad was let go. Rebuilding the Scraper's list on each progress update
+  made that page jump and slowed every press.
+- **Not changed:** the D-pad repeat (Android's delay and rate), touch
+  flicking (Qt's own speeds), the option pop-ups (PegasusOptionsDialog), the
+  other pages' rows, and anything in themes.
+- **Files:** `src/frontend/menu/settings/` `SettingsMain.qml`,
+  `GameDirectory.qml`, `MetadataEditor.qml`, `ScraperScreen.qml`,
+  `RetroAchievementsScreen.qml`, `KeyEditor.qml`, `GamepadEditor.qml`,
+  `FirstRunWizard.qml`, `common/MultivalueBox.qml`,
+  `keyeditor/KeyEditorEntry.qml`, `gamedireditor/FilePicker.qml`.
+- **Commit:** "Menus: focus moves at once, Scraper progress keeps its list".
+
 ## 2026-11-17
 
 ### Duplicate game files are noted in the log

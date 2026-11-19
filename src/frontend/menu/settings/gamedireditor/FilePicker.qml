@@ -298,6 +298,8 @@ FocusScope {
             }
             ListView {
                 id: jumpRow
+                // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+                highlightMoveDuration: 0
                 anchors.top: path.bottom
                 anchors.topMargin: vpx(8)
                 width: parent.width

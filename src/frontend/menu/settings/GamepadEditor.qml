@@ -210,7 +210,8 @@ FocusScope {
                 clip: true
 
                 highlightRangeMode: ListView.ApplyRange
-                highlightMoveDuration: 300
+                // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+                highlightMoveDuration: 0
                 orientation: ListView.Horizontal
 
                 focus: true

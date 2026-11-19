@@ -286,6 +286,8 @@ FocusScope {
         interactive: false
         model: root.options
         keyNavigationWraps: false
+        // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+        highlightMoveDuration: 0
 
         // (not interactive: the arrows are handled here)
         Keys.onUpPressed: if (currentIndex > 0) currentIndex--

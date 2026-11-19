@@ -116,7 +116,8 @@ FocusScope {
                 delegate: listItem
 
                 snapMode: ListView.SnapOneItem
-                highlightMoveDuration: 150
+                // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+                highlightMoveDuration: 0
 
                 MouseArea {
                     anchors.fill: parent

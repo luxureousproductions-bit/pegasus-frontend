@@ -1632,7 +1632,8 @@ FocusScope {
         highlightRangeMode: ListView.ApplyRange
         preferredHighlightBegin: height * 0.3
         preferredHighlightEnd: height * 0.7
-        highlightMoveDuration: 150
+        // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+        highlightMoveDuration: 0
 
         readonly property var rows: {
             if (root.building)
@@ -2634,6 +2635,8 @@ FocusScope {
             highlightRangeMode: ListView.ApplyRange
             preferredHighlightBegin: width * 0.3
             preferredHighlightEnd: width * 0.7
+            // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+            highlightMoveDuration: 0
             delegate: Rectangle {
                 readonly property bool isOn: index === strip.currentIndex
                 readonly property bool vid: /\.(mp4|webm|mkv|avi|mov|pdf|cbz|cbr)$/i.test(modelData.file)
@@ -2935,6 +2938,8 @@ FocusScope {
                     clip: true
                     focus: true
                     keyNavigationWraps: true
+                    // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+                    highlightMoveDuration: 0
                     model: chooser.entries
                     delegate: Rectangle {
                         width: ListView.view.width
@@ -3511,6 +3516,8 @@ FocusScope {
                     id: actionRow
                     width: parent.width
                     height: vpx(46)
+                    // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+                    highlightMoveDuration: 0
                     orientation: ListView.Horizontal
                     layoutDirection: Qt.RightToLeft
                     spacing: vpx(12)

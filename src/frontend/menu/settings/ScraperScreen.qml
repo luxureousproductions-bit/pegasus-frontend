@@ -278,6 +278,34 @@ FocusScope {
         list.currentIndex = 0;
     }
 
+    // Pegasus X: what the running page's rows need from `run` and `results`,
+    // as values that only notify when they change
+    readonly property bool runRunning: !!run.running
+    readonly property bool runHasPreview: !!(run.preview && run.preview.title)
+    readonly property int resultCount: results.length
+    // a running-page row as it is now (the others as they are)
+    function liveRow(r) {
+        if (!r.live)
+            return r;
+        if (r.live === "progress") {
+            var total = run.total || 0;
+            return { "kind": "progress", "text": run.running
+                ? qsTr("%1 of %2").arg(run.done || 0).arg(total) + api.tr
+                : qsTr("Finished · %1 of %2").arg(run.done || 0).arg(total) + api.tr,
+                "value": run.running && run.current ? run.current : "" };
+        }
+        if (r.live === "counts")
+            return { "kind": "info", "text": r.text,
+                     "value": (run.saved || 0) + " · " + (run.notFound || 0) + " · " + (run.failed || 0) };
+        if (r.live === "preview")
+            return { "kind": "preview", "text": "", "preview": run.preview || ({}), "result": run.result || "", "ok": run.ok };
+        if (r.live === "result") {
+            var g = results[r.slot] || ({});
+            return { "kind": "info", "text": g.title || "", "value": g.result || "", "ok": g.ok };
+        }
+        return r;
+    }
+
     readonly property var rows: {
         var out = [];
         var i;
@@ -367,22 +395,20 @@ FocusScope {
             return out;
         }
         if (page === "running") {
-            var total = run.total || 0;
-            out.push({ "kind": "progress", "text": run.running
-                ? qsTr("%1 of %2").arg(run.done || 0).arg(total) + api.tr
-                : qsTr("Finished · %1 of %2").arg(run.done || 0).arg(total) + api.tr,
-                "value": run.running && run.current ? run.current : "" });
-            out.push({ "kind": "info", "text": qsTr("Saved · not found · failed") + api.tr,
-                       "value": (run.saved || 0) + " · " + (run.notFound || 0) + " · " + (run.failed || 0) });
+            // Pegasus X: the rows that change while scraping are filled in
+            // by liveRow(), so a progress update doesn't rebuild the list
+            // (only these three, which change rarely, do)
+            out.push({ "kind": "progress", "live": "progress", "text": "" });
+            out.push({ "kind": "info", "live": "counts", "text": qsTr("Saved · not found · failed") + api.tr, "value": "" });
             // the last game: its picture and what was found
-            if (run.preview && run.preview.title)
-                out.push({ "kind": "preview", "text": "", "preview": run.preview, "result": run.result || "", "ok": run.ok });
+            if (runHasPreview)
+                out.push({ "kind": "preview", "live": "preview", "text": "" });
             out.push({ "kind": "section", "text": qsTr("Last games") + api.tr });
-            for (i = 0; i < results.length; i++)
-                out.push({ "kind": "info", "text": results[i].title, "value": results[i].result, "ok": results[i].ok });
-            if (results.length === 0)
+            for (i = 0; i < resultCount; i++)
+                out.push({ "kind": "info", "live": "result", "slot": i, "text": "" });
+            if (resultCount === 0)
                 out.push({ "kind": "info", "text": qsTr("Starting...") + api.tr, "value": "" });
-            out.push({ "kind": run.running ? "stop" : "done", "text": run.running ? qsTr("Stop") + api.tr : qsTr("Back to the scraper") + api.tr });
+            out.push({ "kind": runRunning ? "stop" : "done", "text": runRunning ? qsTr("Stop") + api.tr : qsTr("Back to the scraper") + api.tr });
             return out;
         }
         if (page === "other") {
@@ -550,7 +576,8 @@ FocusScope {
         highlightRangeMode: ListView.ApplyRange
         preferredHighlightBegin: height * 0.3
         preferredHighlightEnd: height * 0.7
-        highlightMoveDuration: 150
+        // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+        highlightMoveDuration: 0
 
         function selectable(i) {
             return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info"
@@ -613,18 +640,20 @@ FocusScope {
         }
 
         delegate: Item {
-            readonly property bool isSection: modelData.kind === "section"
-            readonly property bool isInfo: modelData.kind === "info"
-            readonly property bool isStart: modelData.kind === "start" || modelData.kind === "stop" || modelData.kind === "done"
-            readonly property bool isProgress: modelData.kind === "progress"
-            readonly property bool isMix: modelData.kind === "preview"
-            readonly property bool steps: modelData.kind === "choice" || modelData.kind === "number"
+            // Pegasus X: the row as it is now (running page: live from `run`)
+            readonly property var row: root.liveRow(modelData)
+            readonly property bool isSection: row.kind === "section"
+            readonly property bool isInfo: row.kind === "info"
+            readonly property bool isStart: row.kind === "start" || row.kind === "stop" || row.kind === "done"
+            readonly property bool isProgress: row.kind === "progress"
+            readonly property bool isMix: row.kind === "preview"
+            readonly property bool steps: row.kind === "choice" || row.kind === "number"
             readonly property bool highlighted: !isSection && !isInfo && !isMix
                 && ((ListView.isCurrentItem && ListView.view.activeFocus) || rowMouse.containsMouse)
 
             width: ListView.view.width
             height: isSection ? sectionText.height : isStart ? vpx(76) : isProgress ? vpx(84) : isMix ? vpx(300)
-                  : isInfo ? (modelData.value ? vpx(42) : rowLabel.implicitHeight + vpx(16)) : vpx(22) * 2.4
+                  : isInfo ? (row.value ? vpx(42) : rowLabel.implicitHeight + vpx(16)) : vpx(22) * 2.4
 
             // the game just scraped: its picture and what was found
             Item {
@@ -634,7 +663,7 @@ FocusScope {
                 anchors.rightMargin: vpx(30)
                 anchors.topMargin: vpx(10)
                 anchors.bottomMargin: vpx(10)
-                readonly property var p: modelData.preview || ({})
+                readonly property var p: row.preview || ({})
 
                 Rectangle {
                     id: previewBox
@@ -681,8 +710,8 @@ FocusScope {
                     }
                     Text {
                         width: parent.width
-                        text: modelData.result || ""
-                        color: modelData.ok ? "#9d9" : "#e8b06a"
+                        text: row.result || ""
+                        color: row.ok ? "#9d9" : "#e8b06a"
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(15)
                         elide: Text.ElideRight
@@ -759,7 +788,7 @@ FocusScope {
             Text {
                 id: sectionText
                 visible: parent.isSection
-                text: modelData.text
+                text: row.text
                 color: "#bbb"
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(22)
@@ -772,10 +801,10 @@ FocusScope {
                 anchors.centerIn: parent
                 width: Math.min(parent.width * 0.5, vpx(380))
                 height: vpx(50)
-                color: parent.highlighted ? (modelData.kind === "stop" ? "#f43" : "#3c4") : "#666"
+                color: parent.highlighted ? (row.kind === "stop" ? "#f43" : "#3c4") : "#666"
                 Text {
                     anchors.centerIn: parent
-                    text: modelData.text
+                    text: row.text
                     color: "#eee"
                     font.family: globalFonts.sans
                     font.pixelSize: vpx(21)
@@ -791,26 +820,26 @@ FocusScope {
             Text {
                 id: rowLabel
                 visible: !parent.isSection && !parent.isStart && !parent.isMix
-                text: modelData.text
+                text: row.text
                 color: parent.isInfo ? "#999" : "#eee"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(21)
                 anchors.left: parent.left
                 anchors.leftMargin: vpx(30)
                 anchors.verticalCenter: parent.verticalCenter
-                width: parent.isInfo && (modelData.value || "") === "" ? parent.width - vpx(60) : parent.width * 0.5
+                width: parent.isInfo && (row.value || "") === "" ? parent.width - vpx(60) : parent.width * 0.5
                 // a note under the options: all of it, on several lines
-                wrapMode: parent.isInfo && !modelData.value ? Text.WordWrap : Text.NoWrap
-                elide: parent.isInfo && !modelData.value ? Text.ElideNone : Text.ElideRight
+                wrapMode: parent.isInfo && !row.value ? Text.WordWrap : Text.NoWrap
+                elide: parent.isInfo && !row.value ? Text.ElideNone : Text.ElideRight
             }
             Text {
                 visible: !parent.isSection && !parent.isStart && !parent.isMix
-                text: (parent.steps && parent.highlighted ? "◂  " : "") + root.valueText(modelData)
+                text: (parent.steps && parent.highlighted ? "◂  " : "") + root.valueText(row)
                       + (parent.steps && parent.highlighted ? "  ▸" : "")
-                      + (modelData.kind === "page" ? "   ›" : "")
-                color: modelData.kind === "info" && modelData.ok !== undefined ? (modelData.ok ? "#9d9" : "#e8b06a")
-                     : modelData.muted ? "#888"
-                     : modelData.kind === "system" && modelData.check ? "#5cc" : "#c0c0c0"
+                      + (row.kind === "page" ? "   ›" : "")
+                color: row.kind === "info" && row.ok !== undefined ? (row.ok ? "#9d9" : "#e8b06a")
+                     : row.muted ? "#888"
+                     : row.kind === "system" && row.check ? "#5cc" : "#c0c0c0"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(21)
                 anchors.left: rowLabel.right
@@ -829,7 +858,7 @@ FocusScope {
                 onClicked: {
                     list.currentIndex = index;
                     list.focus = true;
-                    root.activate(modelData);
+                    root.activate(row);
                 }
             }
         }
@@ -933,7 +962,8 @@ FocusScope {
                 clip: true
                 focus: true
                 keyNavigationWraps: true
-                highlightMoveDuration: 150
+                // Pegasus X: focus moves at once (no slide to catch up with a held D-pad)
+                highlightMoveDuration: 0
                 model: picker.row ? picker.row.choices : []
                 delegate: Rectangle {
                     width: ListView.view.width
