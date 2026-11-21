@@ -45,8 +45,11 @@ FocusScope {
     // (Library has its own for the games scraped from there)
     Connections {
         target: Internal.settings
-        enabled: scraper.activeFocus || scraperChoice.activeFocus
-        function onScraperNeedsChoice(choice) { scraperChoice.openFor(choice); }
+        // (checked here: Connections.enabled needs QtQuick 2.7, this file is 2.6)
+        function onScraperNeedsChoice(choice) {
+            if (scraper.activeFocus || scraperChoice.activeFocus)
+                scraperChoice.openFor(choice);
+        }
     }
     // waiting since before the Scraper opened (scraping went on after you left)
     Timer {

@@ -156,6 +156,11 @@ stop 04-scraper
 mkdir -p "$R/miximages"
 find "$CFG" "$HOME" -path "*miximages*" -type f | head -n 10 | while read -r f; do cp "$f" "$R/miximages/"; done
 
+# -- 4b. Settings > Gaming > Scraper: the section that hosts the Scraper (loads at all)
+start 04b-scraper-section "menu/settings/ScraperSection.qml" 6
+shot 04b-scraper-section
+stop 04b-scraper-section
+
 start 05-scraper-accounts "menu/settings/ScraperScreen.qml" 6
 keys Down Down Down Return
 shot 05-accounts

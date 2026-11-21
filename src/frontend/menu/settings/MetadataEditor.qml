@@ -3586,8 +3586,11 @@ FocusScope {
     Connections {
         target: Internal.settings
         // Pegasus X: one pick window at a time: not while the Scraper is on top
-        enabled: root.activeFocus
-        function onScraperNeedsChoice(choice) { scraperChoice.openFor(choice); }
+        // (checked here: Connections.enabled needs QtQuick 2.7, this file is 2.6)
+        function onScraperNeedsChoice(choice) {
+            if (root.activeFocus)
+                scraperChoice.openFor(choice);
+        }
     }
     // waiting since before Library opened (scraping went on after you left)
     Timer {

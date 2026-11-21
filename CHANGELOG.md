@@ -5,6 +5,23 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-20
 
+### Fix: Library and Scraper open again (build 2221)
+
+- **What:** in build 2221, Settings > Gaming > Library and > Scraper didn't
+  open. Their "only the window in front answers" check for the interactive
+  pick window used `Connections.enabled`, which QtQuick 2.6 (what these
+  files import) doesn't have, so the whole screen failed to load ("Connections.enabled
+  is not available in QtQuick 2.6"). The check is now made inside the
+  handler instead, with the same result. The test environment now opens
+  Settings > Gaming > Scraper too (`04b-scraper-section`), so a screen that
+  doesn't load shows there.
+- **Why:** the build and the test environment passed, but the test only
+  showed it through a warning and missing Library lines.
+- **Not changed:** what the Library and the Scraper do.
+- **Files:** `src/frontend/menu/settings/MetadataEditor.qml`,
+  `src/frontend/menu/settings/ScraperSection.qml`, `tests/testenv/run.sh`.
+- **Commit:** "Fix: Library and Scraper load again (QtQuick 2.6)".
+
 ### Scraper gets its own row in Settings > Gaming
 
 - **What:** Settings > Gaming now reads Game directory, Library, Scraper,
