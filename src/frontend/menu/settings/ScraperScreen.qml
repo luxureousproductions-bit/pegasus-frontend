@@ -19,13 +19,14 @@ import "common"
 import QtQuick 2.6
 
 
-// Pegasus X: Settings > Library > Scraper. Laid out like a classic scraper
+// Pegasus X: Settings > Gaming > Scraper. Laid out like a classic scraper
 // menu (where from, which games, which systems, accounts, content...), in
 // Pegasus' style. Every change is saved right away.
 FocusScope {
     id: root
 
     signal close
+    signal openGenres   // Pegasus X: the Genres page (ScraperSection shows it)
 
     anchors.fill: parent
 
@@ -322,6 +323,8 @@ FocusScope {
             out.push({ "kind": "page", "to": "other", "text": qsTr("Other settings") + api.tr, "value": "" });
             out.push({ "kind": "page", "to": "log", "text": qsTr("Log") + api.tr,
                        "value": qsTr("what the scraper did") + api.tr });
+            out.push({ "kind": "page", "to": "genres", "text": qsTr("Genres") + api.tr,
+                       "value": qsTr("every genre and its games") + api.tr });
             out.push({ "kind": "start", "text": (s.systems || []).length > 0
                 ? qsTr("Start · %1 games").arg(gameCount) + api.tr : qsTr("Start") + api.tr });
             return out;
@@ -457,7 +460,7 @@ FocusScope {
         return row.value || "";
     }
     readonly property var pageTitles: ({
-        "main": qsTr("Library > Scraper"), "systems": qsTr("Scraper > Systems"),
+        "main": qsTr("Scraper"), "systems": qsTr("Scraper > Systems"),
         "accounts": qsTr("Scraper > Accounts"), "content": qsTr("Scraper > Content"),
         "miximage": qsTr("Scraper > Miximages"), "other": qsTr("Scraper > Other settings"),
         "running": qsTr("Scraper > Scraping"), "log": qsTr("Scraper > Log"),
@@ -511,7 +514,8 @@ FocusScope {
         }
     }
     function activate(row) {
-        if (row.kind === "page") openPage(row.to);
+        if (row.kind === "page" && row.to === "genres") root.openGenres();
+        else if (row.kind === "page") openPage(row.to);
         else if (row.kind === "choice") picker.openFor(row);
         else if (row.kind === "toggle") step(row, 1);
         else if (row.kind === "system") togglePicked(row.text);

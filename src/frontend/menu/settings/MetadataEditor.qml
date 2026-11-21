@@ -71,8 +71,10 @@ FocusScope {
                                 "m": Internal.settings.mergeAndroid });
     }
 
+    property bool libWasOpen: false   // Pegasus X: Library opened again on top of itself
     Component.onCompleted: {
         libStart = libState();
+        libWasOpen = Internal.settings.libraryOpen;
         Internal.settings.libraryOpen = true;  // a finished scrape waits for you to leave
         refreshStatus();
         list.currentIndex = 1;  // the first option, below the title
@@ -1305,6 +1307,32 @@ FocusScope {
         list.positionViewAtBeginning();
         console.log("[timing] Library: collection \"" + entry.name + "\" (" + list_games.length + " games) opened in " + (Date.now() - t0) + " ms");
     }
+    // Pegasus X: straight to one game (Scraper > Genres): its collection is
+    // opened under it, and Back from the game leaves Library
+    property bool directGame: false
+    function openGameDirect(obj) {
+        if (!obj)
+            return;
+        var colls = obj.collections;
+        // Android Games is on Android's page (as in the collection list)
+        var android = findCollection(function(x) { return isAndroidCollection(x) && !isAndroidGamesCollection(x); });
+        for (var c = 0; colls && c < colls.count; c++) {
+            var cobj = colls.get(c);
+            var name = (android && isAndroidGamesCollection(cobj)) ? android.name : cobj.name;
+            for (var e = 0; e < collections.length; e++) {
+                if (collections[e].loaded && collections[e].name === name) {
+                    openCollection(collections[e]);
+                    for (var g = 0; g < games.length; g++) {
+                        if (games[g].obj === obj) {
+                            directGame = true;
+                            openGame(games[g]);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
     function openGame(entry) {
         building = true;
         raExtra = null;
@@ -1356,6 +1384,14 @@ FocusScope {
         building = true;
         edits = {};
         message = "";
+        if (page === "game" && directGame) {
+            building = false;
+            Internal.settings.libraryOpen = libWasOpen;  // another Library under this one stays open
+            if (anySaved || (libChanged && libState() !== libStart))
+                Internal.settings.reloadLibrary();
+            root.close();
+            return;
+        }
         if (page === "game") {
             var path = game ? game.path : "";
             page = "collection";

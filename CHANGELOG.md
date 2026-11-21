@@ -5,6 +5,32 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-20
 
+### Scraper > Genres: every genre and its games
+
+- **What:** the Scraper (Settings > Gaming > Scraper) has a "Genres" row
+  after Log. It lists every genre in the library, A to Z, with how many
+  games have it; one-offs show "1 game" in amber, and the top line says how
+  many genres and how many with only one game. A genre lists its games
+  (title, collection); a game opens in Library on that game's page, to fix
+  its genre there. Back from the game returns to the genre's games, with
+  the counts read again (a game whose genre was changed drops out of the
+  list; a genre with no games left goes back to the genre list). Same keys
+  as the Scraper's lists: LB/RB top or bottom, LT/RT 10 rows. The genres
+  Android uses to sort apps ("Application", "Emulator") aren't listed, as
+  in the keyboard's suggestions. The Scraper's title is now "Scraper"
+  (was "Library > Scraper"). The test environment walks through Genres
+  (`04b-genres...`).
+- **Why:** one-off genres (typos, near duplicates) are easy to spot and fix
+  one game at a time.
+- **Not changed:** nothing is merged or rewritten automatically; genres
+  change only in a game's Library page, as before. Library opened from
+  Genres is the same Library (its "Scraper options..." brings the Scraper
+  to the front; Back returns to the game).
+- **Files:** `src/frontend/menu/settings/GenresScreen.qml` (new),
+  `ScraperSection.qml`, `ScraperScreen.qml`, `MetadataEditor.qml`
+  (`openGameDirect`), `src/frontend/frontend.qrc`, `tests/testenv/run.sh`.
+- **Commit:** "Scraper: Genres, every genre with its game count".
+
 ### Fix: Library and Scraper open again (build 2221)
 
 - **What:** in build 2221, Settings > Gaming > Library and > Scraper didn't
