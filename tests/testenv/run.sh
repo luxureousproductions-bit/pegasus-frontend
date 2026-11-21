@@ -127,6 +127,19 @@ keys Down Return
 sleep 1
 shot 03-library-review
 keys Escape
+# Genres (the row under Needs your check): a genre's games, one of them on its page, and back
+keys Down Return
+sleep 1
+shot 03-genres
+keys Return
+shot 03-genre-games
+keys Return
+sleep 1
+shot 03-genre-game
+keys Escape
+shot 03-genre-games-back
+keys Escape Escape
+shot 03-genres-back
 keys Down Down Down Down Down
 shot 03-library-down
 keys Return
@@ -159,18 +172,6 @@ find "$CFG" "$HOME" -path "*miximages*" -type f | head -n 10 | while read -r f; 
 # -- 4b. Settings > Gaming > Scraper: the section that hosts the Scraper (loads at all)
 start 04b-scraper-section "menu/settings/ScraperSection.qml" 6
 shot 04b-scraper-section
-# Genres (the row after Log): a genre's games, one of them in Library, and back
-keys Down Down Down Down Down Down Down Down Return
-shot 04b-genres
-keys Return
-shot 04b-genre-games
-keys Return
-sleep 1
-shot 04b-genre-game-library
-keys Escape
-shot 04b-genre-games-back
-keys Escape Escape
-shot 04b-scraper-back
 stop 04b-scraper-section
 
 start 05-scraper-accounts "menu/settings/ScraperScreen.qml" 6

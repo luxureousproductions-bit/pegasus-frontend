@@ -18,7 +18,7 @@ import "common"
 import QtQuick 2.6
 
 
-// Pegasus X: Settings > Gaming > Scraper > Genres. Every genre in the library
+// Pegasus X: Settings > Gaming > Library > Genres. Every genre in the library
 // with how many games have it (one-offs in amber, so they stand out); a genre
 // lists its games, and a game opens in Library to fix its genre there.
 // Only shows: nothing is merged or rewritten here.
@@ -187,7 +187,7 @@ FocusScope {
 
     ScreenHeader {
         id: header
-        text: root.page === "games" ? qsTr("Genres > %1").arg(root.genre) + api.tr : qsTr("Scraper > Genres") + api.tr
+        text: root.page === "games" ? qsTr("Genres > %1").arg(root.genre) + api.tr : qsTr("Library > Genres") + api.tr
         z: 2
     }
 

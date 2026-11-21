@@ -5,6 +5,28 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-21
 
+### Genres moves into Library
+
+- **What:** Genres is a row in Library's "Your library · N games" section,
+  under Needs your check (Complete my library, Needs your check, Genres),
+  and no longer in Settings > Gaming > Scraper. The page is the same: every
+  genre with its game count (one-offs in amber), a genre lists its games, a
+  game opens on its page in Library, Back returns to the genre's games with
+  the counts read again, and Back again to Library's first page on the
+  Genres row. Same keys (LB/RB top or bottom, LT/RT 10 rows). Its title
+  reads "Library > Genres" (was "Scraper > Genres"). The test environment
+  walks through it in `03-library` (`03-genres...`), no longer in
+  `04b-scraper-section`.
+- **Why:** genres are part of the library, not the scraper.
+- **Not changed:** the rest of the Scraper (its section is as in build 2222)
+  and of Library, the build 2219 menu scrolling and the build 2224-2226
+  folder work. A game opened from Genres is now Library's own game page
+  (before, the Scraper opened a second Library on top).
+- **Files:** `src/frontend/menu/settings/MetadataEditor.qml`,
+  `GenresScreen.qml`, `ScraperScreen.qml`, `ScraperSection.qml`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Library: Genres moves here from the Scraper".
+
 ### Test environment: the Folders steps, fixed
 
 - **What:** `08b-folders` takes the remove screenshots on the SD card's

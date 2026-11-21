@@ -71,10 +71,8 @@ FocusScope {
                                 "m": Internal.settings.mergeAndroid });
     }
 
-    property bool libWasOpen: false   // Pegasus X: Library opened again on top of itself
     Component.onCompleted: {
         libStart = libState();
-        libWasOpen = Internal.settings.libraryOpen;
         Internal.settings.libraryOpen = true;  // a finished scrape waits for you to leave
         refreshStatus();
         list.currentIndex = 1;  // the first option, below the title
@@ -1307,8 +1305,8 @@ FocusScope {
         list.positionViewAtBeginning();
         console.log("[timing] Library: collection \"" + entry.name + "\" (" + list_games.length + " games) opened in " + (Date.now() - t0) + " ms");
     }
-    // Pegasus X: straight to one game (Scraper > Genres): its collection is
-    // opened under it, and Back from the game leaves Library
+    // Pegasus X: straight to one game (Library > Genres): its collection is
+    // opened under it, and Back from the game returns to Genres
     property bool directGame: false
     function openGameDirect(obj) {
         if (!obj)
@@ -1385,11 +1383,19 @@ FocusScope {
         edits = {};
         message = "";
         if (page === "game" && directGame) {
+            // back to Genres (the genre's games), over Library's first page
+            directGame = false;
             building = false;
-            Internal.settings.libraryOpen = libWasOpen;  // another Library under this one stays open
-            if (anySaved || (libChanged && libState() !== libStart))
-                Internal.settings.reloadLibrary();
-            root.close();
+            page = "collection";
+            back();
+            for (var gr = 0; gr < list.rows.length; gr++) {
+                if (list.rows[gr].kind === "genres") {
+                    list.currentIndex = gr;
+                    list.positionViewAtIndex(gr, ListView.Center);
+                }
+            }
+            genres.focus = true;
+            genres.refresh();
             return;
         }
         if (page === "game") {
@@ -1688,6 +1694,8 @@ FocusScope {
                 out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
                            "value": nReview === 1 ? qsTr("1 game") + api.tr : qsTr("%1 games").arg(nReview) + api.tr,
                            "warn": nReview > 0, "muted": nReview === 0 });
+                out.push({ "kind": "genres", "text": qsTr("Genres") + api.tr,
+                           "value": qsTr("every genre and its games") + api.tr });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
                 var perColl = st.collections || {};
                 for (i = 0; i < root.collections.length; i++) {
@@ -2147,6 +2155,10 @@ FocusScope {
                 root.openComplete();
             else if (row.kind === "review")
                 root.openReview();
+            else if (row.kind === "genres") {
+                genres.start();
+                genres.focus = true;
+            }
             else if (row.kind === "reviewgame")
                 root.reviewAct(row.entry, "use");
             else if (row.kind === "coll")
@@ -3609,6 +3621,19 @@ FocusScope {
                     }
                 }
             }
+        }
+    }
+
+    // -- Genres: every genre and its games (a game opens on its page here) -----------
+
+    GenresScreen {
+        id: genres
+        visible: focus
+        z: 6
+        onClose: list.focus = true
+        onOpenGame: function(game) {
+            list.focus = true;
+            root.openGameDirect(game);
         }
     }
 
