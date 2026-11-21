@@ -15,6 +15,7 @@
 
 
 import "common"
+import "GenreKey.js" as GenreKey
 import QtQuick 2.6
 
 
@@ -31,44 +32,41 @@ FocusScope {
     anchors.fill: parent
 
     property string page: "genres"   // genres, games
-    property string genre: ""        // the one whose games are listed
-    property var genreList: []       // [{ name, count }], A to Z
+    property string genre: ""        // the one whose games are listed (as shown)
+    property string genreKey: ""     // ...and its key (GenreKey.key: every spelling of it)
+    property var genreList: []       // [{ key, name, count, spellings }], A to Z (GenreKey.group)
     property var gameList: []        // [{ title, coll, obj }] of `genre`
 
     // the genres Android uses to sort apps, as the keyboard's suggestions leave out
     function skipped(low) { return low === "application" || low === "emulator"; }
 
+    // spellings of one genre that differ in ways you can't see (an apostrophe,
+    // a space, letter case) count as one; the log shows how they differ
     function readGenres() {
-        var counts = {};
+        var perGame = [];
         var all = api.allGames;
-        for (var i = 0; i < all.count; i++) {
-            var names = all.get(i).genreList || [];
-            var seen = {};
-            for (var n = 0; n < names.length; n++) {
-                var name = String(names[n]).trim();
-                if (name === "" || seen[name] || skipped(name.toLowerCase()))
-                    continue;
-                seen[name] = true;
-                counts[name] = (counts[name] || 0) + 1;
-            }
+        for (var i = 0; i < all.count; i++)
+            perGame.push(all.get(i).genreList || []);
+        var out = GenreKey.group(perGame, skipped);
+        for (var r = 0; r < out.length; r++) {
+            var sp = out[r].spellings;
+            if (sp.length < 2)
+                continue;
+            var parts = [];
+            for (var s = 0; s < sp.length; s++)
+                parts.push("\"" + sp[s].name + "\" (" + sp[s].count + "): " + GenreKey.codes(sp[s].name));
+            console.log("Genres: \"" + out[r].name + "\" counts " + sp.length + " spellings as one: " + parts.join(" | "));
         }
-        var out = [];
-        for (var key in counts)
-            out.push({ "name": key, "count": counts[key] });
-        out.sort(function(a, b) {
-            var c = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-            return c !== 0 ? c : a.name.localeCompare(b.name);
-        });
         genreList = out;
     }
-    function readGames(name) {
+    function readGames(key) {
         var out = [];
         var all = api.allGames;
         for (var i = 0; i < all.count; i++) {
             var g = all.get(i);
             var names = g.genreList || [];
             for (var n = 0; n < names.length; n++) {
-                if (String(names[n]).trim() === name) {
+                if (GenreKey.key(names[n]) === key) {
                     var colls = g.collections;
                     out.push({ "title": g.title, "obj": g,
                                "coll": colls && colls.count > 0 ? colls.get(0).name : "" });
@@ -100,15 +98,18 @@ FocusScope {
                    "value": "" });
         for (i = 0; i < genreList.length; i++) {
             var c = genreList[i].count;
-            out.push({ "kind": "genre", "text": genreList[i].name, "one": c === 1,
-                       "value": (c === 1 ? qsTr("1 game") : qsTr("%1 games").arg(c)) + api.tr });
+            var nSp = genreList[i].spellings.length;
+            out.push({ "kind": "genre", "text": genreList[i].name, "key": genreList[i].key, "one": c === 1,
+                       "value": (c === 1 ? qsTr("1 game") : qsTr("%1 games").arg(c)) + api.tr
+                              + (nSp > 1 ? qsTr(" · %1 spellings").arg(nSp) + api.tr : "") });
         }
         return out;
     }
 
+    // a row by its text (a genre: by its key, as the spelling shown may change)
     function select(kind, text) {
         for (var i = 0; i < rows.length; i++) {
-            if (rows[i].kind === kind && rows[i].text === text) {
+            if (rows[i].kind === kind && (kind === "genre" ? rows[i].key === GenreKey.key(text) : rows[i].text === text)) {
                 list.currentIndex = i;
                 list.positionViewAtIndex(i, ListView.Center);
                 return;
@@ -120,9 +121,14 @@ FocusScope {
     // back from a game in Library (or opened again): counts and lists as they are now
     function refresh() {
         readGenres();
+        // the open genre as it's shown now (its most used spelling)
+        for (var g = 0; g < genreList.length; g++) {
+            if (genreList[g].key === genreKey)
+                genre = genreList[g].name;
+        }
         if (page === "games") {
             var at = list.currentIndex >= 0 && list.currentIndex < rows.length ? rows[list.currentIndex].text : "";
-            readGames(genre);
+            readGames(genreKey);
             if (gameList.length === 0) {
                 page = "genres";
                 select("genre", genre);
@@ -139,6 +145,7 @@ FocusScope {
     function start() {
         page = "genres";
         genre = "";
+        genreKey = "";
         gameList = [];
         readGenres();
         list.jumpTo(false);
@@ -148,7 +155,8 @@ FocusScope {
     function activate(row) {
         if (row.kind === "genre") {
             genre = row.text;
-            readGames(genre);
+            genreKey = row.key;
+            readGames(genreKey);
             page = "games";
             list.jumpTo(false);
         }

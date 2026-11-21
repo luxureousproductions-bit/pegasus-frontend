@@ -5,6 +5,41 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-21
 
+### Genres: spellings that only look different count as one
+
+- **What:** Library > Genres counts a genre under a matching key: letter
+  case ignored, every apostrophe (' ’ ‘ ‛ ʼ ` ´ ′) as ', every run of spaces
+  (non-breaking and other wide or thin spaces too) as one space, the ends
+  trimmed, and the same spacing around "/". A genre with "/" stays one genre
+  ("Beat'em Up / Fantasy" isn't split). A row shows the spelling most of its
+  games have (ties: A to Z), and its games are every game with any of its
+  spellings. When a row covers more than one spelling, its value says so
+  ("51 games · 2 spellings"), since the files still differ. The one-off
+  amber and the header use the merged counts. Each merge is logged once per
+  read, with every spelling, its game count and its character codes
+  (`Genres: "..." counts 2 spellings as one: "..." (50): U+0042 ... | ...`).
+- **Why:** a game moved from "Beat'em / Fantasy" (1 game) to "Beat'em Up /
+  Fantasy" (50 games) still showed two rows that looked alike (1 and 50
+  games). The save reaches the game (`apply_scraped` sets its genre list)
+  and Back reads the genres again, so the two rows were two different
+  texts: Genres keyed them exactly as written (only trimmed), and the 50
+  games' genre and the typed one differ in a character that looks the same
+  (the Pegasus X keyboard types a straight '; the log line shows the real
+  difference on the device).
+- **Not changed:** nothing is rewritten: Genres stays view-only and the files
+  keep their spellings. The metadata editor (its save, keyboard and
+  suggestions), Back from a game, the LB/RB/LT/RT keys, the folder work,
+  themes, the Scraper, the ES-DE import and the collection merge.
+- **Tests:** `test_GenreKey` (new, runs `GenreKey.js` in a JS engine): the
+  reported case (1 + 50 games: two texts, one row of 51 with 2 spellings),
+  each apostrophe, space, "/" spacing and case variant, "/" not split,
+  other genres apart, the spelling shown (most games, ties A to Z), the
+  spellings count, a game with two spellings counted once, the log's codes.
+- **Files:** `src/frontend/menu/settings/GenreKey.js` (new),
+  `src/frontend/menu/settings/GenresScreen.qml`, `src/frontend/frontend.qrc`,
+  `tests/frontend/` (new), `tests/tests.pro`, `tests/CMakeLists.txt`.
+- **Commit:** "Genres: spellings that only look different count as one".
+
 ### Genres moves into Library
 
 - **What:** Genres is a row in Library's "Your library · N games" section,

@@ -50,6 +50,7 @@
         <file>menu/settings/ScraperScreen.qml</file>
         <file>menu/settings/ScraperSection.qml</file>
         <file>menu/settings/GenresScreen.qml</file>
+        <file>menu/settings/GenreKey.js</file>
         <file>menu/settings/RetroAchievementsScreen.qml</file>
         <file>menu/settings/ScraperChoice.qml</file>
         <file>menu/settings/ThemeDownloader.qml</file>
