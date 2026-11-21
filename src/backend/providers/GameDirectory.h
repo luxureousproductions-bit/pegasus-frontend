@@ -69,10 +69,28 @@ int clear_backups();
 /// backup/<system>/cleanup/. { games, files } found (`dry`: only counted)
 struct Cleanup { int games = 0; int files = 0; QStringList titles; QString error; };
 Cleanup clean_up(const QString& media_dir, bool dry);
-/// The games of a ROM folder (files under it) out of every system file,
-/// after a copy in backup/<system>/ (their scraped art stays); the folder's
-/// header lines go too. Returns how many games left.
-int remove_folder_games(const QString& folder);
+/// Pegasus X: a folder as compared with others: cleaned, no trailing slash,
+/// Android's other names for the internal storage (/sdcard, /storage/self/primary,
+/// /mnt/sdcard) as /storage/emulated/0, and in lower case where the storage
+/// ignores case (`ignore_case`; storage_ignores_case() on this device)
+QString folder_identity(const QString& folder, bool ignore_case);
+bool storage_ignores_case();
+/// A folder against the listed ones ({ folder, system name to show }): the
+/// first it is ("same"), is inside ("inside") or has inside ("contains"),
+/// with that folder and system. `kind` empty: none.
+struct FolderClash { QString kind; QString folder; QString system; };
+FolderClash folder_clash(const QString& folder, const std::vector<std::pair<QString, QString>>& listed, bool ignore_case);
+/// the ROM folders a system file was made from (its "# folder: " lines)
+QStringList system_folders(const QString& system_file);
+/// how many of a system file's games have all their files in `folder` (not
+/// counting those in another of its folders inside that one)
+int folder_game_count(const QString& system_file, const QString& folder);
+/// One ROM folder out of one system file: its header lines ("# folder: ",
+/// "# own metadata: "), and with `remove_games` its games (all their files in
+/// it; not those in another of the system's folders inside it), after a copy
+/// in backup/<system>/. Other systems and the folders next to it are left
+/// alone. Returns how many games went (-1: the file can't be read).
+int remove_system_folder(const QString& system_file, const QString& folder, bool remove_games);
 
 /// Was the library made the old way (imports, overrides, ROM folders as
 /// game directories) and the game directory not made yet?

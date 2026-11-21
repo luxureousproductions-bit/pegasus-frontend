@@ -188,10 +188,23 @@ public:
     Q_INVOKABLE QVariantList watchedRomFolders() const;
     /// reads every watched folder again (background: romFolderImportFinished)
     Q_INVOKABLE void rescanRomFolders();
-    /// a ROM folder (and the system folders in it) no longer watched; with
-    /// `remove_games`, its games leave the game directory (set aside in
-    /// backup/). Returns how many games left
+    /// one watched ROM folder (that folder only, not the ones next to it) no
+    /// longer watched, its line out of the systems made from it; with
+    /// `remove_games`, its games leave those systems (set aside in backup/).
+    /// Returns how many games left
     Q_INVOKABLE int removeRomFolder(const QString& folder, bool remove_games);
+    /// Pegasus X: a system's ROM folders: [{ folder, storage ("internal", "sd",
+    /// ""), present, games (in the game directory from it), watched }]
+    Q_INVOKABLE QVariantList systemFolders(const QString& key) const;
+    /// one more ROM folder for a system (its games, details, art and emulators
+    /// stay; the new folder's games are added). A short reason when it can't be
+    /// (already listed, inside or around a listed folder, another system's),
+    /// else "" and the reading goes on in the background: romFolderImportFinished
+    Q_INVOKABLE QString addSystemFolder(const QString& key, const QString& folder);
+    /// one of a system's ROM folders out of it (only that folder, only that
+    /// system): no longer watched, no line left; with `remove_games` its games
+    /// go too (set aside in backup/). Returns how many games left (-1: error)
+    Q_INVOKABLE int removeSystemFolder(const QString& key, const QString& folder, bool remove_games);
 
     // Pegasus X: emulators
     Q_INVOKABLE QVariantList emulatorCollections() const;

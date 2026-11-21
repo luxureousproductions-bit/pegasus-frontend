@@ -31,7 +31,7 @@ FocusScope {
     signal close
     signal openEsdeImport
 
-    property string page: "main"     // main, add, found
+    property string page: "main"     // main, add, found, folders
     property bool addOnly: false     // opened for Add systems alone (the first-start setup)
     property string message: ""
     property bool changed: false     // the library is read again on the way out
@@ -44,6 +44,10 @@ FocusScope {
     property var matches: []         // Settings.matchSystems
     property var ticked: ({})        // found page: system name -> true (the ones to import)
     property string folderFor: ""    // a system without a folder: picking one for it
+    // Pegasus X: a system's ROM folders (its Folders page), and adding one to it
+    property var folderSystem: null  // the system ({ key, name, ... })
+    property var folders: []         // Settings.systemFolders
+    property string folderKey: ""    // picking a folder to add to this system
     property int pickedCount: Object.keys(picked).length
 
     anchors.fill: parent
@@ -59,6 +63,13 @@ FocusScope {
     function refresh() {
         systems = Internal.settings.gameDirectorySystems();
         watched = Internal.settings.watchedRomFolders();
+        if (folderSystem) {
+            for (var i = 0; i < systems.length; i++) {
+                if (systems[i].key === folderSystem.key)
+                    folderSystem = systems[i];
+            }
+            folders = Internal.settings.systemFolders(folderSystem.key);
+        }
     }
     function keepPosition(fn) {
         var i = list.currentIndex;
@@ -88,8 +99,8 @@ FocusScope {
         filePicker.focus = true;
     }
     function removeWatched(folder) {
-        chooser.openFor(qsTr("Remove %1? Its games leave the game directory (their entries are set aside in backup/, nothing on the card is touched) and it's no longer watched.").arg(folder) + api.tr, [
-            { "act": "remove", "text": qsTr("Remove the folder") + api.tr },
+        chooser.openFor(qsTr("Remove %1? Only this folder: the folders next to it and other systems stay. Its games leave the game directory (their entries are set aside in backup/, nothing on the card is touched).").arg(folder) + api.tr, [
+            { "act": "remove", "text": qsTr("Remove the folder and its games") + api.tr },
             { "act": "forget", "text": qsTr("Only stop watching it (keep the games)") + api.tr },
             { "act": "stay", "text": qsTr("Keep it") + api.tr },
         ], function(act) {
@@ -186,11 +197,47 @@ FocusScope {
     function systemMenu(entry) {
         var where = entry.folders.length > 0 ? entry.folders.join(", ") : qsTr("no ROM folder") + api.tr;
         chooser.openFor(qsTr("%1 · %2").arg(entry.name).arg(where) + api.tr, [
+            { "act": "folders", "text": qsTr("Folders: see, add or remove its ROM folders") + api.tr },
             { "act": "rescan", "text": qsTr("Rescan: read its ROM folders again") + api.tr },
             { "act": "remove", "text": qsTr("Remove from the game directory") + api.tr },
         ], function(act) {
-            if (act === "rescan") root.reimport(entry);
+            if (act === "folders") root.openFolders(entry);
+            else if (act === "rescan") root.reimport(entry);
             else if (act === "remove") root.remove(entry);
+        });
+    }
+    // Pegasus X: a system's ROM folders: where each is, is it there, its games
+    function openFolders(entry) {
+        folderSystem = entry;
+        folders = Internal.settings.systemFolders(entry.key);
+        page = "folders";
+        message = "";
+        list.currentIndex = 1;
+        list.positionViewAtBeginning();
+    }
+    // one more folder (internal storage or SD card): its games join the system
+    function addFolderTo(entry) {
+        folderKey = entry.key;
+        folderFor = "";
+        filePicker.openAt(Internal.settings.lastBrowseFolder);
+        filePicker.focus = true;
+    }
+    // one folder out: that folder only, this system only
+    function folderMenu(f) {
+        var sys = folderSystem;
+        chooser.openFor(qsTr("%1 · %2").arg(sys.name).arg(f.folder) + api.tr, [
+            { "act": "forget", "text": qsTr("Stop watching it, keep its %1 games").arg(f.games) + api.tr },
+            { "act": "remove", "text": qsTr("Remove it and its %1 games (set aside in backup/)").arg(f.games) + api.tr },
+            { "act": "stay", "text": qsTr("Keep it") + api.tr },
+        ], function(act) {
+            if (act === "stay")
+                return;
+            var n = Internal.settings.removeSystemFolder(sys.key, f.folder, act === "remove");
+            root.changed = root.changed || (act === "remove" && n > 0);
+            root.message = n < 0 ? qsTr("Couldn't write %1's file.").arg(sys.name) + api.tr
+                         : act === "remove" ? qsTr("%1 games set aside: the library is read again when you leave.").arg(n) + api.tr
+                         : qsTr("No longer watched: its games stay.") + api.tr;
+            root.keepPosition(root.refresh);
         });
     }
     function remove(entry) {
@@ -209,7 +256,24 @@ FocusScope {
     function back() {
         if (filePicker.focus) {
             filePicker.focus = false;
+            folderKey = "";
             list.focus = true;
+            return;
+        }
+        if (page === "folders") {
+            var key = folderSystem ? folderSystem.key : "";
+            page = "main";
+            folderSystem = null;
+            folders = [];
+            message = "";
+            for (var r = 0; r < list.rows.length; r++) {
+                if (list.rows[r].kind === "system" && list.rows[r].entry.key === key) {
+                    list.currentIndex = r;
+                    list.positionViewAtIndex(r, ListView.Center);
+                    return;
+                }
+            }
+            list_top();
             return;
         }
         if (page === "found") {
@@ -241,6 +305,7 @@ FocusScope {
     ScreenHeader {
         id: header
         text: (root.page === "main" ? qsTr("Settings > Game directory")
+             : root.page === "folders" && root.folderSystem ? qsTr("Game directory > %1").arg(root.folderSystem.name)
              : qsTr("Game directory > Add systems")) + api.tr
         z: 2
     }
@@ -260,6 +325,23 @@ FocusScope {
         highlightMoveDuration: 0
 
         readonly property var rows: {
+            if (root.page === "folders") {
+                var fo = [];
+                var fs = root.folderSystem || ({});
+                fo.push({ "kind": "section", "text": qsTr("%1 · its ROM folders").arg(fs.name || "") + api.tr });
+                for (var fi = 0; fi < root.folders.length; fi++) {
+                    var f = root.folders[fi];
+                    fo.push({ "kind": "folder", "folder": f,
+                              "text": (f.storage === "sd" ? qsTr("SD card") : f.storage === "internal" ? qsTr("Internal storage") : qsTr("Folder")) + api.tr,
+                              "sub": "· " + (f.games === 1 ? qsTr("1 game") : qsTr("%1 games").arg(f.games)) + api.tr,
+                              "value": (f.present ? "" : qsTr("not found") + api.tr + " · ") + f.folder,
+                              "warn": !f.present });
+                }
+                if (root.folders.length === 0)
+                    fo.push({ "kind": "info", "text": qsTr("No ROM folder: its games come from a file of yours or a gamelist.") + api.tr, "value": "" });
+                fo.push({ "kind": "addsysfolder", "text": qsTr("Add a folder...") + api.tr, "value": qsTr("internal storage or SD card ›") + api.tr });
+                return fo;
+            }
             var out = [];
             var i;
             // every list A to Z, by the name shown
@@ -292,17 +374,18 @@ FocusScope {
                 if (root.systems.length === 0)
                     out.push({ "kind": "info", "text": qsTr("No systems yet: Add systems, or Import gamelist.") + api.tr, "value": "" });
                 out.push({ "kind": "section", "text": qsTr("ROM folders watched for new games") + api.tr });
-                var byFolder = {};
-                for (i = 0; i < root.watched.length; i++) {
-                    var w = root.watched[i];
-                    var parent = w.folder.replace(/\/[^\/]+\/?$/, "");
-                    byFolder[parent] = (byFolder[parent] || 0) + 1;
+                // one row per folder (removing one leaves the ones next to it alone)
+                var watchedAz = root.watched.slice().sort(function(a, b) { return a.folder < b.folder ? -1 : a.folder > b.folder ? 1 : 0; });
+                for (i = 0; i < watchedAz.length; i++) {
+                    var w = watchedAz[i];
+                    var wname = w.system;
+                    for (var ws = 0; ws < root.systems.length; ws++) {
+                        if (root.systems[ws].folders.indexOf(w.folder) >= 0)
+                            wname = root.systems[ws].name;
+                    }
+                    out.push({ "kind": "watched", "text": wname, "folder": w.folder, "value": w.folder });
                 }
-                var parents = Object.keys(byFolder).sort();
-                for (i = 0; i < parents.length; i++)
-                    out.push({ "kind": "watched", "text": parents[i], "folder": parents[i],
-                               "value": (byFolder[parents[i]] === 1 ? qsTr("1 system") : qsTr("%1 systems").arg(byFolder[parents[i]])) + api.tr });
-                if (parents.length > 0)
+                if (watchedAz.length > 0)
                     out.push({ "kind": "rescan", "text": qsTr("Read them again now") + api.tr, "value": root.working ? qsTr("working...") + api.tr : "" });
                 else
                     out.push({ "kind": "info", "text": qsTr("None") + api.tr, "value": "" });
@@ -409,6 +492,8 @@ FocusScope {
             if (row.kind === "add") root.openAdd();
             else if (row.kind === "addfolder") root.addRomFolder();
             else if (row.kind === "watched") root.removeWatched(row.folder);
+            else if (row.kind === "folder") root.folderMenu(row.folder);
+            else if (row.kind === "addsysfolder") root.addFolderTo(root.folderSystem);
             else if (row.kind === "esde") root.openEsdeImport();
             else if (row.kind === "system") root.systemMenu(row.entry);
             else if (row.kind === "rescan") { root.working = true; root.message = qsTr("Reading the watched folders again...") + api.tr; Internal.settings.rescanRomFolders(); }
@@ -562,6 +647,7 @@ FocusScope {
         id: messageBar
         text: root.message !== "" ? root.message
             : root.page === "main" ? qsTr("A rescan / remove · Y remove · B back") + api.tr
+            : root.page === "folders" ? qsTr("A remove a folder / add one · B back") + api.tr
             : root.page === "add" ? qsTr("A tick · B back") + api.tr
             : qsTr("A tick a system or pick the folder · Import is at the bottom · B back") + api.tr
         anchors.bottom: parent.bottom
@@ -578,13 +664,27 @@ FocusScope {
         pickFolders: true
         allowNewFolder: false
         fileExtensions: []
-        infoText: root.folderFor !== ""
+        infoText: root.folderKey !== "" && root.folderSystem
+            ? qsTr("Pick another folder of %1 games (internal storage or SD card). Its games join the system; the ones there keep everything.").arg(root.folderSystem.name) + api.tr
+            : root.folderFor !== ""
             ? qsTr("Pick the folder the %1 games are in.").arg(root.folderFor) + api.tr
             : qsTr("Pick the folder your ROMs are in: the one with the systems' folders inside (snes, psx, ...), or one system's folder.") + api.tr
-        onCancel: { focus = false; list.focus = true; }
+        onCancel: { focus = false; root.folderKey = ""; list.focus = true; }
         onPickFolder: {
             focus = false;
             list.focus = true;
+            if (root.folderKey !== "") {
+                var key = root.folderKey;
+                root.folderKey = "";
+                var refused = Internal.settings.addSystemFolder(key, dir_path);
+                if (refused !== "") {
+                    root.message = refused;
+                    return;
+                }
+                root.working = true;
+                root.message = qsTr("Reading %1...").arg(dir_path) + api.tr;
+                return;
+            }
             if (root.folderFor !== "") {
                 root.working = true;
                 root.message = qsTr("Reading %1 as %2...").arg(dir_path).arg(root.folderFor) + api.tr;

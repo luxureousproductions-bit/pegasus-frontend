@@ -405,77 +405,180 @@ Cleanup clean_up(const QString& media_dir, bool dry)
     return out;
 }
 
-int remove_folder_games(const QString& folder)
+bool storage_ignores_case()
 {
-    const QString prefix = QDir::cleanPath(folder) % QLatin1Char('/');
-    int removed = 0;
-    for (const QString& path : metafiles()) {
-        QFile file(path);
-        if (!file.open(QIODevice::ReadOnly | QIODevice::Text))
-            continue;
-        const QStringList lines = QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
-        file.close();
-        const QDir base(QFileInfo(path).absolutePath());
-        // the blocks, and whether each game's files are all under the folder
-        QStringList kept;
-        int block_first = -1;
-        bool block_game = false, block_under = false, block_any = false;
-        int here = 0;
-        const auto flush = [&](int upto) {
-            if (block_first < 0)
-                return;
-            if (block_game && block_any && block_under)
-                here++;
-            else
-                for (int i = block_first; i < upto; i++) kept.append(lines.at(i));
-        };
-        for (int i = 0; i < lines.size(); i++) {
-            const QString& line = lines.at(i);
-            const bool game = line.startsWith(QLatin1String("game:"));
-            if (game || line.startsWith(QLatin1String("collection:"))) {
-                flush(i);
-                block_first = i;
-                block_game = game;
-                block_under = true;
-                block_any = false;
-                continue;
-            }
-            if (block_first < 0) {
-                // the header: this folder's own lines go
-                const bool mine = (line.startsWith(QLatin1String("# folder: ")) && QDir::cleanPath(line.mid(10).trimmed()) % QLatin1Char('/') == prefix)
-                               || (line.startsWith(QLatin1String("# own metadata: ")) && QDir::cleanPath(line.mid(16).trimmed()) % QLatin1Char('/') == prefix);
-                if (!mine)
-                    kept.append(line);
-                continue;
-            }
-            if (!block_game)
-                continue;
-            QStringList files;
-            if (line.startsWith(QLatin1String("file:")))
-                files.append(line.mid(5).trimmed());
-            else if (line.startsWith(QLatin1String("files:"))) {
-                for (int j = i + 1; j < lines.size() && lines.at(j).startsWith(QLatin1Char(' ')); j++)
-                    files.append(lines.at(j).trimmed());
-            }
-            for (const QString& f : files) {
-                block_any = true;
-                const bool uri = f.contains(QLatin1String("://")) || f.startsWith(QLatin1String("android:"));
-                const QString abs = uri ? f : QDir::cleanPath(QFileInfo(base, f).absoluteFilePath());
-                if (uri || !abs.startsWith(prefix))
-                    block_under = false;
-            }
-        }
-        flush(lines.size());
-        if (here == 0)
-            continue;
-        backup(path, QStringLiteral("remove"));
-        while (!kept.isEmpty() && kept.last().trimmed().isEmpty())
-            kept.removeLast();
-        if (write_all(path, kept.join(QLatin1Char('\n')) % QLatin1Char('\n'))) {
-            removed += here;
-            Log::info(LOG_TAG, LOGMSG("`%1`: %2 games of `%3` removed").arg(path).arg(here).arg(folder));
+#if defined(Q_OS_ANDROID) || defined(Q_OS_WIN)
+    return true;   // Android's shared storage and Windows don't tell "SNES" from "snes"
+#else
+    return false;
+#endif
+}
+
+QString folder_identity(const QString& folder, bool ignore_case)
+{
+    QString p = QDir::cleanPath(QDir::fromNativeSeparators(folder.trimmed()));
+    static const QStringList aliases {
+        QStringLiteral("/sdcard"), QStringLiteral("/storage/self/primary"), QStringLiteral("/mnt/sdcard"),
+    };
+    for (const QString& alias : aliases) {
+        if (p == alias || p.startsWith(alias % QLatin1Char('/'))) {
+            p = QStringLiteral("/storage/emulated/0") % p.mid(alias.size());
+            break;
         }
     }
+    while (p.size() > 1 && p.endsWith(QLatin1Char('/')))
+        p.chop(1);
+    return ignore_case ? p.toLower() : p;
+}
+
+FolderClash folder_clash(const QString& folder, const std::vector<std::pair<QString, QString>>& listed, bool ignore_case)
+{
+    const QString me = folder_identity(folder, ignore_case);
+    // the same folder first, then inside or around one
+    for (const auto& entry : listed) {
+        if (folder_identity(entry.first, ignore_case) == me)
+            return { QStringLiteral("same"), entry.first, entry.second };
+    }
+    for (const auto& entry : listed) {
+        const QString other = folder_identity(entry.first, ignore_case);
+        if (me.startsWith(other % QLatin1Char('/')))
+            return { QStringLiteral("inside"), entry.first, entry.second };
+        if (other.startsWith(me % QLatin1Char('/')))
+            return { QStringLiteral("contains"), entry.first, entry.second };
+    }
+    return {};
+}
+
+namespace {
+QStringList read_lines(const QString& path, bool* ok = nullptr)
+{
+    QFile file(path);
+    if (ok)
+        *ok = file.open(QIODevice::ReadOnly | QIODevice::Text);
+    else
+        file.open(QIODevice::ReadOnly | QIODevice::Text);
+    if (!file.isOpen())
+        return {};
+    return QString::fromUtf8(file.readAll()).split(QLatin1Char('\n'));
+}
+
+QStringList header_folders(const QStringList& lines)
+{
+    QStringList out;
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (!line.isEmpty() && !line.startsWith(QLatin1Char('#')))
+            break;
+        if (line.startsWith(QLatin1String("# folder: ")))
+            out.append(line.mid(10).trimmed());
+    }
+    return out;
+}
+
+// One folder out of a system file's lines: its header lines, and with
+// `remove_games` the games whose files are all in it (not those in another of
+// the file's folders inside it). `games`: how many games are in it.
+struct FolderEdit { QStringList kept; int games = 0; bool header = false; };
+FolderEdit edit_folder(const QString& path, const QStringList& lines, const QString& folder, bool remove_games)
+{
+    const bool nocase = storage_ignores_case();
+    const QString me = folder_identity(folder, nocase);
+    const QString prefix = me % QLatin1Char('/');
+    // the file's other folders inside this one: their games stay
+    QStringList deeper;
+    for (const QString& other : header_folders(lines)) {
+        const QString id = folder_identity(other, nocase);
+        if (id.startsWith(prefix))
+            deeper.append(id % QLatin1Char('/'));
+    }
+    const QDir base(QFileInfo(path).absolutePath());
+    FolderEdit out;
+    int block_first = -1;
+    bool block_game = false, block_under = false, block_any = false;
+    const auto flush = [&](int upto) {
+        if (block_first < 0)
+            return;
+        const bool in_folder = block_game && block_any && block_under;
+        if (in_folder)
+            out.games++;
+        if (!(in_folder && remove_games)) {
+            for (int i = block_first; i < upto; i++)
+                out.kept.append(lines.at(i));
+        }
+    };
+    for (int i = 0; i < lines.size(); i++) {
+        const QString& line = lines.at(i);
+        const bool game = line.startsWith(QLatin1String("game:"));
+        if (game || line.startsWith(QLatin1String("collection:"))) {
+            flush(i);
+            block_first = i;
+            block_game = game;
+            block_under = true;
+            block_any = false;
+            continue;
+        }
+        if (block_first < 0) {
+            // the header: this folder's own lines go
+            const bool mine = (line.startsWith(QLatin1String("# folder: ")) && folder_identity(line.mid(10), nocase) == me)
+                           || (line.startsWith(QLatin1String("# own metadata: ")) && folder_identity(line.mid(16), nocase) == me);
+            if (mine)
+                out.header = true;
+            else
+                out.kept.append(line);
+            continue;
+        }
+        if (!block_game)
+            continue;
+        QStringList files;
+        if (line.startsWith(QLatin1String("file:")))
+            files.append(line.mid(5).trimmed());
+        else if (line.startsWith(QLatin1String("files:"))) {
+            for (int j = i + 1; j < lines.size() && lines.at(j).startsWith(QLatin1Char(' ')); j++)
+                files.append(lines.at(j).trimmed());
+        }
+        for (const QString& f : files) {
+            block_any = true;
+            const bool uri = f.contains(QLatin1String("://")) || f.startsWith(QLatin1String("android:"));
+            const QString abs = uri ? f : folder_identity(QFileInfo(base, f).absoluteFilePath(), nocase);
+            bool under = !uri && abs.startsWith(prefix);
+            for (const QString& d : deeper)
+                under = under && !abs.startsWith(d);
+            if (!under)
+                block_under = false;
+        }
+    }
+    flush(lines.size());
+    return out;
+}
+} // namespace
+
+QStringList system_folders(const QString& system_file)
+{
+    return header_folders(read_lines(system_file));
+}
+
+int folder_game_count(const QString& system_file, const QString& folder)
+{
+    return edit_folder(system_file, read_lines(system_file), folder, false).games;
+}
+
+int remove_system_folder(const QString& system_file, const QString& folder, bool remove_games)
+{
+    bool ok = false;
+    const QStringList lines = read_lines(system_file, &ok);
+    if (!ok)
+        return -1;
+    FolderEdit edit = edit_folder(system_file, lines, folder, remove_games);
+    const int removed = remove_games ? edit.games : 0;
+    if (!edit.header && removed == 0)
+        return 0;  // nothing of it here: the file stays as it is
+    backup(system_file, QStringLiteral("remove"));
+    while (!edit.kept.isEmpty() && edit.kept.last().trimmed().isEmpty())
+        edit.kept.removeLast();
+    if (!write_all(system_file, edit.kept.join(QLatin1Char('\n')) % QLatin1Char('\n')))
+        return -1;
+    Log::info(LOG_TAG, LOGMSG("`%1`: the ROM folder `%2` taken out (%3 games removed, %4 kept)")
+        .arg(system_file, folder).arg(removed).arg(remove_games ? 0 : edit.games));
     return removed;
 }
 

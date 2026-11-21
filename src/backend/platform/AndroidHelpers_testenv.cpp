@@ -39,7 +39,15 @@ QString primary_storage_path()
     return env.isEmpty() ? QDir::homePath() : QDir::cleanPath(env);
 }
 
-QStringList storage_paths() { return { primary_storage_path() }; }
+// a second storage (an SD card) when PEGASUSX_TEST_SD is set
+QStringList storage_paths()
+{
+    QStringList out { primary_storage_path() };
+    const QString sd = qEnvironmentVariable("PEGASUSX_TEST_SD");
+    if (!sd.isEmpty())
+        out.append(QDir::cleanPath(sd));
+    return out;
+}
 bool has_external_storage_access() { return true; }
 QString wait_for_storage(int) { return primary_storage_path(); }
 QString last_storage_wait() { return {}; }

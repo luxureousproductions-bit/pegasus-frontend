@@ -138,6 +138,18 @@ int refresh_rom_folders(bool force = false);
 /// Remembers system folders with a list made by Pegasus X (for refresh_rom_folders)
 void remember_rom_folders(const QStringList& folders, const QString& system);
 
+/// Pegasus X: the system (ES-DE's name) of a game directory system file: the
+/// one its folders were read as, else by its collection's name, else by its
+/// folders' names. Empty: not one Pegasus X knows.
+QString system_name_of(const QString& system_file);
+/// The folders to read when `folder` is added to `system`: the folder itself,
+/// or, when it has other systems' folders in it, only this system's ones.
+/// `error`: it can't be (it's another system's folder, or has only theirs).
+struct FolderTargets { QStringList folders; QString error; };
+FolderTargets folder_targets(const QString& system, const QString& folder);
+/// Where a folder is: "internal", "sd" (another storage), or "" (unknown)
+QString folder_storage(const QString& folder);
+
 
 // -- Emulators (Settings > Emulators) ---------------------------------------------
 

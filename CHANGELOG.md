@@ -3,6 +3,61 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-21
+
+### Game directory: a system's ROM folders, one at a time
+
+- **What:** a system's menu in Settings > Game directory has "Folders": each of
+  its ROM folders with where it is (internal storage, SD card), whether it's
+  there ("not found" in amber when not), and how many of the system's games
+  come from it (counted from its file, so a missing SD card still shows them).
+  "Add a folder..." picks another one with the folder picker (internal or SD
+  card), also for systems that have folders already: its games are added to
+  the system, and everything there stays (your details, art, emulators,
+  launch commands, hidden games and favorites; your own metadata and ES-DE's
+  entries aren't rewritten). A folder with other systems' folders in it
+  (snes, gba...) adds only this system's one. A folder is refused, with a short
+  reason, when it's listed already (any spelling: a trailing slash, /sdcard
+  or /storage/self/primary for /storage/emulated/0, letter case on Android),
+  inside or around a listed one, another system's (named), or has only other
+  systems' folders. A on a folder: "Stop watching it, keep its games" or
+  "Remove it and its games"; either way that folder only, that system only,
+  and its "# folder: " (and "# own metadata: ") line goes. The main page's
+  "ROM folders watched for new games" has one row per folder now (system,
+  path), and removing one is that folder only.
+- **Why:** the watched folders were grouped by their parent folder, so
+  removing one row stopped watching every system's folder under it, and
+  "remove games too" took the games under that parent out of every system,
+  leaving the systems' "# folder: " lines behind. A system could only get a
+  folder picked when it had none.
+- **Not changed:** how folders are stored (`pegasusx-rom-folders.txt`, one
+  "folder<TAB>system" line per system folder, and the system files' "# folder: "
+  lines); game cache schema 3. Rescans and startup never delete games or
+  forget a folder that isn't there (an SD card out); they skip it, as before.
+  The same file name in two folders is two games (the duplicate log notes
+  it); the same path is one game. Untouched libraries load the same.
+  game_dirs.txt, migration, the game directory layout, ES-DE import, themes,
+  launching and metadata precedence are unchanged.
+- **Tests:** `test_GameDirectoryFolders` (new): taking one folder out leaves
+  the folder next to it (same parent, same start of the name), a listed
+  folder inside it and the other system alone, with no line left, your
+  details and launch commands kept; keeping games keeps every entry; an
+  unlisted folder changes no file; a missing folder keeps its games counted;
+  listed, re-spelled, inside and around folders are refused; the same file
+  name in two folders is two games and one path from two files is one game.
+  Test environment: `08b-folders` (screenshots: system menu, Folders view,
+  picker, added, remove, removed) and `08c-folder-checks` (the add, the
+  refusals, a folder with two systems' folders, the SD card out with a rescan,
+  stop watching, remove; the summary's "ROM folders per system").
+- **Files:** `src/backend/providers/GameDirectory.h/.cpp`,
+  `src/backend/providers/esde/EsdeProvider.h/.cpp`,
+  `src/backend/model/internal/settings/Settings.h/.cpp`,
+  `src/backend/platform/AndroidHelpers_testenv.cpp` (a second test storage),
+  `src/frontend/menu/settings/GameDirectory.qml`,
+  `tests/backend/providers/gamedirectory/` (new), `tests/backend/providers/providers.pro`,
+  `tests/CMakeLists.txt`, `tests/testenv/fixture.sh`, `tests/testenv/run.sh`.
+- **Commit:** "Game directory: a system's ROM folders, one at a time".
+
 ## 2026-11-20
 
 ### Scraper > Genres: every genre and its games

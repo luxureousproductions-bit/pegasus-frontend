@@ -529,6 +529,11 @@ QObject* Settings::themeStore()
     return m_theme_store;
 }
 
+
+#if defined(PEGASUSX_TESTENV) && defined(WITH_COMPAT_ESDE)
+namespace { void run_folder_tests(Settings& s); }
+#endif
+
 void Settings::postInit()
 {
 #ifdef WITH_COMPAT_ESDE
@@ -577,6 +582,8 @@ void Settings::postInit()
                 .arg(result.systems).arg(result.games).arg(result.error));
             written += result.folders;
         }
+        // Settings > Game directory > a system > Folders (PEGASUSX_TEST_FOLDERS)
+        run_folder_tests(*this);
     }
 #endif
 
@@ -1403,21 +1410,328 @@ QVariantList Settings::watchedRomFolders() const
     return out;
 }
 
+namespace {
+// Pegasus X: the watched entries that are this folder (written the way they were)
+QStringList watched_entries_of(const QString& folder)
+{
+    QStringList out;
+#ifdef WITH_COMPAT_ESDE
+    const bool nocase = providers::gamedir::storage_ignores_case();
+    const QString id = providers::gamedir::folder_identity(folder, nocase);
+    for (const auto& entry : providers::esde::watched_rom_folders()) {
+        if (providers::gamedir::folder_identity(entry.first, nocase) == id)
+            out.append(entry.first);
+    }
+#else
+    Q_UNUSED(folder);
+#endif
+    return out;
+}
+// the system files that list this folder among theirs
+QStringList system_files_listing(const QString& folder)
+{
+    const bool nocase = providers::gamedir::storage_ignores_case();
+    const QString id = providers::gamedir::folder_identity(folder, nocase);
+    QStringList out;
+    for (const QString& path : providers::gamedir::metafiles()) {
+        for (const QString& f : providers::gamedir::system_folders(path)) {
+            if (providers::gamedir::folder_identity(f, nocase) == id) {
+                out.append(path);
+                break;
+            }
+        }
+    }
+    return out;
+}
+} // namespace
+
 int Settings::removeRomFolder(const QString& folder, bool remove_games)
 {
-    const QString prefix = QDir::cleanPath(folder) + QLatin1Char('/');
-#ifdef WITH_COMPAT_ESDE
-    QStringList under;
-    for (const auto& entry : providers::esde::watched_rom_folders()) {
-        const QString clean = QDir::cleanPath(entry.first) + QLatin1Char('/');
-        if (clean == prefix || clean.startsWith(prefix))
-            under.append(entry.first);
-    }
-    providers::esde::forget_rom_folders(under);
-#endif
+    // that folder only: the folders next to it (the same parent) and the
+    // other systems stay as they are
     int removed = 0;
-    if (remove_games)
-        removed = providers::gamedir::remove_folder_games(folder);
+    for (const QString& path : system_files_listing(folder))
+        removed += qMax(0, providers::gamedir::remove_system_folder(path, folder, remove_games));
+#ifdef WITH_COMPAT_ESDE
+    providers::esde::forget_rom_folders(watched_entries_of(folder));
+#endif
+    // (the library is read again when Game directory is left)
+    return removed;
+}
+
+QVariantList Settings::systemFolders(const QString& key) const
+{
+    QVariantList out;
+    const QString file = providers::gamedir::system_file(key);
+    const QStringList watched = [](){
+        QStringList list;
+#ifdef WITH_COMPAT_ESDE
+        const bool nocase = providers::gamedir::storage_ignores_case();
+        for (const auto& entry : providers::esde::watched_rom_folders())
+            list.append(providers::gamedir::folder_identity(entry.first, nocase));
+#endif
+        return list;
+    }();
+    for (const QString& folder : providers::gamedir::system_folders(file)) {
+        QString storage;
+#ifdef WITH_COMPAT_ESDE
+        storage = providers::esde::folder_storage(folder);
+#endif
+        out.append(QVariantMap {
+            { QStringLiteral("folder"), folder },
+            { QStringLiteral("storage"), storage },
+            { QStringLiteral("present"), QFileInfo(folder).isDir() },
+            { QStringLiteral("games"), providers::gamedir::folder_game_count(file, folder) },
+            { QStringLiteral("watched"), watched.contains(providers::gamedir::folder_identity(folder, providers::gamedir::storage_ignores_case())) },
+        });
+    }
+    return out;
+}
+
+#ifdef WITH_COMPAT_ESDE
+namespace {
+// Pegasus X: adding `folder` to the system `key`: the folders to read and the
+// system's name (ES-DE's), or a short reason why it can't be (`systems`:
+// gameDirectorySystems()). The screen and the test environment use this.
+QString prepare_folder_add(const QVariantList& systems, const QString& key, const QString& folder,
+                           QStringList& todo, QString& system)
+{
+    const QString file = providers::gamedir::system_file(key);
+    if (!QFileInfo(folder).isDir())
+        return Settings::tr("That folder isn't there.");
+    system = providers::esde::system_name_of(file);
+    if (system.isEmpty())
+        return Settings::tr("Pegasus X doesn't know which system this is, so it can't read a folder for it.");
+    QString this_name;
+    // every listed folder, and whose it is
+    std::vector<std::pair<QString, QString>> listed;
+    for (const QVariant& v : systems) {
+        const QVariantMap sys = v.toMap();
+        const QString name = sys.value(QStringLiteral("name")).toString();
+        if (sys.value(QStringLiteral("key")).toString() == key)
+            this_name = name;
+        for (const QString& f : sys.value(QStringLiteral("folders")).toStringList())
+            listed.emplace_back(f, name);
+    }
+    for (const auto& entry : providers::esde::watched_rom_folders())
+        listed.emplace_back(entry.first, entry.second);
+    // the folder, or this system's folders in it
+    const providers::esde::FolderTargets targets = providers::esde::folder_targets(system, folder);
+    if (targets.error.startsWith(QLatin1String("other:")))
+        return Settings::tr("That's the %1 folder. Pick %2's own folder.").arg(targets.error.mid(6), this_name);
+    if (targets.error.startsWith(QLatin1String("others:")))
+        return Settings::tr("That folder has other systems' folders in it (%1), none for %2. Pick %2's own folder.").arg(targets.error.mid(7), this_name);
+    if (!targets.error.isEmpty() || targets.folders.isEmpty())
+        return Settings::tr("Pegasus X doesn't know which system this is, so it can't read a folder for it.");
+    const bool nocase = providers::gamedir::storage_ignores_case();
+    for (const QString& target : targets.folders) {
+        const providers::gamedir::FolderClash clash = providers::gamedir::folder_clash(target, listed, nocase);
+        if (clash.kind.isEmpty())
+            continue;
+        const bool mine = clash.system == this_name || clash.system == system;
+        if (clash.kind == QLatin1String("same"))
+            return mine ? Settings::tr("%1 is already one of %2's folders.").arg(clash.folder, this_name)
+                        : Settings::tr("%1 is already a folder of %2, and stays there. Pick another folder.").arg(clash.folder, clash.system);
+        if (clash.kind == QLatin1String("inside"))
+            return Settings::tr("That folder is inside %1 (a folder of %2), which is read already.").arg(clash.folder, clash.system);
+        return Settings::tr("That folder has %1 (a folder of %2) inside it. Pick the folder next to it, not around it.").arg(clash.folder, clash.system);
+    }
+    todo = targets.folders;
+    return {};
+}
+
+// the folders read as the system, merged into its file
+providers::esde::EsdeImportResult add_folders(const QStringList& todo, const QString& system)
+{
+    providers::esde::EsdeImportResult all;
+    for (const QString& target : todo) {
+        const auto one = providers::esde::import_folder_as(target, system);
+        all.systems = qMax(all.systems, one.systems);
+        all.games += one.games;
+        all.folders += one.folders;
+        if (!one.error.isEmpty())
+            all.error = one.error;
+    }
+    if (all.error.isEmpty() && all.folders.isEmpty())
+        all.error = Settings::tr("No games of this system in that folder.");
+    return all;
+}
+} // namespace
+#endif
+
+#if defined(PEGASUSX_TESTENV) && defined(WITH_COMPAT_ESDE)
+namespace {
+// the test environment: Settings > Game directory > a system > Folders, step
+// by step through the same functions (PEGASUSX_TEST_FOLDERS=<an SD card>), each
+// result a "Test: Folders: OK:/FAILED:" line
+void run_folder_tests(Settings& s)
+{
+    const QString sd = qEnvironmentVariable("PEGASUSX_TEST_FOLDERS");
+    if (sd.isEmpty())
+        return;
+    const QString storage = qEnvironmentVariable("PEGASUSX_TEST_STORAGE");
+    const QString key = QStringLiteral("snes");
+    const QString snes_file = providers::gamedir::system_file(key);
+    const QString gba_file = providers::gamedir::system_file(QStringLiteral("gba"));
+    const auto read = [](const QString& path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly | QIODevice::Text) ? QString::fromUtf8(f.readAll()) : QString();
+    };
+    const auto say = [](bool ok, const QString& what) {
+        Log::info(LOGMSG("Test: Folders: %1 %2").arg(ok ? QStringLiteral("OK:") : QStringLiteral("FAILED:"), what));
+    };
+    // the lines of `before` past its header, in the same order in `after`
+    const auto kept_in_order = [](const QString& before, const QString& after) {
+        const QStringList b = before.split(QLatin1Char('\n'));
+        const QStringList a = after.split(QLatin1Char('\n'));
+        int at = 0;
+        bool body = false;
+        for (const QString& line : b) {
+            body = body || line.startsWith(QLatin1String("collection:"));
+            if (!body || line.trimmed().isEmpty())
+                continue;
+            while (at < a.size() && a.at(at) != line)
+                at++;
+            if (at >= a.size())
+                return false;
+            at++;
+        }
+        return true;
+    };
+    const auto refusal = [&s, &key](const QString& folder) {
+        QStringList todo;
+        QString system;
+        return prepare_folder_add(s.gameDirectorySystems(), key, folder, todo, system);
+    };
+
+    const QString snes_before = read(snes_file);
+    const QString gba_before = read(gba_file);
+    say(!snes_before.isEmpty(), QStringLiteral("the SNES system (made from ES-DE) is there"));
+
+    // already listed, inside, around, another system's: refused, nothing written
+    const QString internal = storage + QStringLiteral("/ROMs/snes");
+    for (const auto& c : std::vector<std::pair<QString, QString>> {
+            { internal + QStringLiteral("/"), QStringLiteral("the same folder with a trailing slash") },
+            { storage + QStringLiteral("/ROMs/./snes"), QStringLiteral("the same folder written another way") },
+            { internal + QStringLiteral("/extras"), QStringLiteral("a folder inside a listed one") },
+            { storage, QStringLiteral("a folder with a listed one inside") },
+            { storage + QStringLiteral("/ROMs/gba"), QStringLiteral("another system's folder") },
+            { sd + QStringLiteral("/Others"), QStringLiteral("a folder with only other systems' folders") } }) {
+        const QString why = refusal(c.first);
+        say(!why.isEmpty(), QStringLiteral("refused %1: \"%2\"").arg(c.second, why));
+    }
+    say(read(snes_file) == snes_before, QStringLiteral("nothing written by the refusals"));
+
+    // a second folder, on the SD card
+    const QString sd_snes = sd + QStringLiteral("/ROMs/snes");
+    {
+        QStringList todo;
+        QString system;
+        const QString why = prepare_folder_add(s.gameDirectorySystems(), key, sd_snes, todo, system);
+        say(why.isEmpty(), QStringLiteral("the SD card's folder can be added as %1").arg(system));
+        const auto result = add_folders(todo, system);
+        say(result.error.isEmpty() && result.games > 0, QStringLiteral("added: %1 games read, error `%2`").arg(result.games).arg(result.error));
+    }
+    QString now = read(snes_file);
+    say(now.contains(QStringLiteral("# folder: ") + sd_snes + QLatin1Char('\n')), QStringLiteral("the SD card's folder is listed"));
+    say(now.contains(sd_snes + QStringLiteral("/Super Metroid (USA).sfc")) || now.contains(QStringLiteral("Super Metroid (USA).sfc")),
+        QStringLiteral("its game is in"));
+    say(kept_in_order(snes_before, now), QStringLiteral("every entry there before is as it was (details, art, emulators, launch)"));
+    say(now.count(QStringLiteral("Super Mario World (USA).sfc")) >= 2, QStringLiteral("the same file name in both folders: two entries"));
+    QString folders_text;
+    for (const QVariant& v : s.systemFolders(key)) {
+        const QVariantMap f = v.toMap();
+        folders_text += QStringLiteral(" [%1 %2 %3 games%4]").arg(f.value(QStringLiteral("folder")).toString().mid(storage.size() - 7),
+            f.value(QStringLiteral("storage")).toString()).arg(f.value(QStringLiteral("games")).toInt())
+            .arg(f.value(QStringLiteral("present")).toBool() ? QString() : QStringLiteral(" not found"));
+    }
+    say(s.systemFolders(key).size() == 2, QStringLiteral("Folders view:%1").arg(folders_text));
+
+    // a folder with other systems' folders in it: only this system's
+    {
+        QStringList todo;
+        QString system;
+        const QString why = prepare_folder_add(s.gameDirectorySystems(), key, sd + QStringLiteral("/Mixed"), todo, system);
+        say(why.isEmpty() && todo.size() == 1 && todo.first().endsWith(QLatin1String("/Mixed/snes")),
+            QStringLiteral("a folder with snes and gba folders in it: reads %1").arg(todo.join(QStringLiteral(", "))));
+        add_folders(todo, system);
+    }
+    now = read(snes_file);
+    say(now.contains(QStringLiteral("Donkey Kong Country")) && !now.contains(QStringLiteral("Golden Sun")),
+        QStringLiteral("only its SNES games came in"));
+    say(read(gba_file) == gba_before, QStringLiteral("the GBA system is as it was"));
+
+    // the SD card out: rescans keep its games and the folder
+    QDir().rename(sd, sd + QStringLiteral(".out"));
+    providers::esde::rescan_rom_folders();
+    now = read(snes_file);
+    bool watched = false;
+    for (const auto& entry : providers::esde::watched_rom_folders())
+        watched = watched || entry.first == sd_snes;
+    bool shown_missing = false;
+    for (const QVariant& v : s.systemFolders(key)) {
+        const QVariantMap f = v.toMap();
+        if (f.value(QStringLiteral("folder")).toString() == sd_snes)
+            shown_missing = !f.value(QStringLiteral("present")).toBool() && f.value(QStringLiteral("games")).toInt() > 0;
+    }
+    say(now.contains(QStringLiteral("Super Metroid")) && now.contains(QStringLiteral("# folder: ") + sd_snes) && watched,
+        QStringLiteral("SD card out, rescan: its games and folder kept, still watched"));
+    say(shown_missing, QStringLiteral("SD card out: the Folders view says not found, with its games counted"));
+    QDir().rename(sd + QStringLiteral(".out"), sd);
+
+    // stop watching one (games stay), then remove one with its games
+    const QString mixed = sd + QStringLiteral("/Mixed/snes");
+    s.removeSystemFolder(key, mixed, false);
+    now = read(snes_file);
+    say(!now.contains(QStringLiteral("# folder: ") + mixed) && now.contains(QStringLiteral("Donkey Kong Country")),
+        QStringLiteral("stop watching a folder: no line left, its games stay"));
+    s.removeSystemFolder(key, mixed, true);
+    const int removed = s.removeSystemFolder(key, sd_snes, true);
+    now = read(snes_file);
+    say(removed > 0 && !now.contains(QStringLiteral("# folder: ") + sd_snes) && !now.contains(QStringLiteral("Super Metroid"))
+        && !now.contains(QStringLiteral("Donkey Kong Country")),
+        QStringLiteral("remove a folder and its games: %1 games out, no line left").arg(removed));
+    say(now.contains(QStringLiteral("# folder: ") + internal) && kept_in_order(snes_before, now),
+        QStringLiteral("the first folder and its games are as they were"));
+    bool still_watched = false;
+    for (const auto& entry : providers::esde::watched_rom_folders())
+        still_watched = still_watched || entry.first == sd_snes || entry.first == mixed;
+    say(!still_watched, QStringLiteral("removed folders are no longer watched"));
+    say(read(gba_file) == gba_before, QStringLiteral("the GBA system is as it was"));
+    Log::info(LOGMSG("Test: Folders: done"));
+}
+} // namespace
+#endif
+
+QString Settings::addSystemFolder(const QString& key, const QString& folder)
+{
+#ifdef WITH_COMPAT_ESDE
+    QStringList todo;
+    QString system;
+    const QString refused = prepare_folder_add(gameDirectorySystems(), key, folder, todo, system);
+    if (!refused.isEmpty())
+        return refused;
+    QtConcurrent::run([this, todo, system]{
+        const auto result = add_folders(todo, system);
+        QMetaObject::invokeMethod(this, [this, result]{ emit romFolderImportFinished(import_result_map(result)); }, Qt::QueuedConnection);
+    });
+    return {};
+#else
+    Q_UNUSED(key); Q_UNUSED(folder);
+    return tr("Not in this build");
+#endif
+}
+
+int Settings::removeSystemFolder(const QString& key, const QString& folder, bool remove_games)
+{
+    const QString file = providers::gamedir::system_file(key);
+    const int removed = providers::gamedir::remove_system_folder(file, folder, remove_games);
+    // no longer watched, unless another system still lists it
+    if (removed >= 0 && system_files_listing(folder).isEmpty()) {
+#ifdef WITH_COMPAT_ESDE
+        providers::esde::forget_rom_folders(watched_entries_of(folder));
+#endif
+    }
     // (the library is read again when Game directory is left)
     return removed;
 }

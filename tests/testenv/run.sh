@@ -220,6 +220,41 @@ sleep 1
 keys Down Down Down Down Return
 shot 08-gamedirs-system
 stop 08-gamedirs
+# -- 8b. a system's ROM folders: the Folders view, adding the SD card's folder, removing it ------
+SD="$T/sdcard"
+sed -i "/^\[browse\]/,/^\[/ s|^last=.*|last=$SD/ROMs|" "$CFG/pegasusx.ini"
+start 08b-folders "menu/settings/GameDirectory.qml" 5 "PEGASUSX_TEST_SD=$SD"
+# the systems are A to Z (GameCube, My SNES picks, Nintendo 64, Nintendo Game Boy Advance,
+# Nintendo SNES): LB to the top, down to SNES, A: its menu, A: Folders
+keys q Down Down Down Down Down Down Down Return
+shot 08b-system-menu
+keys Return
+sleep 1
+shot 08b-folders
+# Add a folder...: the picker, LB to the last folder browsed (the SD card's ROMs), into snes,
+# "Use this folder"
+keys Down Return
+sleep 1
+keys q
+sleep 1
+shot 08b-folders-picker
+keys Down Return
+sleep 1
+keys Down Return
+sleep 4
+shot 08b-folders-added
+# the SD card's folder: remove it and its games
+keys Up Return
+shot 08b-folders-remove
+keys Down Return
+sleep 1
+shot 08b-folders-removed
+stop 08b-folders
+# the same steps, and the edge cases, through the same functions (checked in the summary)
+start 08c-folder-checks "menu/settings/GameDirectory.qml" 3 "PEGASUSX_TEST_SD=$SD" "PEGASUSX_TEST_FOLDERS=$SD"
+wait_log "Test: Folders: done" 60 "$R/logs/08c-folder-checks.stdout"
+stop 08c-folder-checks
+
 start 09-esde-import "menu/settings/EsdeImport.qml" 6
 shot 09-esde-import
 keys Return; sleep 1; shot 09-esde-import-page
@@ -316,6 +351,9 @@ done
         echo "    FAILED: ES-DE's screenshot isn't on your own file's Chrono Trigger"
     fi
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game|Imports onto your games" | head -n 5 | sed 's/^/    /'
+    echo
+    echo "## ROM folders per system (Settings > Game directory > a system > Folders)"
+    strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Folders:" | sed 's/^.*Test: Folders: /    /'
     echo
     echo "## Scrape without a login (Hasheous + libretro)"
     grep -E "libretro|Hasheous|Saving|not found|no source" "$R/scraped-free/scraper.log" 2>/dev/null | head -n 12 | sed 's/^/    /'

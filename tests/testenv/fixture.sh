@@ -129,4 +129,19 @@ description: Written in my own metadata file: it wins over the ES-DE import.
 TXT
 
 printf '%s\n%s\n' "$T/Pegasus/gamecube" "$S/ROMs" > "$T/home/.config/pegasus-frontend/game_dirs.txt"
+
+# -- a second storage (an SD card), for Settings > Game directory > a system > Folders ---------
+#   sdcard/ROMs/snes ......... one more SNES folder (Super Mario World has the same file name
+#                              as the one in storage/ROMs/snes)
+#   sdcard/Mixed/snes, gba ... a folder with two systems' folders in it
+#   sdcard/Others/gba, psx ... a folder with only other systems' folders
+#   storage/ROMs/snes/extras . a folder inside a listed one
+SD="$T/sdcard"
+mkdir -p "$SD/ROMs/snes" "$SD/Mixed/snes" "$SD/Mixed/gba" "$SD/Others/gba" "$SD/Others/psx" "$S/ROMs/snes/extras"
+rom "$SD/ROMs/snes/Super Metroid (USA).sfc"
+rom "$SD/ROMs/snes/Super Mario World (USA).sfc"
+rom "$SD/Mixed/snes/Donkey Kong Country (USA).sfc"
+rom "$SD/Mixed/gba/Golden Sun (USA).gba"
+rom "$SD/Others/gba/Advance Wars (USA).gba"
+rom "$SD/Others/psx/Spyro the Dragon (USA).chd"
 echo "Fixture ready in $T"

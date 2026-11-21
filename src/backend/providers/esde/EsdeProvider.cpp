@@ -2588,6 +2588,96 @@ std::vector<std::pair<QString, QString>> watched_rom_folders()
     return read_rom_folders();
 }
 
+QString system_name_of(const QString& system_file)
+{
+    const ImportSetup setup = rom_folder_setup();
+    const bool nocase = providers::gamedir::storage_ignores_case();
+    const QStringList folders = providers::gamedir::system_folders(system_file);
+    // the system its folders were read as
+    const std::vector<std::pair<QString, QString>> watched = read_rom_folders();
+    for (const QString& folder : folders) {
+        const QString id = providers::gamedir::folder_identity(folder, nocase);
+        for (const auto& entry : watched) {
+            if (!entry.second.isEmpty() && setup.systems.count(entry.second)
+                    && providers::gamedir::folder_identity(entry.first, nocase) == id)
+                return entry.second;
+        }
+    }
+    // the system its folder in the game directory is named after
+    const QString key = providers::gamedir::system_of(system_file);
+    for (const QString& name : setup.order) {
+        const EsdeSystem& sys = setup.systems.at(name);
+        if (providers::gamedir::key_for(sys.fullname.isEmpty() ? name : sys.fullname, pegasus_short_name(name)) == key)
+            return name;
+    }
+    // its folders' names
+    for (const QString& folder : folders) {
+        const QString name = system_of_folder(setup, QFileInfo(folder).fileName());
+        if (!name.isEmpty())
+            return name;
+    }
+    return {};
+}
+
+FolderTargets folder_targets(const QString& system, const QString& folder)
+{
+    FolderTargets out;
+    const ImportSetup setup = rom_folder_setup();
+    if (!setup.systems.count(system)) {
+        out.error = QStringLiteral("unknown system");
+        return out;
+    }
+    const QString clean = QDir::cleanPath(folder);
+    const auto fullname = [&setup](const QString& name) {
+        const EsdeSystem& sys = setup.systems.at(name);
+        return sys.fullname.isEmpty() ? name : sys.fullname;
+    };
+    // the folder is named for a system: this one, or it's another's
+    const QString self = system_of_folder(setup, QFileInfo(clean).fileName());
+    if (!self.isEmpty()) {
+        if (self != system)
+            out.error = QStringLiteral("other:") % fullname(self);
+        else
+            out.folders.append(clean);
+        return out;
+    }
+    // folders for systems in it: only this system's (games are read from
+    // every folder inside, so the others' would come in too)
+    const HashMap<QString, QStringList> layout = rom_folder_layout(setup, clean);
+    if (layout.empty()) {
+        out.folders.append(clean);
+        return out;
+    }
+    const auto it = layout.find(system);
+    if (it != layout.cend()) {
+        out.folders = it->second;
+        return out;
+    }
+    QStringList others;
+    for (const QString& name : setup.order) {
+        if (layout.count(name))
+            others.append(fullname(name));
+    }
+    out.error = QStringLiteral("others:") % others.join(QStringLiteral(", "));
+    return out;
+}
+
+QString folder_storage(const QString& folder)
+{
+    const bool nocase = providers::gamedir::storage_ignores_case();
+    const QString me = providers::gamedir::folder_identity(folder, nocase) % QLatin1Char('/');
+    const auto under = [&me, nocase](const QString& root) {
+        return !root.isEmpty() && me.startsWith(providers::gamedir::folder_identity(root, nocase) % QLatin1Char('/'));
+    };
+    if (under(::android::primary_storage_path()) || under(QStringLiteral("/storage/emulated/0")))
+        return QStringLiteral("internal");
+    for (const QString& root : ::android::storage_paths()) {
+        if (under(root))
+            return QStringLiteral("sd");
+    }
+    return {};
+}
+
 void forget_rom_folders(const QStringList& folders)
 {
     std::vector<std::pair<QString, QString>> list = read_rom_folders();

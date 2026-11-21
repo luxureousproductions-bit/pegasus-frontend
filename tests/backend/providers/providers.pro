@@ -5,6 +5,7 @@ SUBDIRS += \
     pegasus_media \
     emulationstation \
     favorites \
+    gamedirectory \
     logiqx \
     playtime \
 
