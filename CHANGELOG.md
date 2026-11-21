@@ -5,6 +5,22 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-21
 
+### Test environment: the Folders steps, fixed
+
+- **What:** `08b-folders` takes the remove screenshots on the SD card's
+  folder (one key press too many reopened the picker), and `08c-folder-checks`
+  starts from a clean SNES system (the SD card's folders taken out first if a
+  step before left them in).
+- **Why:** in build 2224's run the folder stayed in after `08b`, so three
+  checks failed for that reason only (the add refused as "already listed",
+  and the "as it was" comparison counted the SD games).
+- **Not changed:** Pegasus X itself; only the test environment's steps (the
+  checks run in its build only).
+- **Tests:** the test environment's "ROM folders per system".
+- **Files:** `tests/testenv/run.sh`, `src/backend/model/internal/settings/Settings.cpp`
+  (the test environment's checks).
+- **Commit:** "Test environment: Folders steps start clean".
+
 ### Game directory: a system's ROM folders, one at a time
 
 - **What:** a system's menu in Settings > Game directory has "Folders": each of

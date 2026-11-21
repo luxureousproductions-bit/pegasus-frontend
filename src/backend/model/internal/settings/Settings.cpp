@@ -1604,6 +1604,13 @@ void run_folder_tests(Settings& s)
         return prepare_folder_add(s.gameDirectorySystems(), key, folder, todo, system);
     };
 
+    // from a clean start (the SD card's folders out, if a step before left them in)
+    const QString sd_snes = sd + QStringLiteral("/ROMs/snes");
+    const QString mixed = sd + QStringLiteral("/Mixed/snes");
+    for (const QString& f : { sd_snes, mixed }) {
+        if (s.removeSystemFolder(key, f, true) > 0)
+            Log::info(LOGMSG("Test: Folders: (left from before, taken out first: %1)").arg(f));
+    }
     const QString snes_before = read(snes_file);
     const QString gba_before = read(gba_file);
     say(!snes_before.isEmpty(), QStringLiteral("the SNES system (made from ES-DE) is there"));
@@ -1623,7 +1630,6 @@ void run_folder_tests(Settings& s)
     say(read(snes_file) == snes_before, QStringLiteral("nothing written by the refusals"));
 
     // a second folder, on the SD card
-    const QString sd_snes = sd + QStringLiteral("/ROMs/snes");
     {
         QStringList todo;
         QString system;
@@ -1680,7 +1686,6 @@ void run_folder_tests(Settings& s)
     QDir().rename(sd + QStringLiteral(".out"), sd);
 
     // stop watching one (games stay), then remove one with its games
-    const QString mixed = sd + QStringLiteral("/Mixed/snes");
     s.removeSystemFolder(key, mixed, false);
     now = read(snes_file);
     say(!now.contains(QStringLiteral("# folder: ") + mixed) && now.contains(QStringLiteral("Donkey Kong Country")),
