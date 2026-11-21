@@ -1,0 +1,17 @@
+# Pegasus X game directory: Sony PlayStation
+# Made by Pegasus X from the ROM folder /home/runner/work/_temp/px/MyGames.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/MyGames/psx
+
+collection: Sony PlayStation
+shortname: psx
+
+game: Crash Bandicoot
+file: /home/runner/work/_temp/px/MyGames/psx/Crash Bandicoot (USA).chd
+sort-by: Crash Bandicoot (USA)
+description: From the folder's own gamelist.xml.
+assets.box_front: /home/runner/work/_temp/px/MyGames/psx/media/crash.png
+
+game: Final Fantasy VII (USA)
+file: /home/runner/work/_temp/px/MyGames/psx/Final Fantasy VII (USA).m3u
+

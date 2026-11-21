@@ -1,0 +1,4 @@
+/home/runner/work/_temp/px/storage/ROMs/gba	gba
+/home/runner/work/_temp/px/storage/ROMs/snes	snes
+/home/runner/work/_temp/px/MyGames/Nintendo 64	n64
+/home/runner/work/_temp/px/MyGames/psx	psx

@@ -1,0 +1,25 @@
+# Pegasus X game directory: Nintendo 64
+# Made by Pegasus X from the ROM folder /home/runner/work/_temp/px/MyGames.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/MyGames/Nintendo 64
+
+collection: Nintendo 64
+shortname: n64
+
+game: Mario Kart 64 (USA)
+file: /home/runner/work/_temp/px/MyGames/Nintendo 64/Mario Kart 64 (USA).z64
+assets.background: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/fanart/Mario Kart 64 (USA).png
+x-pegasusx-hidden-art: box_front|/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/covers/Mario Kart 64 (USA).png
+assets.box_front: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/covers/Mario Kart 64 (USA).png
+  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/3D Boxes/Mario Kart 64 (USA).png
+assets.logo: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/wheel/Mario Kart 64 (USA).png
+assets.background: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/fanart/Mario Kart 64 (USA).png
+assets.screenshot: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/screenshot/Mario Kart 64 (USA).png
+assets.steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/miximages/Mario Kart 64 (USA).png
+
+game: Star Fox 64 (USA)
+file: /home/runner/work/_temp/px/MyGames/Nintendo 64/Star Fox 64 (USA).z64
+assets.box_front: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/Star Fox 64 (USA)/boxFront.png
+assets.screenshot: /home/runner/work/_temp/px/MyGames/Nintendo 64/media/Star Fox 64 (USA)/screenshot.png
+assets.steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/miximages/Star Fox 64 (USA).png
+
