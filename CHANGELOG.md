@@ -3,6 +3,25 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-20
+
+### Keyboard: a picked suggestion no longer adds a comma
+
+- **What:** in Developer, Publisher and Genres (comma-separated lists),
+  picking a suggestion from the row above the keys puts in just the name;
+  the keyboard no longer adds ", " after it. Type a comma (on the letter
+  page) and a space yourself when you want another item.
+- **Why:** the automatic ", " looked like Space adding a comma: Space itself
+  always typed a plain space (the space bar, Y, or a real keyboard), and
+  nothing else in the menus changes text while typing. The comma came from
+  `sugBar.apply` in `OnScreenKeyboard.qml`, which added ", " after a picked
+  name in a comma list to make room for the next one.
+- **Not changed:** suggestions themselves, word suggestions in other fields
+  (they still add a space after the word), lists of lines (a new line after
+  the item), and how lists are saved (split at commas).
+- **Files:** `src/frontend/menu/settings/common/OnScreenKeyboard.qml`.
+- **Commit:** "Keyboard: a picked suggestion adds no comma".
+
 ## 2026-11-19
 
 ### Built-in menus keep up with a held D-pad

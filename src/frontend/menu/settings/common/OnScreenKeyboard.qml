@@ -452,7 +452,9 @@ FocusScope {
                 if (items.length === 0 && root.row === -1)
                     root.row = 0;
             }
-            // the term becomes the suggestion; a list gets room for the next item
+            // the term becomes the suggestion; a list of lines gets a new line for
+            // the next item. Pegasus X: a comma list gets nothing after it (no
+            // automatic ", "): a comma and a space are typed when wanted
             function apply(index) {
                 var name = items[index];
                 if (name === undefined || !root.target)
@@ -472,7 +474,7 @@ FocusScope {
                 }
                 var lead = (sep === "," && b.start > 0) ? " " : "";
                 var before = t.substring(0, b.start) + lead + name;
-                var after = sep === "" ? "" : (sep === "," ? ", " : "\n");
+                var after = sep === "\n" ? "\n" : "";
                 if (b.end >= t.length) {
                     root.target.text = before + after;
                     root.target.cursorPosition = before.length + after.length;
