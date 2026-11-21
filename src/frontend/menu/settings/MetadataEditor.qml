@@ -32,6 +32,8 @@ FocusScope {
     id: root
 
     signal close
+    // Pegasus X: a game's "Scraper options...": Settings opens the Scraper on top
+    signal openScraper
 
     anchors.fill: parent
     enabled: focus
@@ -754,8 +756,8 @@ FocusScope {
                 return;
             }
             if (act === "options") {
-                scraperLoader.active = true;
-                scraperLoader.focus = true;
+                // Pegasus X: Settings > Gaming > Scraper, on top of this game
+                root.openScraper();
                 return;
             }
             var error = Internal.settings.scrapeGame(root.game.obj, root.gameColl(), act === "replace");
@@ -1645,8 +1647,6 @@ FocusScope {
                 var st = root.status || {};
                 var nReview = root.reviews.length;
                 out.push({ "kind": "section", "text": qsTr("Your library · %1 games").arg(st.games || 0) + api.tr });
-                out.push({ "kind": "scraper", "text": qsTr("Scraper") + api.tr,
-                           "value": qsTr("sources, content, pictures, accounts ›") + api.tr });
 
                 out.push({ "kind": "complete", "text": qsTr("Complete my library") + api.tr, "sub": " " });
                 out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
@@ -2165,10 +2165,6 @@ FocusScope {
                     root.testWith(String(root.current("launch") || "") || root.collectionLaunch, root.game);
                 else
                     root.testWith(root.collectionLaunch, root.games[0]);
-            }
-            else if (row.kind === "scraper") {
-                scraperLoader.active = true;
-                scraperLoader.focus = true;
             }
             else if (row.kind === "racheck")
                 root.raCheckThisGame();
@@ -3580,41 +3576,17 @@ FocusScope {
         }
     }
 
-    // -- The scraper (its own screen, over Library) ---------------------------------
-
-    Loader {
-        id: scraperLoader
-        anchors.fill: parent
-        z: 7
-        active: false
-        enabled: focus
-        visible: active && focus
-        source: "ScraperScreen.qml"
-        onLoaded: item.focus = true
-        onFocusChanged: if (item && focus) item.focus = true
-    }
-    Connections {
-        target: scraperLoader.item
-        function onClose() {
-            list.focus = true;
-            // after the signal is done: the screen that sent it goes
-            Qt.callLater(function() { scraperLoader.active = false; });
-        }
-    }
     // -- The scraper's matches to pick from (interactive mode, one game) -----------
 
     ScraperChoice {
         id: scraperChoice
         z: 9
-        onFinished: {
-            if (scraperLoader.active)
-                scraperLoader.focus = true;
-            else
-                list.focus = true;
-        }
+        onFinished: list.focus = true
     }
     Connections {
         target: Internal.settings
+        // Pegasus X: one pick window at a time: not while the Scraper is on top
+        enabled: root.activeFocus
         function onScraperNeedsChoice(choice) { scraperChoice.openFor(choice); }
     }
     // waiting since before Library opened (scraping went on after you left)

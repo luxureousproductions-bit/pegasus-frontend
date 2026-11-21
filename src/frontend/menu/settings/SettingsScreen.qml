@@ -65,6 +65,7 @@ FocusScope {
         onOpenUpdater: root.openModal("UpdateDialog.qml")
         onOpenRootFolder: root.openModal("RootFolderSetup.qml")
         onOpenMetadataEditor: root.openScreen("MetadataEditor.qml")
+        onOpenScraper: root.openScreen("ScraperSection.qml")
         onOpenRetroAchievements: root.openScreen("RetroAchievementsScreen.qml")
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
@@ -123,6 +124,14 @@ FocusScope {
         function onOpenEsdeImport() {
             modal.source = "";
             modal.source = "EsdeImport.qml";
+            modal.focus = true;
+        }
+        // Library: a game's "Scraper options..." opens the Scraper on top
+        // (Back returns to the game)
+        function onOpenScraper() {
+            root.openedAt = Date.now();
+            modal.source = "";
+            modal.source = "ScraperSection.qml";
             modal.focus = true;
         }
     }

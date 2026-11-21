@@ -34,6 +34,7 @@ FocusScope {
     signal openUpdater
     signal openRootFolder
     signal openMetadataEditor
+    signal openScraper
     signal openRetroAchievements
     signal openAndroidSafSettings
     signal openProviderSettings
@@ -165,6 +166,14 @@ FocusScope {
             desc: QT_TR_NOOP("Your collections and games: edit their details, art and emulators, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openMetadataEditor
+            section: "gaming"
+            enabled: Internal.settings.esdeImportSupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Scraper...")
+            desc: QT_TR_NOOP("Your games' details and art from ScreenScraper or LaunchboxDB: sources, content, pictures, accounts, and scraping the whole library.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openScraper
             section: "gaming"
             enabled: Internal.settings.esdeImportSupported
         },

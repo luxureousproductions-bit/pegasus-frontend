@@ -5,6 +5,27 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-20
 
+### Scraper gets its own row in Settings > Gaming
+
+- **What:** Settings > Gaming now reads Game directory, Library, Scraper,
+  RetroAchievements. "Scraper..." opens the scraper's pages (sources,
+  content, pictures, accounts, the running scrape) as they were, in a small
+  host screen (`ScraperSection.qml`) that also has its own window to pick
+  each game's match in interactive mode. The Scraper row inside Library is
+  gone. A game's "Scrape this game > Scraper options..." opens this same
+  Scraper on top of the game; Back returns to the game.
+- **Why:** the scraper is used for the whole library, not one collection,
+  and lived three levels down inside Library.
+- **Not changed:** the scraper's pages and settings, "Scrape this game" and
+  "Scrape this collection..." in Library (with Library's own pick window).
+  Only the window in front answers an interactive pick (the Scraper's or
+  Library's), so two never open at once. No other settings, themes or the
+  build 2219 menu scrolling.
+- **Files:** `src/frontend/menu/settings/ScraperSection.qml` (new),
+  `SettingsMain.qml`, `SettingsScreen.qml`, `MetadataEditor.qml`,
+  `src/frontend/frontend.qrc`.
+- **Commit:** "Settings: Scraper gets its own row in Gaming".
+
 ### Keyboard: a picked suggestion no longer adds a comma
 
 - **What:** in Developer, Publisher and Genres (comma-separated lists),
