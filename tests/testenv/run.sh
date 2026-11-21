@@ -231,9 +231,11 @@ shot 08b-system-menu
 keys Return
 sleep 1
 shot 08b-folders
-# Add a folder...: the picker opens at the last folder browsed (the SD card's ROMs);
-# "Use this folder" there reads only its snes folder
+# Add a folder...: the picker (on the drives), LB to the last folder browsed (the SD card's
+# ROMs); "Use this folder" there reads only its snes folder
 keys Down Return
+sleep 1
+keys q
 sleep 1
 shot 08b-folders-picker
 keys Down Return

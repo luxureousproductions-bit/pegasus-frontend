@@ -21,6 +21,17 @@ rolled back on its own with `git revert <commit>`.
   (the test environment's checks).
 - **Commit:** "Test environment: Folders steps start clean".
 
+### Test environment: the Folders picker step, fixed
+
+- **What:** `08b-folders` presses LB in the picker again (it opens on the
+  drives; LB goes to the last folder browsed, the SD card's ROMs).
+- **Why:** without it the picker stayed on the drives, so the add and remove
+  screenshots of build 2225's run show the picker, not the Folders view.
+- **Not changed:** Pegasus X itself and the checks (`08c-folder-checks`).
+- **Tests:** the test environment's `08b-folders` screenshots.
+- **Files:** `tests/testenv/run.sh`.
+- **Commit:** "Test environment: Folders picker step uses LB".
+
 ### Game directory: a system's ROM folders, one at a time
 
 - **What:** a system's menu in Settings > Game directory has "Folders": each of
