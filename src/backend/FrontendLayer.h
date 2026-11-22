@@ -50,6 +50,19 @@ public:
     /// unused graphics (QQuickWindow::releaseResources) and the components
     /// nothing uses (trimComponentCache). `why` goes in the log.
     void releaseMemory(const QString& why);
+    /// Pegasus X: Android's onTrimMemory warnings (Android 13 sends them well
+    /// before the last-ditch onLowMemory). Never unloads the theme, so the
+    /// return stays instant:
+    ///  - in front, memory low (RUNNING_LOW): the QML engine's garbage is
+    ///    collected and its unused components let go; critical
+    ///    (RUNNING_CRITICAL): releaseMemory too (only unused graphics go)
+    ///  - out of sight (UI_HIDDEN): nothing more (going to the background
+    ///    already released, applicationStateChanged)
+    ///  - in the background list (BACKGROUND, MODERATE, COMPLETE): garbage
+    ///    collected and releaseMemory, once per level while away; not if
+    ///    Pegasus X is already back in front when Qt gets to it (Qt doesn't
+    ///    run while Android has it in the background)
+    void trimMemory(int level);
 
 signals:
     void rebuildComplete();
@@ -59,4 +72,5 @@ private:
     QObject* const m_api_public;
     QObject* const m_api_private;
     QQmlApplicationEngine* m_engine;
+    int m_trimmed_level = 0;  ///< the highest trim level handled since Pegasus X was last in front
 };

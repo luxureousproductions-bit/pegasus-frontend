@@ -20,7 +20,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothClass;
 import android.bluetooth.BluetoothDevice;
 import android.content.BroadcastReceiver;
-import android.content.ComponentCallbacks;
+import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -108,10 +108,21 @@ public class SystemStatus {
     // Pegasus X frees the theme's cached graphics and unused QML components
     // (FrontendLayer::releaseMemory); registered by FrontendLayer at startup
     private static native void nativeLowMemory();
+    // Pegasus X: Android's earlier warnings (onTrimMemory's level), handled
+    // by FrontendLayer::trimMemory
+    private static native void nativeTrimMemory(int level);
 
     private static void lowMemory() {
         try {
             nativeLowMemory();
+        } catch (UnsatisfiedLinkError e) {
+            // not registered (yet): nothing to free
+        }
+    }
+
+    private static void trimMemory(int level) {
+        try {
+            nativeTrimMemory(level);
         } catch (UnsatisfiedLinkError e) {
             // not registered (yet): nothing to free
         }
@@ -256,10 +267,12 @@ public class SystemStatus {
             // unknown: stays 0
         }
 
-        // -- dark mode changes
-        ctx.registerComponentCallbacks(new ComponentCallbacks() {
+        // -- dark mode changes, and Android short of memory (its earlier
+        //    warnings too: onTrimMemory)
+        ctx.registerComponentCallbacks(new ComponentCallbacks2() {
             @Override public void onConfigurationChanged(Configuration config) { readDark(config); }
             @Override public void onLowMemory() { lowMemory(); }
+            @Override public void onTrimMemory(int level) { trimMemory(level); }
         });
 
         readWifi();

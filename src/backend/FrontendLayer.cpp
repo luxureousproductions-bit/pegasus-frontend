@@ -65,6 +65,15 @@ void JNICALL native_low_memory(JNIEnv*, jclass)
     }
 }
 
+void JNICALL native_trim_memory(JNIEnv*, jclass, jint level)
+{
+    FrontendLayer* const frontend = g_frontend.load();
+    if (frontend) {
+        const int lvl = static_cast<int>(level);
+        QMetaObject::invokeMethod(frontend, [frontend, lvl]{ frontend->trimMemory(lvl); }, Qt::QueuedConnection);
+    }
+}
+
 void register_low_memory_callback()
 {
     static bool done = false;
@@ -73,6 +82,7 @@ void register_low_memory_callback()
     done = true;
     const JNINativeMethod methods[] {
         { "nativeLowMemory", "()V", reinterpret_cast<void*>(native_low_memory) },
+        { "nativeTrimMemory", "(I)V", reinterpret_cast<void*>(native_trim_memory) },
     };
     // the class through Qt's class loader (an instance: Qt 5 has no findClass)
     const QAndroidJniObject status("org/pegasus_frontend/android/SystemStatus");
@@ -108,6 +118,8 @@ FrontendLayer::FrontendLayer(QObject* const api_public, QObject* const api_priva
     connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state){
         if (state == Qt::ApplicationHidden || state == Qt::ApplicationSuspended)
             releaseMemory(QStringLiteral("Pegasus X is in the background"));
+        if (state == Qt::ApplicationActive)
+            m_trimmed_level = 0;  // (Android's warnings count again)
     });
 #ifdef Q_OS_ANDROID
     g_frontend.store(this);
@@ -171,6 +183,38 @@ void FrontendLayer::releaseMemory(const QString& why)
     }
     m_engine->trimComponentCache();
     Log::info(LOGMSG("Frontend: released cached graphics and unused QML components (%1)").arg(why));
+}
+
+void FrontendLayer::trimMemory(int level)
+{
+    // Android's ComponentCallbacks2 levels
+    constexpr int RUNNING_LOW = 10;
+    constexpr int RUNNING_CRITICAL = 15;
+    constexpr int UI_HIDDEN = 20;
+    constexpr int BACKGROUND = 40;
+    if (!m_engine || level == UI_HIDDEN || level <= m_trimmed_level)
+        return;
+    // a background warning only reaches here once Qt runs again: if that's
+    // because Pegasus X is back in front, letting go now would only slow the
+    // return (going to the background already released what it could)
+    if (level >= BACKGROUND && QGuiApplication::applicationState() == Qt::ApplicationActive) {
+        Log::info(LOGMSG("Frontend: Android memory warning, level %1, from the background: Pegasus X is back, nothing let go").arg(level));
+        return;
+    }
+    m_trimmed_level = level;
+    if (level < RUNNING_LOW) {
+        Log::info(LOGMSG("Frontend: Android memory warning, level %1: nothing let go").arg(level));
+        return;  // RUNNING_MODERATE: nothing yet
+    }
+    m_engine->collectGarbage();
+    if (level < RUNNING_CRITICAL) {
+        m_engine->trimComponentCache();
+        Log::info(LOGMSG("Frontend: Android memory warning, level %1: QML garbage collected, unused components let go").arg(level));
+        return;
+    }
+    releaseMemory(level >= BACKGROUND
+        ? QStringLiteral("Android memory warning, level %1, in the background").arg(level)
+        : QStringLiteral("Android memory warning, level %1, in front").arg(level));
 }
 
 void FrontendLayer::clearCache()

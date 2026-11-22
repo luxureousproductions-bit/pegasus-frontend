@@ -5,6 +5,35 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Android's earlier memory warnings are handled
+
+- **What:** Pegasus X now listens to Android's onTrimMemory warnings
+  (Android 13 sends them well before the last-ditch onLowMemory, which was
+  the only one handled). What it does never unloads the theme:
+  - in front, memory getting low (RUNNING_LOW): the QML engine's garbage is
+    collected and unused components let go;
+  - in front, critical (RUNNING_CRITICAL): the same, plus the window's
+    unused graphics (`releaseMemory`, as onLowMemory and going to the
+    background already do);
+  - in the background list (BACKGROUND, MODERATE, COMPLETE): garbage
+    collected and `releaseMemory`, but only while Pegasus X is still away
+    when Qt gets to it. Qt doesn't run while Android has Pegasus X in the
+    background, so a warning sent then is handled on the return; it's
+    skipped then, because letting go at that moment would only slow the
+    return (going to the background already released what it could).
+  - RUNNING_MODERATE and UI_HIDDEN: nothing more.
+  Each level is handled once while Pegasus X is away or until it's in
+  front again; every warning is logged with its level.
+- **Why:** with only onLowMemory, nothing was let go on Android's earlier
+  warnings, and the theme's garbage stayed until Android was out of
+  options.
+- **Not changed:** onLowMemory, the release when going to the background,
+  the theme kept loaded during a game (no rebuild, no splash).
+- **Files:** `src/app/platform/android/src/org/pegasus_frontend/android/SystemStatus.java`
+  (ComponentCallbacks2, `nativeTrimMemory`), `src/backend/FrontendLayer.h/.cpp`
+  (`trimMemory`).
+- **Commit:** "Android's earlier memory warnings are handled".
+
 ### Device listeners pause while Pegasus X is away
 
 - **What:** while Pegasus X isn't in front (a game running, the screen off,
