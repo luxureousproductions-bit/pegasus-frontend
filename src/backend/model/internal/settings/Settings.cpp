@@ -2080,6 +2080,51 @@ QString Settings::saveGameMetadata(const QString& collection_name, const QString
 #endif
 }
 
+QVariantMap Settings::saveGamesGenres(const QVariantList& games)
+{
+    int saved = 0;
+    QStringList errors;
+#ifdef WITH_COMPAT_ESDE
+    // per collection, in the order first met: the edits and their games
+    QStringList order;
+    QHash<QString, std::vector<providers::esde::GameEdit>> edits;
+    QHash<QString, std::vector<std::pair<model::Game*, QStringList>>> loaded;
+    for (const QVariant& item : games) {
+        const QVariantMap map = item.toMap();
+        const QString coll = map.value(QStringLiteral("coll")).toString();
+        const QString path = map.value(QStringLiteral("path")).toString();
+        if (coll.isEmpty() || path.isEmpty())
+            continue;
+        const QStringList genres = map.value(QStringLiteral("genre")).toStringList();
+        if (!edits.contains(coll))
+            order.append(coll);
+        edits[coll].push_back({ path, map.value(QStringLiteral("title")).toString(),
+                                QVariantMap { { QStringLiteral("genre"), genres } } });
+        auto* const game = qobject_cast<model::Game*>(map.value(QStringLiteral("obj")).value<QObject*>());
+        if (game)
+            loaded[coll].emplace_back(game, genres);
+    }
+    for (const QString& coll : order) {
+        const QString error = providers::esde::save_games_metadata(coll, edits.value(coll), true, QStringLiteral("edit"));
+        if (!error.isEmpty()) {
+            errors.append(error);
+            continue;
+        }
+        saved += static_cast<int>(edits.value(coll).size());
+        // the loaded games show it right away, as a game's own save does
+        for (const auto& entry : loaded.value(coll))
+            apply_scraped(*entry.first, QVariantMap { { QStringLiteral("genre"), entry.second } });
+    }
+#else
+    Q_UNUSED(games);
+    errors.append(QStringLiteral("Not supported on this platform"));
+#endif
+    return QVariantMap {
+        { QStringLiteral("saved"), saved },
+        { QStringLiteral("error"), errors.join(QLatin1Char('\n')) },
+    };
+}
+
 QString Settings::saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes)
 {
 #ifdef WITH_COMPAT_ESDE

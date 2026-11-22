@@ -279,6 +279,11 @@ public:
     Q_INVOKABLE QString saveGameMetadata(const QString& collection_name, const QString& game_path,
                                          const QString& game_title, const QVariantMap& changes, QObject* game = nullptr);
     Q_INVOKABLE QString saveCollectionMetadata(const QString& collection_name, const QVariantMap& changes);
+    /// Pegasus X: Library > Genres' change of a genre in many games. Each
+    /// item: { obj, coll, path, title, genre } (genre: the game's whole new
+    /// list). Each collection's file is backed up ("edit"), read and written
+    /// once; the loaded games show it at once. Returns { saved, error }.
+    Q_INVOKABLE QVariantMap saveGamesGenres(const QVariantList& games);
     /// { shortname, extensions, launch, defaultLabel, defaultCommand } of a collection
     Q_INVOKABLE QVariantMap collectionDetails(const QString& collection_name) const;
     /// The emulators of a collection's system: [{ label, command, installed, recommended, retroarch }]

@@ -5,6 +5,57 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Genres: change a genre in all its games
+
+- **What:** a genre's page in Library > Genres starts with "Change this
+  genre in all N games..." (one game: "...in its game..."). It opens a pick
+  list: "Type a genre..." (Pegasus' own keyboard, your genres as
+  suggestions; Start or Done takes it, B goes back) or any other genre you
+  have, with its game count. A on one of the genre's spellings (build 2229)
+  goes the same way with that spelling, to use it for the whole genre.
+  Then a page shows what will happen before anything is written: "Replace
+  "Platform" with "Platformer"" (or "Use the spelling ..."), "2 games
+  change · 1 already as it would be · their other genres stay", "Keep as
+  is" (selected first), "Change N games", and the games that change with
+  their collection. Change writes them and returns to the genre list on the
+  new genre, with a line saying what was done ("..." is now "..." in N
+  games, or what couldn't be saved). Back on the confirm page returns to
+  the pick list (or the genre's page, from a spelling).
+- **How it changes a game:** every spelling of the chosen genre (its key)
+  is replaced by the new one; the game's other genres stay as they are and
+  in their order (Application and Emulator too); the new genre ends up
+  once, where it first was (if the game had it already in another
+  spelling, that one is kept, unless the change is to a spelling of the
+  same genre). Games already as they'd be are left alone (not written).
+- **How it's saved:** as Library saves a game's genre: into the
+  collection's file in the game directory (the game's block added if it
+  has none), never into a folder's own metadata or a gamelist. One write
+  per collection, with one backup of the file first (reason "edit", as a
+  hand edit; the last 3 are kept) instead of one per game. The loaded
+  games show it at once (themes too), as after a game saved in Library; no
+  read of the library is added. `save_games_metadata` (used by
+  RetroAchievements) takes the backup's name as a new argument, "scrape"
+  as before by default.
+- **Not changed:** the counting, Hide genres... (build 2230), the metadata
+  editor (its save, keyboard, suggestions), the RetroAchievements save
+  (same backup name), artwork, search, launch commands, themes.
+- **Tests:** `test_GenreKey` `replace` (12 cases: other genres kept in
+  order, any spelling, two spellings once, the new one already there before
+  or after, one spelling for all, unrelated duplicates and Application
+  untouched, trimmed, a game without it, a "/" genre kept whole) and
+  `same`. The test environment: `03-genre-pick`, `03-genre-type` ("Platformer"
+  typed), `03-genre-confirm`, `03-genre-changed`, then Shoot'em Up's first
+  spelling for the genre (`03-genre-spelling-confirm`, `-used`); the summary
+  checks each game's genre in the game directory, that psx's own
+  gamelist.xml and the Pegasus metadata file are as they were, and counts
+  the "edit" backups. The step that opens a game moves down one row.
+- **Files:** `src/backend/model/internal/settings/Settings.h/.cpp`
+  (`saveGamesGenres`), `src/backend/providers/esde/EsdeProvider.h/.cpp`
+  (`save_games_metadata`'s backup name), `src/frontend/menu/settings/GenreKey.js`
+  (`replace`, `same`), `src/frontend/menu/settings/GenresScreen.qml`,
+  `tests/frontend/genrekey/test_GenreKey.cpp`, `tests/testenv/run.sh`.
+- **Commit:** "Genres: change a genre in all its games".
+
 ### Genres: hide genres from the list
 
 - **What:** Library > Genres has a "Hide genres..." row under its header

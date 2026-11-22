@@ -4017,7 +4017,8 @@ QVariantMap game_extra_fields(const QString& collection_name, const QString& gam
     return out;
 }
 
-QString save_games_metadata(const QString& collection_name, const std::vector<GameEdit>& edits, bool backup)
+QString save_games_metadata(const QString& collection_name, const std::vector<GameEdit>& edits, bool backup,
+                            const QString& backup_reason)
 {
     split_legacy_edits_file();
     if (edits.empty())
@@ -4027,7 +4028,7 @@ QString save_games_metadata(const QString& collection_name, const std::vector<Ga
     if (coll_index < 0)
         return QStringLiteral("Could not write the game directory file for `%1`").arg(collection_name);
     if (backup)
-        providers::gamedir::backup(file.path, QStringLiteral("scrape"));
+        providers::gamedir::backup(file.path, backup_reason);
     int written = 0;
     for (const GameEdit& edit : edits) {
         if (edit.changes.isEmpty())

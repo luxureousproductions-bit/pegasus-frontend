@@ -55,6 +55,9 @@ private slots:
     void markup_marks_what_differs();
     void markup_is_escaped();
     void note_in_words();
+    void replace_data();
+    void replace();
+    void same();
 };
 
 QString test_GenreKey::key(const QString& name)
@@ -268,6 +271,60 @@ void test_GenreKey::note_in_words()
     QCOMPARE(call("note", QStringLiteral("beat'em  up/fantasy"), QStringLiteral("Beat'em Up / Fantasy")),
              QStringLiteral("extra · U+0020 · missing · U+0020 ×2 · letter case"));
     QCOMPARE(call("note", QStringLiteral("Action"), QStringLiteral("Action")), QString());
+}
+
+// Change this genre...: only the chosen genre (any spelling of it) is
+// replaced; the game's other genres stay, in their order; the new one once
+void test_GenreKey::replace_data()
+{
+    QTest::addColumn<QStringList>("genres");
+    QTest::addColumn<QString>("from");
+    QTest::addColumn<QString>("to");
+    QTest::addColumn<QStringList>("expected");
+    QTest::newRow("the others stay, in order") << QStringList { QStringLiteral("Action"), QStringLiteral("Platform"), QStringLiteral("RPG") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("Action"), QStringLiteral("Platformer"), QStringLiteral("RPG") };
+    QTest::newRow("any spelling of it") << QStringList { QStringLiteral("platform"), QStringLiteral("Action") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("Platformer"), QStringLiteral("Action") };
+    QTest::newRow("two spellings of it: once") << QStringList { QStringLiteral("Platform"), QStringLiteral("PLATFORM"), QStringLiteral("Action") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("Platformer"), QStringLiteral("Action") };
+    QTest::newRow("has the new one already") << QStringList { QStringLiteral("Platformer"), QStringLiteral("Platform") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("Platformer") };
+    QTest::newRow("has the new one after it") << QStringList { QStringLiteral("Platform"), QStringLiteral("platformer") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("Platformer") };
+    QTest::newRow("has the new one before it: kept as written") << QStringList { QStringLiteral("platformer"), QStringLiteral("Platform") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("platformer") };
+    QTest::newRow("one spelling for all") << QStringList { QStringLiteral("Shoot’em Up"), QStringLiteral("Action") } << QStringLiteral("Shoot'em Up") << QStringLiteral("Shoot'em Up")
+        << QStringList { QStringLiteral("Shoot'em Up"), QStringLiteral("Action") };
+    QTest::newRow("other duplicates untouched") << QStringList { QStringLiteral("Action"), QStringLiteral("Action"), QStringLiteral("Platform") } << QStringLiteral("Platform") << QStringLiteral("RPG")
+        << QStringList { QStringLiteral("Action"), QStringLiteral("Action"), QStringLiteral("RPG") };
+    QTest::newRow("Application stays") << QStringList { QStringLiteral("Application"), QStringLiteral("Platform") } << QStringLiteral("Platform") << QStringLiteral("RPG")
+        << QStringList { QStringLiteral("Application"), QStringLiteral("RPG") };
+    QTest::newRow("the new one trimmed") << QStringList { QStringLiteral("Platform") } << QStringLiteral("Platform") << QStringLiteral("  RPG ")
+        << QStringList { QStringLiteral("RPG") };
+    QTest::newRow("a game without it: as it is") << QStringList { QStringLiteral("Action"), QStringLiteral("RPG") } << QStringLiteral("Platform") << QStringLiteral("Platformer")
+        << QStringList { QStringLiteral("Action"), QStringLiteral("RPG") };
+    QTest::newRow("a genre with a slash stays whole") << QStringList { QStringLiteral("Beat'em Up / Fantasy"), QStringLiteral("Fantasy") } << QStringLiteral("Fantasy") << QStringLiteral("Magic")
+        << QStringList { QStringLiteral("Beat'em Up / Fantasy"), QStringLiteral("Magic") };
+}
+
+void test_GenreKey::replace()
+{
+    QFETCH(QStringList, genres);
+    QFETCH(QString, from);
+    QFETCH(QString, to);
+    QFETCH(QStringList, expected);
+    const QJSValue fn = m_js.globalObject().property(QStringLiteral("replace"));
+    const QJSValue out = fn.call({ m_js.toScriptValue(genres), key(from), to });
+    QVERIFY2(!out.isError(), qPrintable(out.toString()));
+    QCOMPARE(out.toVariant().toStringList(), expected);
+}
+
+void test_GenreKey::same()
+{
+    const QJSValue fn = m_js.globalObject().property(QStringLiteral("same"));
+    QVERIFY(fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }), m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }) }).toBool());
+    QVERIFY(!fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }), m_js.toScriptValue(QStringList { QStringLiteral("B"), QStringLiteral("A") }) }).toBool());
+    QVERIFY(!fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("a") }), m_js.toScriptValue(QStringList { QStringLiteral("A") }) }).toBool());
 }
 
 

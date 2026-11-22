@@ -74,6 +74,46 @@ function group(gameGenres, skip) {
     return out;
 }
 
+// -- Change a genre in its games (a genre's page) ------------------------------------------
+
+// a game's genres with every spelling of the genre `fromKey` replaced by
+// `to`; its other genres stay as they are, in their order. The genre `to`
+// ends up once: where it was first (if the game had it already, in that
+// spelling, unless every spelling of it is being replaced: `to` is then a
+// spelling of `fromKey` itself)
+function replace(names, fromKey, to) {
+    var target = String(to).trim();
+    var toKey = key(target);
+    var out = [];
+    var placed = false;
+    for (var i = 0; i < names.length; i++) {
+        var name = String(names[i]);
+        var k = key(name);
+        if (k === fromKey)
+            name = target;
+        else if (k !== toKey) {
+            out.push(name);
+            continue;
+        }
+        if (placed)
+            continue;
+        placed = true;
+        out.push(name);
+    }
+    return out;
+}
+
+// the same list (same texts, same order)
+function same(a, b) {
+    if (a.length !== b.length)
+        return false;
+    for (var i = 0; i < a.length; i++) {
+        if (String(a[i]) !== String(b[i]))
+            return false;
+    }
+    return true;
+}
+
 // -- Spellings side by side (a genre's page) ------------------------------------------
 
 function code(ch) {

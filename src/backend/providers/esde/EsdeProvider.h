@@ -242,13 +242,16 @@ MetadataLocation metadata_location(const QString& collection_name, const QString
 QString save_game_metadata(const QString& collection_name, const QString& game_path,
                            const QString& game_title, const QVariantMap& changes, bool scraped = false);
 /// Pegasus X: many games of one collection at once (the file is read and
-/// written once): with `backup`, a copy of the file first (reason "scrape")
+/// written once): with `backup`, a copy of the file first (named after
+/// `backup_reason`: "scrape" for the RetroAchievements matches, "edit" for
+/// Library > Genres' changes)
 struct GameEdit {
     QString path;
     QString title;
     QVariantMap changes;
 };
-QString save_games_metadata(const QString& collection_name, const std::vector<GameEdit>& edits, bool backup);
+QString save_games_metadata(const QString& collection_name, const std::vector<GameEdit>& edits, bool backup,
+                            const QString& backup_reason = QStringLiteral("scrape"));
 /// Pegasus X: a game's entries whose key starts with `prefix` (eg. "x-ra-"),
 /// as in its file now: key -> values
 QVariantMap game_extra_fields(const QString& collection_name, const QString& game_path, const QString& prefix);

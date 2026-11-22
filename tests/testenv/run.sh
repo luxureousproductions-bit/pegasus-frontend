@@ -129,14 +129,14 @@ shot 03-library-review
 keys Escape
 # Genres (the row under Needs your check): a genre's games, one of them on its page, and back.
 # The fixture's genres: Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up),
-# A to Z, under Hide genres...; a genre's page: its two spellings side by side (the first
-# selected), then its games
+# A to Z, under Hide genres...; a genre's page: Change this genre... (selected), its two
+# spellings side by side, then its games
 keys Down Return
 sleep 1
 shot 03-genres
 keys Down Return
 shot 03-genre-games
-keys Down Down Return
+keys Down Down Down Return
 sleep 1
 shot 03-genre-game
 keys Escape
@@ -153,6 +153,25 @@ keys Escape
 shot 03-genres-hidden
 keys Return Return Escape
 shot 03-genres-shown-again
+# Change this genre...: Platform (2 games, two spellings) becomes Platformer, typed; then
+# Shoot'em Up's first spelling (the straight ', A to Z on a tie) for both its games
+keys Down Return Return
+shot 03-genre-pick
+keys Return
+sleep 1
+xdotool type --clearmodifiers --delay 150 "Platformer"
+sleep 1
+shot 03-genre-type
+keys Return
+shot 03-genre-confirm
+keys Down Return
+sleep 2
+shot 03-genre-changed
+keys Down Return Down Return
+shot 03-genre-spelling-confirm
+keys Down Return
+sleep 2
+shot 03-genre-spelling-used
 keys Escape
 shot 03-genres-back
 keys Down Down Down Down Down
@@ -379,6 +398,46 @@ done
         echo "    OK: shown again: genres/hidden gone from pegasusx.ini"
     fi
     strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: " | sort -u | sed 's/^/    /'
+    echo
+    echo "### Change this genre... (Platform -> Platformer; Shoot’em Up -> Shoot'em Up)"
+    python3 - "$CFG/gamedirectory" "$T" <<'PY' | sed 's/^/    /'
+import glob, os, sys
+gd, t = sys.argv[1:3]
+genres = {}   # game file name -> genres, in the game directory
+for path in glob.glob(os.path.join(gd, "*", "metadata.pegasus.txt")):
+    cur, files, gen = None, [], None
+    def flush():
+        for f in files:
+            genres[os.path.basename(f)] = gen
+    for line in open(path, encoding="utf-8").read().split("\n"):
+        if line.startswith("game:") or line.startswith("collection:"):
+            flush(); files, gen = [], None
+        elif line.startswith("file:"):
+            files.append(line[5:].strip())
+        elif line.startswith("genre:"):
+            gen = line[6:].strip()
+    flush()
+want = {
+    "Super Mario World (USA).sfc": "Platformer",
+    "Crash Bandicoot (USA).chd": "Platformer",
+    "Wind Waker (USA).iso": "Shoot'em Up",
+}
+for f, g in want.items():
+    have = genres.get(f)
+    print(("OK: " if have == g else "FAILED: ") + "%s: genre %r in the game directory (wanted %r)" % (f, have, g))
+# already spelled so: not written
+have = genres.get("Metroid Prime (USA).iso")
+print(("OK: " if have in (None, "Shoot'em Up") else "FAILED: ") + "Metroid Prime (USA).iso (already Shoot'em Up): %r in the game directory" % (have,))
+# the files a change never writes to: the folder's own gamelist, the Pegasus metadata file
+own = open(os.path.join(t, "MyGames/psx/gamelist.xml"), encoding="utf-8").read()
+print(("OK: " if "<genre>platform</genre>" in own else "FAILED: ") + "psx's own gamelist.xml keeps <genre>platform</genre>")
+peg = open(os.path.join(t, "Pegasus/gamecube/metadata.pegasus.txt"), encoding="utf-8").read()
+print(("OK: " if "genre: Shoot’em Up" in peg and "genre: Shoot'em Up" in peg else "FAILED: ")
+      + "Pegasus/gamecube/metadata.pegasus.txt keeps both its spellings")
+PY
+    n_edit="$(find "$CFG/backup" -name "*.edit.*" 2>/dev/null | wc -l)"
+    echo "    backups made before the changes (reason edit): $n_edit"
+    strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: \".*\" -> \|games saved in" | sed 's/^/    /'
     echo
     echo "## ROM folders per system (Settings > Game directory > a system > Folders)"
     strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Folders:" | sed 's/^.*Test: Folders: /    /'
