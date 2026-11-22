@@ -446,6 +446,19 @@ PY
     echo "    backups made before the changes (reason edit): $n_edit"
     strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: \".*\" -> \|games saved in" | sed 's/^/    /'
     echo
+    echo "## Art folders aren't read for games (psx/media/, psx/skraper/ have .zip files)"
+    if grep -E "^file: .*/MyGames/psx/(media|skraper)/" "$CFG/gamedirectory/psx/metadata.pegasus.txt" >/dev/null 2>&1; then
+        echo "    FAILED: a file in psx's art folders is listed as a game:"
+        grep -E "^file: .*/MyGames/psx/(media|skraper)/" "$CFG/gamedirectory/psx/metadata.pegasus.txt" | sed 's/^/        /'
+    else
+        echo "    OK: nothing in psx/media/ or psx/skraper/ is listed as a game"
+    fi
+    if awk '/^Crash Bandicoot/{f=1;next} /^[^ ]/{f=0} f' "$R/art-per-game.txt" 2>/dev/null | grep -q "media/crash.png"; then
+        echo "    OK: Crash Bandicoot still has its picture from psx/media/"
+    else
+        echo "    FAILED: Crash Bandicoot's psx/media/crash.png isn't in its art"
+    fi
+    echo
     echo "## A game added in a subfolder of a watched folder (psx/Extra/, after the first start)"
     if grep -q "Ape Escape (USA).chd" "$CFG/gamedirectory/psx/metadata.pegasus.txt" 2>/dev/null; then
         echo "    OK: Ape Escape is in psx's list without a Rescan"

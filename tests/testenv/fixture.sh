@@ -93,6 +93,10 @@ done
 printf 'Final Fantasy VII (USA) (Disc 1).cue\nFinal Fantasy VII (USA) (Disc 2).cue\n' > "$T/MyGames/psx/Final Fantasy VII (USA).m3u"
 rom "$T/MyGames/psx/Crash Bandicoot (USA).chd"
 pic "$T/MyGames/psx/media/crash.png" 400x400 "#e70" "Crash (gamelist image)"
+# files with a psx extension in its art folders: art, never games
+rom "$T/MyGames/psx/media/Crash Bandicoot (USA).zip"
+mkdir -p "$T/MyGames/psx/skraper/box2d"
+rom "$T/MyGames/psx/skraper/box2d/Crash Bandicoot (USA).zip"
 cat > "$T/MyGames/psx/gamelist.xml" <<'XML'
 <?xml version="1.0"?>
 <gameList>

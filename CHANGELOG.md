@@ -5,6 +5,32 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Game discovery skips the art folders
+
+- **What:** when Pegasus X looks for game files in a system folder (ROM
+  folder import, watched-folder refresh, ES-DE import, the game counts on
+  the Add systems/Folders pages), the folder's own media/, .media/ and
+  skraper/ (any letter case) are no longer walked. Pegasus' own scan of a
+  metadata file's folder (a collection with `extensions:`) already left out
+  media/; it now also leaves out Media/ and skraper/.
+- **Why:** those folders hold art (often thousands of files); walking them
+  cost time, and a file in them with one of the system's extensions (a
+  .zip, a .png for PICO-8) would have been listed as a game.
+- **Only the system folder's own art folders:** a folder called media
+  deeper down (switch/Zelda/media) is still read, as before, and so is
+  every other folder, also a folder that is one game.
+- **Not changed:** art is still found in those folders (that's a separate
+  read: the gamelist's paths, ES-DE's media, the media/ kinds); nothing is
+  deleted or moved; metadata files that name a file in them still work.
+- **Tests:** the fixture puts a .zip in psx/media/ and in psx/skraper/box2d/;
+  the summary checks that neither is listed as a game and that Crash
+  Bandicoot still has its psx/media/crash.png.
+- **Files:** `src/backend/providers/esde/EsdeProvider.cpp` (`is_art_folder`,
+  `find_game_groups`, `quick_game_count`),
+  `src/backend/providers/pegasus_metadata/PegasusFilter.cpp`,
+  `tests/testenv/fixture.sh`, `tests/testenv/run.sh`.
+- **Commit:** "Game discovery skips the art folders".
+
 ### Watched ROM folders: games added in a subfolder are found
 
 - **What:** when Pegasus X checks whether a watched ROM folder changed

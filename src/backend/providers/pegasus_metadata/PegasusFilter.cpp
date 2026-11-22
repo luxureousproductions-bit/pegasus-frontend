@@ -39,11 +39,15 @@ std::vector<QString> all_valid_direct_subdirs(const QString& filter_dir)
     std::vector<QString> result;
 
     QDirIterator dirs_it(filter_dir, subdir_filters, subdir_flags);
-    while (dirs_it.hasNext())
-        result.emplace_back(dirs_it.next());
-
-    const QString media_dir = filter_dir + QStringLiteral("/media");
-    VEC_REMOVE_VALUE(result, media_dir);
+    while (dirs_it.hasNext()) {
+        const QString path = dirs_it.next();
+        // Pegasus X: the art folders are left out (media/ as before, any
+        // letter case, and Skraper's skraper/; .media/ is hidden already)
+        const QString name = dirs_it.fileName().toLower();
+        if (name == QLatin1String("media") || name == QLatin1String("skraper"))
+            continue;
+        result.emplace_back(path);
+    }
 
     return result;
 }

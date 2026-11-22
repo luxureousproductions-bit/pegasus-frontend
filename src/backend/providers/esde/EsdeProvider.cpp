@@ -816,21 +816,43 @@ QStringList referenced_files(const QFileInfo& finfo)
 ///   in the same folder are one game with several files; Pegasus then asks
 ///   which disc to start
 /// Subfolders are searched too, so games in their own folder are found.
+// Pegasus X: the art folders of a system folder (media/, .media/,
+// skraper/, as ES-DE, Skraper and Pegasus put them next to the games): never
+// looked into for games. Their art is still found (that's read on its own).
+bool is_art_folder(const QString& name)
+{
+    const QString lower = name.toLower();
+    return lower == QLatin1String("media") || lower == QLatin1String(".media") || lower == QLatin1String("skraper");
+}
+
 std::vector<std::vector<QFileInfo>> find_game_groups(const QString& system_dir, const QStringList& extensions,
                                                      const QSet<QString>& skipped_paths)
 {
     std::vector<QFileInfo> candidates;
     constexpr auto entry_filters = QDir::Files | QDir::Dirs | QDir::Readable | QDir::NoDotAndDotDot;
-    constexpr auto entry_flags = QDirIterator::FollowSymlinks | QDirIterator::Subdirectories;
-    QDirIterator file_it(system_dir, entry_filters, entry_flags);
-    while (file_it.hasNext()) {
-        file_it.next();
-        const QFileInfo finfo = file_it.fileInfo();
+    const auto consider = [&](const QFileInfo& finfo) {
         if (!has_extension(finfo.fileName(), extensions))
-            continue;
+            return;
         if (skipped_paths.contains(::clean_abs_path(finfo)))
-            continue;
+            return;
         candidates.push_back(finfo);
+    };
+    // the system folder's own entries, then each of its folders all the way
+    // down, its art folders left out
+    QDirIterator top_it(system_dir, entry_filters, QDirIterator::FollowSymlinks);
+    while (top_it.hasNext()) {
+        top_it.next();
+        const QFileInfo finfo = top_it.fileInfo();
+        if (finfo.isDir() && is_art_folder(finfo.fileName()))
+            continue;
+        consider(finfo);
+        if (!finfo.isDir())
+            continue;
+        QDirIterator file_it(finfo.absoluteFilePath(), entry_filters, QDirIterator::FollowSymlinks | QDirIterator::Subdirectories);
+        while (file_it.hasNext()) {
+            file_it.next();
+            consider(file_it.fileInfo());
+        }
     }
     std::sort(candidates.begin(), candidates.end(), [](const QFileInfo& a, const QFileInfo& b) {
         return a.absoluteFilePath().compare(b.absoluteFilePath(), Qt::CaseInsensitive) < 0;
@@ -1751,6 +1773,8 @@ int quick_game_count(const QString& dir, const QStringList& extensions, int dept
         bool is_dir = entry->d_type == DT_DIR;
         if (entry->d_type == DT_UNKNOWN || entry->d_type == DT_LNK)
             is_dir = QFileInfo(dir % QLatin1Char('/') % name).isDir();
+        if (depth == 0 && is_dir && is_art_folder(name))
+            continue;  // media/, skraper/: art, not games (as find_game_groups)
         if (has_extension(name, extensions))
             count++;  // a game file, or a folder that is one game
         else if (is_dir)
