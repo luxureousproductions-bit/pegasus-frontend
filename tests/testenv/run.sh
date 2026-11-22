@@ -55,6 +55,11 @@ stop() {  # name
     cp "$CFG/lastrun.log" "$R/logs/$1.log" 2>/dev/null
 }
 
+# an older build (2230-2238) hid Platform from Library > Genres: no genre is hidden now, and
+# the first start removes the entry
+mkdir -p "$CFG"
+printf '[genres]\nhidden=platform\n' >> "$CFG/pegasusx.ini"
+
 # -- 1. first start: the ES-DE import and the ROM folder import, then the theme --
 start 01-first-start "" 15 PEGASUSX_TEST_ESDE_IMPORT=1 "PEGASUSX_TEST_ROM_FOLDERS=$T/MyGames"
 # the first-start setup: through its four steps (keeping the folder, skipping the rest)
@@ -72,6 +77,7 @@ keys Down Return
 sleep 2
 shot 01-theme
 stop 01-first-start
+cp "$CFG/pegasusx.ini" "$R/files/pegasusx-after-first-start.ini" 2>/dev/null
 cp "$CFG/game_dirs.txt" "$R/files/game_dirs.txt" 2>/dev/null
 find "$T" -name "esde-import.metadata.pegasus.txt" | while read -r f; do
     cp "$f" "$R/files/OLD-PLACE_$(echo "${f#$T/}" | tr '/ ' '__')"
@@ -131,14 +137,14 @@ keys Down Return
 sleep 1
 shot 03-library-review
 keys Escape
-# Genres (the row under Needs your check): a genre's games, one of them on its page, and back.
-# The fixture's genres: Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up),
-# A to Z, under Hide genres...; a genre's page: Change this genre... (selected), its two
-# spellings side by side, then its games
+# Genres (the row under Needs your check). The fixture's genres, A to Z: Action (1 game),
+# Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up), under Search
+# genres..., Only genres with 1 game and Sort (Search selected first). A genre's page:
+# Change this genre... (selected), its two spellings side by side, then its games
 keys Down Return
 sleep 1
 shot 03-genres
-keys Down Return
+keys Down Down Down Down Return
 shot 03-genre-games
 keys Down Down Down Return
 sleep 1
@@ -147,19 +153,29 @@ keys Escape
 shot 03-genre-games-back
 keys Escape Down Return
 shot 03-genre-spellings
-# Hide genres...: Platform hidden (kept in pegasusx.ini), then shown again
+# Search genres...: "shoot" narrows the list as it's typed; then cleared
 keys Escape q Return
-shot 03-genres-hide
+sleep 1
+xdotool type --clearmodifiers --delay 150 "shoot"
+sleep 1
+shot 03-genres-search-typing
 keys Return
-shot 03-genres-hide-platform
-cp "$CFG/pegasusx.ini" "$R/files/pegasusx-after-hide.ini" 2>/dev/null
-keys Escape
-shot 03-genres-hidden
-keys Return Return Escape
-shot 03-genres-shown-again
+shot 03-genres-search
+keys Return
+sleep 1
+keys BackSpace BackSpace BackSpace BackSpace BackSpace Return
+shot 03-genres-search-cleared
+# Only genres with 1 game (Action), then off; Sort: most games first, fewest, A to Z again
+keys Down Return
+shot 03-genres-only-ones
+keys Return Down Return
+shot 03-genres-sort-most
+keys Return
+shot 03-genres-sort-fewest
+keys Return
 # Change this genre...: Platform (2 games, two spellings) becomes Platformer, typed; then
 # Shoot'em Up's first spelling (the straight ', A to Z on a tie) for both its games
-keys Down Return Return
+keys Down Down Return Return
 shot 03-genre-pick
 keys Return
 sleep 1
@@ -393,17 +409,13 @@ done
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game|Imports onto your games" | head -n 5 | sed 's/^/    /'
     echo
     echo "## Library > Genres"
-    if grep -A3 "^\[genres\]" "$R/files/pegasusx-after-hide.ini" 2>/dev/null | grep -q "^hidden=platform$"; then
-        echo "    OK: Hide genres... kept Platform's key (genres/hidden=platform)"
+    # an older build's hidden genre (genres/hidden=platform, put in before the first start)
+    if grep -q "^hidden=" "$R/files/pegasusx-after-first-start.ini" 2>/dev/null; then
+        echo "    FAILED: the old genres/hidden entry is still in pegasusx.ini after the first start"
     else
-        echo "    FAILED: no genres/hidden=platform in pegasusx.ini after hiding Platform:"
-        grep -A3 "^\[genres\]" "$R/files/pegasusx-after-hide.ini" 2>/dev/null | sed 's/^/        /'
+        echo "    OK: the old genres/hidden entry is gone after the first start"
     fi
-    if grep -q "^\[genres\]" "$CFG/pegasusx.ini" 2>/dev/null && grep -A3 "^\[genres\]" "$CFG/pegasusx.ini" | grep -q "^hidden="; then
-        echo "    FAILED: Platform shown again, but pegasusx.ini still has genres/hidden"
-    else
-        echo "    OK: shown again: genres/hidden gone from pegasusx.ini"
-    fi
+    strip_ansi "$R/logs/01-first-start.stdout" | grep -h "hidden genres of an older build" | sed 's/^/    /'
     strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: " | sort -u | sed 's/^/    /'
     echo
     echo "### Change this genre... (Platform -> Platformer; Shoot’em Up -> Shoot'em Up)"

@@ -11,7 +11,8 @@
 #                              Extra/ gets a game after the first start
 #   genres, for Library > Genres: Platform (Super Mario World) and platform
 #   (Crash Bandicoot), Shoot'em Up (Metroid Prime) and Shoot’em Up (Wind
-#   Waker, a curly apostrophe): two genres of two spellings each
+#   Waker, a curly apostrophe): two genres of two spellings each; and Action
+#   (Metroid Prime too), a genre of one game
 #   Pegasus/gamecube ......... a folder with a Pegasus metadata file
 #   storage/ROMs/metadata.pegasus.txt  your own file for a game ES-DE has too
 #   home/.config/pegasus-frontend/game_dirs.txt (Pegasus/gamecube, storage/ROMs)
@@ -123,6 +124,7 @@ game: Metroid Prime
 file: Metroid Prime (USA).iso
 description: Written in a Pegasus metadata file.
 genre: Shoot'em Up
+  Action
 
 game: Wind Waker (USA)
 file: Wind Waker (USA).iso

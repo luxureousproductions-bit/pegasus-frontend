@@ -74,6 +74,42 @@ function group(gameGenres, skip) {
     return out;
 }
 
+// -- The list as shown: search, one-game filter, sort ----------------------------------------
+
+// the rows of group() to show: `query` (part of a name, matched as the key
+// is made: letter case, apostrophes and spaces don't matter; any of a
+// genre's spellings counts), `onlyOnes` (only genres with 1 game), and
+// `order`: "az" (as group() gives them, A to Z), "most" or "fewest" (by
+// game count; the same count: A to Z). Never changes the rows themselves.
+function view(rows, query, onlyOnes, order) {
+    var q = key(query || "");
+    var out = [];
+    for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        if (onlyOnes && r.count !== 1)
+            continue;
+        if (q !== "") {
+            var hit = r.key.indexOf(q) >= 0;
+            for (var s = 0; !hit && s < r.spellings.length; s++)
+                hit = key(r.spellings[s].name).indexOf(q) >= 0;
+            if (!hit)
+                continue;
+        }
+        out.push(r);
+    }
+    if (order === "most" || order === "fewest") {
+        var place = {};
+        for (i = 0; i < out.length; i++)
+            place[out[i].key] = i;  // the A to Z place, for the same count
+        out.sort(function(a, b) {
+            if (a.count !== b.count)
+                return order === "most" ? b.count - a.count : a.count - b.count;
+            return place[a.key] - place[b.key];
+        });
+    }
+    return out;
+}
+
 // -- Change a genre in its games (a genre's page) ------------------------------------------
 
 // a game's genres with every spelling of the genre `fromKey` replaced by

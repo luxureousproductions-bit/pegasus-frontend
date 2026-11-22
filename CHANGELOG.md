@@ -5,6 +5,46 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Genres: search, one-game filter and sort instead of hiding
+
+- **What:** Library > Genres no longer hides genres. "Hide genres...", its
+  page with the Shown/Hidden switches, the "N hidden" text and the setting
+  behind it (`hiddenGenres`/`setHiddenGenres`, `[genres] hidden=` in
+  pegasusx.ini) are gone; a `hidden=` entry an earlier build saved is
+  removed at the next start (logged), and nothing reads it any more. In
+  their place, three rows above the list (only the view: no metadata is
+  written, and they start fresh each time Genres is opened):
+  - **Search genres...:** Pegasus' keyboard; the list narrows as you type
+    (part of a name; letter case, apostrophes and spacing don't matter, and
+    any of a genre's spellings counts). Start or Done keeps it, B puts the
+    previous search back; an empty search shows the whole list. The row
+    shows the search in quotes.
+  - **Only genres with 1 game:** On/Off.
+  - **Sort:** A to Z (the default, as before) → Most games first → Fewest
+    games first → A to Z; the same count stays A to Z.
+  The header still counts the whole library ("N genres · M with only one
+  game") and adds " · K shown" while a search or the filter narrows it;
+  "No genre matches." when nothing is left. A to Z stays the default
+  because it's what the list did and what a search reads best with.
+- **Why:** hiding wasn't what was wanted; filtering and sorting the list
+  was.
+- **Not changed:** the counting, a genre's page (spellings, Change this
+  genre..., its games), the pick and confirm pages, the keyboard for
+  "Type a genre...", Back, the keys (LB/RB top or bottom, LT/RT 10 rows).
+  The rows A/tap opens or switches, like the other rows.
+- **Tests:** `test_GenreKey` `view_search`, `view_only_ones`, `view_sort`.
+  The test environment puts an old `hidden=platform` in pegasusx.ini before
+  the first start and checks it's gone; the fixture's Metroid Prime also
+  has Action (a one-game genre); new steps search ("shoot", as typed and
+  kept), clear it, the 1-game filter and both sorts (screenshots, and a
+  log line per view); the Hide genres steps are gone.
+- **Files:** `src/frontend/menu/settings/GenresScreen.qml`,
+  `src/frontend/menu/settings/GenreKey.js` (`view`),
+  `src/backend/model/internal/settings/Settings.h/.cpp`,
+  `tests/frontend/genrekey/test_GenreKey.cpp`, `tests/testenv/fixture.sh`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Genres: search, one-game filter and sort instead of hiding".
+
 ### Android's earlier memory warnings are handled
 
 - **What:** Pegasus X now listens to Android's onTrimMemory warnings

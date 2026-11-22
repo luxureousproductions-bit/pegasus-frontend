@@ -58,6 +58,9 @@ private slots:
     void replace_data();
     void replace();
     void same();
+    void view_search();
+    void view_only_ones();
+    void view_sort();
 };
 
 QString test_GenreKey::key(const QString& name)
@@ -325,6 +328,66 @@ void test_GenreKey::same()
     QVERIFY(fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }), m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }) }).toBool());
     QVERIFY(!fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }), m_js.toScriptValue(QStringList { QStringLiteral("B"), QStringLiteral("A") }) }).toBool());
     QVERIFY(!fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("a") }), m_js.toScriptValue(QStringList { QStringLiteral("A") }) }).toBool());
+}
+
+// the list as shown: rows of group(), searched, filtered, sorted (names only)
+static QStringList view_names(QJSEngine& js, const QJSValue& rows, const QString& query, bool only_ones, const QString& order)
+{
+    QJSValue fn = js.globalObject().property(QStringLiteral("view"));
+    const QJSValue out = fn.call({ rows, query, only_ones, order });
+    QStringList names;
+    for (int i = 0; i < out.property(QStringLiteral("length")).toInt(); i++)
+        names << out.property(i).property(QStringLiteral("name")).toString()
+                 + QLatin1Char(':') + QString::number(out.property(i).property(QStringLiteral("count")).toInt());
+    return names;
+}
+static QList<QStringList> view_games()
+{
+    return {
+        { QStringLiteral("Action") }, { QStringLiteral("Action") }, { QStringLiteral("Action") },
+        { QStringLiteral("Platform") }, { QStringLiteral("platform") },
+        { QStringLiteral("Shoot’em Up") }, { QStringLiteral("RPG") }, { QStringLiteral("Beat'em Up / Fantasy") },
+    };
+}
+
+// part of a name, any case, apostrophe or spacing; any spelling counts
+void test_GenreKey::view_search()
+{
+    const QJSValue rows = group(view_games());
+    QCOMPARE(view_names(m_js, rows, QString(), false, QStringLiteral("az")).size(), 5);
+    QCOMPARE(view_names(m_js, rows, QStringLiteral("plat"), false, QStringLiteral("az")),
+             QStringList { QStringLiteral("Platform:2") });
+    QCOMPARE(view_names(m_js, rows, QStringLiteral("shoot'em"), false, QStringLiteral("az")),
+             QStringList { QStringLiteral("Shoot’em Up:1") });
+    QCOMPARE(view_names(m_js, rows, QStringLiteral("  EM up"), false, QStringLiteral("az")),
+             QStringList({ QStringLiteral("Beat'em Up / Fantasy:1"), QStringLiteral("Shoot’em Up:1") }));
+    QVERIFY(view_names(m_js, rows, QStringLiteral("zzz"), false, QStringLiteral("az")).isEmpty());
+    // the rows themselves aren't changed
+    QCOMPARE(rows.property(QStringLiteral("length")).toInt(), 5);
+}
+
+void test_GenreKey::view_only_ones()
+{
+    const QJSValue rows = group(view_games());
+    QCOMPARE(view_names(m_js, rows, QString(), true, QStringLiteral("az")),
+             QStringList({ QStringLiteral("Beat'em Up / Fantasy:1"), QStringLiteral("RPG:1"), QStringLiteral("Shoot’em Up:1") }));
+    QCOMPARE(view_names(m_js, rows, QStringLiteral("rpg"), true, QStringLiteral("az")),
+             QStringList { QStringLiteral("RPG:1") });
+}
+
+// by game count both ways; the same count stays A to Z
+void test_GenreKey::view_sort()
+{
+    const QJSValue rows = group(view_games());
+    QCOMPARE(view_names(m_js, rows, QString(), false, QStringLiteral("az")),
+             QStringList({ QStringLiteral("Action:3"), QStringLiteral("Beat'em Up / Fantasy:1"), QStringLiteral("Platform:2"),
+                           QStringLiteral("RPG:1"), QStringLiteral("Shoot’em Up:1") }));
+    QCOMPARE(view_names(m_js, rows, QString(), false, QStringLiteral("most")),
+             QStringList({ QStringLiteral("Action:3"), QStringLiteral("Platform:2"), QStringLiteral("Beat'em Up / Fantasy:1"),
+                           QStringLiteral("RPG:1"), QStringLiteral("Shoot’em Up:1") }));
+    QCOMPARE(view_names(m_js, rows, QString(), false, QStringLiteral("fewest")),
+             QStringList({ QStringLiteral("Beat'em Up / Fantasy:1"), QStringLiteral("RPG:1"), QStringLiteral("Shoot’em Up:1"),
+                           QStringLiteral("Platform:2"), QStringLiteral("Action:3") }));
 }
 
 

@@ -23,8 +23,9 @@ import QtQuick 2.6
 // with how many games have it (one-offs in amber, so they stand out); a genre
 // lists its games, and a game opens in Library to fix its genre there. A
 // genre with more than one spelling lists them above its games, side by
-// side, what differs marked. Hide genres... leaves genres out of the list
-// (pegasusx.ini, genres/hidden: only this list reads it). On a genre's
+// side, what differs marked. Above the list: Search genres..., Only genres
+// with 1 game and Sort (A to Z, most or fewest games): they only change what
+// the list shows, for as long as Genres is open. On a genre's
 // page, "Change this genre..." (or A on one of its spellings) replaces it in
 // all its games at once, after a page that shows which games change: the
 // one thing here that writes (each game's other genres stay).
@@ -36,12 +37,14 @@ FocusScope {
 
     anchors.fill: parent
 
-    property string page: "genres"   // genres, games, hide (Hide genres...), pick, confirm (Change this genre...)
+    property string page: "genres"   // genres, games, pick, confirm (Change this genre...)
     property string genre: ""        // the one whose games are listed (as shown)
     property string genreKey: ""     // ...and its key (GenreKey.key: every spelling of it)
     property var allGenres: []       // [{ key, name, count, spellings }], A to Z (GenreKey.group)
-    property var genreList: []       // ...without the hidden ones: the list shown
-    property var hiddenKeys: ({})    // key -> true: left out of the list (Hide genres...)
+    property var genreList: []       // ...as shown: searched, filtered, sorted (GenreKey.view)
+    property string query: ""        // Search genres...: part of a name
+    property bool onlyOnes: false    // Only genres with 1 game
+    property string order: "az"      // Sort: az (A to Z), most, fewest (games)
     property var gameList: []        // [{ title, coll, obj, spelling }] of `genre`
     property var spellingList: []    // [{ name, count }] of `genre`, most games first (GenreKey.group)
     property string target: ""       // Change this genre...: what it becomes
@@ -70,43 +73,21 @@ FocusScope {
             console.log("Genres: \"" + out[r].name + "\" counts " + sp.length + " spellings as one: " + parts.join(" | "));
         }
         allGenres = out;
-        applyHidden();
+        applyView();
     }
-    // the list shown: every genre but the hidden ones
-    function applyHidden() {
-        var shown = [];
-        for (var i = 0; i < allGenres.length; i++) {
-            if (!hiddenKeys[allGenres[i].key])
-                shown.push(allGenres[i]);
+    // the list shown: the search, the one-game filter and the sort applied
+    // (only the view: no genre is left out for good, nothing is written)
+    function applyView() {
+        genreList = GenreKey.view(allGenres, query, onlyOnes, order);
+        if (query !== "" || onlyOnes || order !== "az") {
+            var names = [];
+            for (var i = 0; i < genreList.length; i++)
+                names.push(genreList[i].name + " (" + genreList[i].count + ")");
+            console.log("Genres: search \"" + query + "\", only 1 game " + onlyOnes + ", sort " + order + ": " + names.join(", "));
         }
-        genreList = shown;
     }
-    function hiddenCount() {
-        var n = 0;
-        for (var i = 0; i < allGenres.length; i++) {
-            if (hiddenKeys[allGenres[i].key])
-                n++;
-        }
-        return n;
-    }
-    function readHidden() {
-        var map = {};
-        var keys = Internal.settings.hiddenGenres();
-        for (var i = 0; i < keys.length; i++)
-            map[keys[i]] = true;
-        hiddenKeys = map;
-    }
-    // hidden <-> shown, saved at once (the keys of every hidden one, also
-    // those no game has now: they stay hidden if a game gets them again)
-    function toggleHidden(key) {
-        var map = Object.assign({}, hiddenKeys);
-        if (map[key])
-            delete map[key];
-        else
-            map[key] = true;
-        hiddenKeys = map;
-        Internal.settings.setHiddenGenres(Object.keys(map));
-        applyHidden();
+    function orderText(o) {
+        return (o === "most" ? qsTr("Most games first") : o === "fewest" ? qsTr("Fewest games first") : qsTr("A to Z")) + api.tr;
     }
     function readGames(key) {
         var out = [];
@@ -266,31 +247,28 @@ FocusScope {
             }
             return out;
         }
-        var hidden = hiddenCount();
-        if (page === "hide") {
-            out.push({ "kind": "info", "text": qsTr("A hidden genre stays out of the Genres list. Your games keep it.") + api.tr,
-                       "value": "" });
-            for (i = 0; i < allGenres.length; i++) {
-                var off = hiddenKeys[allGenres[i].key] === true;
-                out.push({ "kind": "hide", "text": allGenres[i].name, "key": allGenres[i].key, "one": off,
-                           "value": (off ? qsTr("Hidden") : qsTr("Shown")) + api.tr });
-            }
-            return out;
-        }
         var ones = 0;
-        for (i = 0; i < genreList.length; i++) {
-            if (genreList[i].count === 1)
+        for (i = 0; i < allGenres.length; i++) {
+            if (allGenres[i].count === 1)
                 ones++;
         }
+        var narrowed = query !== "" || onlyOnes;
         out.push({ "kind": "info", "text": (allGenres.length === 0 ? qsTr("No genres in your library yet")
-                                            : qsTr("%1 genres · %2 with only one game").arg(genreList.length).arg(ones)) + api.tr
-                                           + (hidden > 0 ? qsTr(" · %1 hidden").arg(hidden) + api.tr : ""),
+                                            : qsTr("%1 genres · %2 with only one game").arg(allGenres.length).arg(ones)) + api.tr
+                                           + (narrowed ? qsTr(" · %1 shown").arg(genreList.length) + api.tr : ""),
                    "value": "" });
         if (message !== "")
             out.push({ "kind": "info", "text": message, "value": "" });
-        if (allGenres.length > 0)
-            out.push({ "kind": "hideopen", "text": qsTr("Hide genres...") + api.tr,
-                       "value": (hidden > 0 ? qsTr("%1 hidden").arg(hidden) : qsTr("none hidden")) + api.tr });
+        // what the list shows (search, filter, sort): A opens or switches
+        if (allGenres.length > 0) {
+            out.push({ "kind": "search", "text": qsTr("Search genres...") + api.tr,
+                       "value": query !== "" ? "\u201C" + query + "\u201D" : "" });
+            out.push({ "kind": "ones", "text": qsTr("Only genres with 1 game") + api.tr,
+                       "value": (onlyOnes ? qsTr("On") : qsTr("Off")) + api.tr });
+            out.push({ "kind": "sort", "text": qsTr("Sort") + api.tr, "value": orderText(order) });
+            if (genreList.length === 0)
+                out.push({ "kind": "info", "text": qsTr("No genre matches.") + api.tr, "value": "" });
+        }
         for (i = 0; i < genreList.length; i++) {
             var c = genreList[i].count;
             var nSp = genreList[i].spellings.length;
@@ -304,7 +282,7 @@ FocusScope {
     // a row by its text (a genre: by its key, as the spelling shown may change)
     function select(kind, text) {
         for (var i = 0; i < rows.length; i++) {
-            if (rows[i].kind === kind && (kind === "genre" || kind === "hide" ? rows[i].key === GenreKey.key(text) : rows[i].text === text)) {
+            if (rows[i].kind === kind && (kind === "genre" ? rows[i].key === GenreKey.key(text) : rows[i].text === text)) {
                 list.currentIndex = i;
                 list.positionViewAtIndex(i, ListView.Center);
                 return;
@@ -344,7 +322,9 @@ FocusScope {
         gameList = [];
         spellingList = [];
         message = "";
-        readHidden();
+        query = "";
+        onlyOnes = false;
+        order = "az";
         readGenres();
         list.jumpTo(false);
         list.positionViewAtBeginning();
@@ -379,7 +359,7 @@ FocusScope {
             openConfirm(row.text);
         }
         else if (row.kind === "type") {
-            typeDialog.open();
+            typeDialog.open("change");
         }
         else if (row.kind === "cancel") {
             back();
@@ -387,14 +367,18 @@ FocusScope {
         else if (row.kind === "apply") {
             applyPlan();
         }
-        else if (row.kind === "hideopen") {
-            page = "hide";
-            list.jumpTo(false);
-            list.positionViewAtBeginning();
+        else if (row.kind === "search") {
+            typeDialog.open("search");
         }
-        else if (row.kind === "hide") {
-            toggleHidden(row.key);
-            select("hide", row.text);
+        else if (row.kind === "ones") {
+            onlyOnes = !onlyOnes;
+            applyView();
+            select("ones", row.text);
+        }
+        else if (row.kind === "sort") {
+            order = order === "az" ? "most" : order === "most" ? "fewest" : "az";
+            applyView();
+            select("sort", row.text);
         }
     }
     function back() {
@@ -407,11 +391,6 @@ FocusScope {
                 select("target", target);
             else
                 list.jumpTo(false);
-            return;
-        }
-        if (page === "hide") {
-            page = "genres";
-            select("hideopen", qsTr("Hide genres...") + api.tr);
             return;
         }
         if (page === "games") {
@@ -447,7 +426,6 @@ FocusScope {
         text: root.page === "games" ? qsTr("Genres > %1").arg(root.genre) + api.tr
             : root.page === "pick" ? qsTr("Genres > %1 > Change to").arg(root.genre) + api.tr
             : root.page === "confirm" ? qsTr("Genres > %1 > Change").arg(root.genre) + api.tr
-            : root.page === "hide" ? qsTr("Genres > Hide genres") + api.tr
             : qsTr("Library > Genres") + api.tr
         z: 2
     }
@@ -572,7 +550,7 @@ FocusScope {
                 elide: Text.ElideRight
             }
             Text {
-                text: modelData.value + (["genre", "hideopen", "change", "type", "target"].indexOf(modelData.kind) >= 0 ? "   ›" : "")
+                text: modelData.value + (["genre", "search", "change", "type", "target"].indexOf(modelData.kind) >= 0 ? "   ›" : "")
                 color: modelData.one ? "#e8b06a" : "#c0c0c0"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(21)
@@ -609,20 +587,48 @@ FocusScope {
         visible: focus
         z: 4
 
-        function open() {
-            typeInput.text = "";
+        property string mode: "change"   // change (Type a genre...), search (Search genres...)
+        property string before: ""       // search: the search when it opened (B puts it back)
+        function open(how) {
+            mode = how;
+            before = root.query;
+            typeInput.text = how === "search" ? root.query : "";
+            typeInput.cursorPosition = typeInput.text.length;
             typeKeyboard.row = 1;
             typeKeyboard.col = 0;
             focus = true;
             typeKeyboard.focus = true;
         }
+        // search: the list narrows as you type
+        function typed() {
+            if (!visible || mode !== "search")
+                return;
+            root.query = typeInput.text;
+            root.applyView();
+        }
         function finish() {
             var text = typeInput.text.trim();
+            if (mode === "search") {
+                root.query = text;  // (empty: the whole list again)
+                root.applyView();
+                list.focus = true;
+                root.select("search", qsTr("Search genres...") + api.tr);
+                return;
+            }
             if (text === "")
                 return;
             list.focus = true;
             root.pickedFromList = true;
             root.openConfirm(text);
+        }
+        function cancel() {
+            if (mode === "search") {
+                root.query = before;
+                root.applyView();
+            }
+            list.focus = true;
+            if (mode === "search")
+                root.select("search", qsTr("Search genres...") + api.tr);
         }
         function genreNames() {
             var out = [];
@@ -634,7 +640,7 @@ FocusScope {
         Keys.onPressed: {
             if (api.keys.isCancel(event) && !event.isAutoRepeat) {
                 event.accepted = true;
-                list.focus = true;
+                typeDialog.cancel();
             }
         }
 
@@ -659,7 +665,8 @@ FocusScope {
                 spacing: vpx(12)
                 Text {
                     width: parent.width
-                    text: qsTr("Replace \"%1\" with").arg(root.genre) + api.tr
+                    text: (typeDialog.mode === "search" ? qsTr("Search genres: part of a name")
+                                                        : qsTr("Replace \"%1\" with").arg(root.genre)) + api.tr
                     color: "#eee"
                     font.family: globalFonts.sans
                     font.pixelSize: vpx(18)
@@ -684,6 +691,7 @@ FocusScope {
                         cursorVisible: typeDialog.visible
                         activeFocusOnPress: false  // no Android keyboard: Pegasus' own is below
                         clip: true
+                        onTextChanged: typeDialog.typed()
                     }
                 }
             }
@@ -695,7 +703,7 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             keyH: vpx(40)
             target: typeInput
-            suggestions: typeDialog.visible ? typeDialog.genreNames() : []
+            suggestions: typeDialog.visible && typeDialog.mode === "change" ? typeDialog.genreNames() : []
             onDone: typeDialog.finish()
         }
     }

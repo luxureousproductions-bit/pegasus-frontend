@@ -446,10 +446,6 @@ public:
     Q_INVOKABLE QString firstExistingDir(const QStringList& paths) const;
     /// Every genre used in the library, A to Z
     Q_INVOKABLE QStringList libraryGenres(QObject* all_games) const;
-    /// Pegasus X: the genres left out of Library > Genres (their keys, as
-    /// GenreKey.js makes them), in pegasusx.ini; only that list reads them
-    Q_INVOKABLE QStringList hiddenGenres() const;
-    Q_INVOKABLE void setHiddenGenres(const QStringList& keys);
     Q_INVOKABLE QStringList libraryValues(QObject* all_games, const QString& field) const;
     /// every word in the library (titles, descriptions, names, genres), the
     /// most used first: the keyboard's word suggestions (read once per library)

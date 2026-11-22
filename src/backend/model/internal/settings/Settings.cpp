@@ -554,6 +554,15 @@ void Settings::postInit()
     providers::esde::move_edits_to_overrides();
 #endif
     change_mouse_support(AppSettings::general.mouse_support);
+    // builds 2230-2238 could leave genres hidden from Library > Genres
+    // (pegasusx.ini, genres/hidden): nothing reads it any more; it goes
+    {
+        QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
+        if (file.contains(QStringLiteral("genres/hidden"))) {
+            file.remove(QStringLiteral("genres/hidden"));
+            Log::info(LOGMSG("Genres: the hidden genres of an older build were removed (no genre is hidden now)"));
+        }
+    }
 #ifdef WITH_COMPAT_ESDE
     // (games added to a ROM folder while Pegasus X was away: looked for in
     // the background once the library is up, startRomFolderRefresh; a
@@ -3505,25 +3514,6 @@ QStringList Settings::libraryGenres(QObject* all_games) const
     return libraryValues(all_games, QStringLiteral("genre"));
 }
 
-QStringList Settings::hiddenGenres() const
-{
-    const QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
-    return file.value(QStringLiteral("genres/hidden")).toStringList();
-}
-
-void Settings::setHiddenGenres(const QStringList& keys)
-{
-    QStringList list;
-    for (const QString& key : keys) {
-        if (!key.isEmpty() && !list.contains(key))
-            list.append(key);
-    }
-    QSettings file(pegasusx_settings_path(), QSettings::IniFormat);
-    if (list.isEmpty())
-        file.remove(QStringLiteral("genres/hidden"));
-    else
-        file.setValue(QStringLiteral("genres/hidden"), list);
-}
 
 // every distinct genre, developer, publisher or title in the library (`field`),
 // for the keyboard's suggestions
