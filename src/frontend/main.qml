@@ -164,6 +164,7 @@ Window {
             function onClose() {
                 theme.focus = true;
                 theme.finishSwap();  // a theme picked in the menu loads now
+                romRefresh.tryReload();  // games a background refresh found, if any
             }
 
             function onRequestShutdown() {
@@ -433,6 +434,30 @@ Window {
             genericMessage.setSource("dialogs/GenericOkDialog.qml",
                 { "title": qsTr("Error"), "message": msg });
             genericMessage.focus = true;
+        }
+    }
+    // Pegasus X: the watched ROM folders are checked in the background once
+    // the library is up. If lists were made again (games added or removed),
+    // the library is read again, but only while the theme is in front and
+    // active (not under the menu, a dialog or a game, so no splash on a
+    // return from a game): else when the menu is next closed, or at the next
+    // start (the lists are already written).
+    Connections {
+        id: romRefresh
+        target: Internal.settings
+        property bool pending: false
+        function tryReload() {
+            if (!pending || !theme.activeFocus || Internal.scanner.running)
+                return;
+            pending = false;
+            console.log("ROM folders: new or removed games, the library is read again");
+            Internal.settings.reloadLibrary();
+        }
+        function onRomFoldersRefreshed(lists) {
+            if (lists <= 0)
+                return;
+            pending = true;
+            tryReload();
         }
     }
     // Pegasus X: "Reload all games" lands on the theme (its home screen), the

@@ -332,6 +332,11 @@ void Backend::onScanFinished()
         m_scan_pending = true;
         m_scan_pending_force = true;
     }
+    // Pegasus X: the library is up: the watched ROM folders are checked in
+    // the background now, not before the library is read (once; not while
+    // another read is about to start, which would read the lists it writes)
+    if (!m_scan_pending)
+        m_api_private->settings().startRomFolderRefresh();
     if (m_scan_pending) {
         const bool force_refresh = m_scan_pending_force;
         m_scan_pending = false;

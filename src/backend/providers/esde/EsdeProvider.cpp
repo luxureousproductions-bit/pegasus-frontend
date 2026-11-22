@@ -42,6 +42,7 @@
 #include "utils/PathTools.h"
 
 #include <QDir>
+#include <atomic>
 #include <memory>
 #include <QDateTime>
 #include <QDirIterator>
@@ -2711,8 +2712,30 @@ void forget_rom_folders(const QStringList& folders)
     write_rom_folders(list);
 }
 
+namespace {
+// Pegasus X: one refresh or Rescan at a time (two would write the same
+// lists); a background one can be told to stop between folders
+QMutex& rom_refresh_mutex()
+{
+    static QMutex mutex;
+    return mutex;
+}
+std::atomic<bool>& rom_refresh_cancel()
+{
+    static std::atomic<bool> cancel { false };
+    return cancel;
+}
+} // namespace
+
+void cancel_rom_folder_refresh()
+{
+    rom_refresh_cancel().store(true);
+}
+
 int rescan_rom_folders()
 {
+    // a background refresh still going: stopped, as this reads everything
+    cancel_rom_folder_refresh();
     return refresh_rom_folders(true);
 }
 
@@ -2764,8 +2787,11 @@ QDateTime folder_changed(const QString& dir)
 }
 } // namespace
 
-int refresh_rom_folders(bool force)
+int refresh_rom_folders(bool force, bool cancellable)
 {
+    if (cancellable)
+        rom_refresh_cancel().store(false);  // (a cancel asked from here on counts)
+    const QMutexLocker lock(&rom_refresh_mutex());
     // a folder changed since its list was made (games added or removed): made again
     const std::vector<std::pair<QString, QString>> list = read_rom_folders();
     if (list.empty())
@@ -2773,6 +2799,10 @@ int refresh_rom_folders(bool force)
     std::unique_ptr<ImportSetup> setup;
     int refreshed = 0;
     for (const auto& entry : list) {
+        if (cancellable && rom_refresh_cancel().load()) {
+            Log::info(QStringLiteral("ROM folders"), LOGMSG("Refresh stopped (%1 lists made again so far)").arg(refreshed));
+            break;
+        }
         const QString& dir = entry.first;
         const QFileInfo dir_info(dir);
         if (!dir_info.isDir())

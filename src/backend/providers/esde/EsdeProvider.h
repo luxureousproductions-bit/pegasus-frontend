@@ -133,8 +133,13 @@ void forget_rom_folders(const QStringList& folders);
 /// Writes the game lists of a ROM folder's systems
 EsdeImportResult rom_folder_import(const QString& folder, const std::function<void(int, int, const QString&)>& progress);
 /// The remembered folders whose games changed since their list was made: made
-/// again. Returns how many. Quick when nothing changed.
-int refresh_rom_folders(bool force = false);
+/// again. Returns how many. Quick when nothing changed. One refresh (or
+/// Rescan) at a time: a second one waits for the first. With `cancellable`,
+/// it stops between folders once cancel_rom_folder_refresh() is called.
+int refresh_rom_folders(bool force = false, bool cancellable = false);
+/// Pegasus X: a cancellable refresh stops after the folder it's on (a
+/// Rescan, Reload all games or quitting asks this first)
+void cancel_rom_folder_refresh();
 /// Remembers system folders with a list made by Pegasus X (for refresh_rom_folders)
 void remember_rom_folders(const QStringList& folders, const QString& system);
 

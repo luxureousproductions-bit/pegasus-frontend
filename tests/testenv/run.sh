@@ -465,7 +465,11 @@ PY
     else
         echo "    FAILED: Ape Escape isn't in gamedirectory/psx/metadata.pegasus.txt"
     fi
-    strip_ansi "$R/logs/02-settings.stdout" 2>/dev/null | grep -h "ROM folders" | sed 's/^/    /' | head -n 5
+    # (checked in the background once the library is up: each start's line)
+    for f in "$R"/logs/*.stdout; do
+        strip_ansi "$f" | grep -h "Background refresh\|ROM folders: \(new or removed\|Refresh stopped\)\|game lists made again" \
+            | sed "s|^|    $(basename "$f" .stdout): |"
+    done | head -n 20
     echo
     echo "## ROM folders per system (Settings > Game directory > a system > Folders)"
     strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Folders:" | sed 's/^.*Test: Folders: /    /'

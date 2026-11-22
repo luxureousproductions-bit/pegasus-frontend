@@ -555,9 +555,10 @@ void Settings::postInit()
 #endif
     change_mouse_support(AppSettings::general.mouse_support);
 #ifdef WITH_COMPAT_ESDE
-    // games added to a ROM folder while Pegasus X was away: in the list
-    // before the library is read (quick when nothing changed)
-    providers::esde::refresh_rom_folders();
+    // (games added to a ROM folder while Pegasus X was away: looked for in
+    // the background once the library is up, startRomFolderRefresh; a
+    // background refresh still going stops when Pegasus X quits)
+    connect(qApp, &QCoreApplication::aboutToQuit, this, []{ providers::esde::cancel_rom_folder_refresh(); });
 #endif
 #if defined(PEGASUSX_TESTENV) && defined(WITH_COMPAT_ESDE)
     // the test environment: the imports it asks for, before the library is
@@ -588,6 +589,22 @@ void Settings::postInit()
 #endif
 
     m_themes.postInit();
+}
+
+void Settings::startRomFolderRefresh()
+{
+#ifdef WITH_COMPAT_ESDE
+    if (m_rom_refresh_started)
+        return;
+    m_rom_refresh_started = true;
+    QtConcurrent::run([this]{
+        QElapsedTimer timer;
+        timer.start();
+        const int n = providers::esde::refresh_rom_folders(false, true);
+        Log::info(QStringLiteral("ROM folders"), LOGMSG("Background refresh: %1 lists made again in %2 ms").arg(n).arg(timer.elapsed()));
+        QMetaObject::invokeMethod(this, [this, n]{ emit romFoldersRefreshed(n); }, Qt::QueuedConnection);
+    });
+#endif
 }
 
 void Settings::setFullscreen(bool new_val)
@@ -3675,7 +3692,9 @@ QVariantMap Settings::themeSystemArt(const QString& collection_name, const QStri
 void Settings::reloadAllGames()
 {
 #ifdef WITH_COMPAT_ESDE
-    // games added to a ROM folder since its list was made: in the list
+    // games added to a ROM folder since its list was made: in the list (a
+    // background refresh still going stops after its folder, this one reads)
+    providers::esde::cancel_rom_folder_refresh();
     providers::esde::refresh_rom_folders();
 #endif
     emit reloadAllRequested();

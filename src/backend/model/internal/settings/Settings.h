@@ -91,6 +91,10 @@ class Settings : public QObject {
 public:
     explicit Settings(QObject* parent = nullptr);
     void postInit();
+    /// Pegasus X: games added to the watched ROM folders while Pegasus X was
+    /// away, looked for in the background once the library is up (started
+    /// once; romFoldersRefreshed with how many lists were made again)
+    void startRomFolderRefresh();
     /// older builds' <Pegasus X folder>/media -> downloaded_media
     void move_media_folder();
 
@@ -497,6 +501,7 @@ signals:
     void esdeImportProgress(int done, int total, QString system);
     void esdeImportFinished(QVariantMap result);
     void romFolderImportFinished(QVariantMap result);
+    void romFoldersRefreshed(int lists);
     void originalGameReady(QString game_path, QVariantMap result);
     void raProgress(QVariantMap state);
     void raFinished(QVariantMap result);
@@ -521,6 +526,7 @@ private:
     QStringList m_words;       ///< libraryWords, for this many games:
     int m_words_games = -1;
     bool m_esde_import_running = false;
+    bool m_rom_refresh_started = false;
     QNetworkAccessManager* m_netman = nullptr;
     scraper::Scraper* m_scraper = nullptr;
     mutable scraper::LaunchBoxDb* m_launchbox = nullptr;

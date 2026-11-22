@@ -5,6 +5,35 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Watched ROM folders are checked in the background, after the library is up
+
+- **What:** the check of the watched ROM folders for added or removed games
+  no longer runs at start before the library is read (the start waited for
+  it, including the subfolder dates of the previous build); it runs in the
+  background once the first library read is done. When it made lists
+  again, the library is read again (as when leaving Library), but only
+  while the theme is in front and Pegasus X active: not under the menu or a
+  dialog, and not on a return from a game (no extra splash then). Else it
+  waits for the menu to be closed; at the latest, the next start shows
+  them (the lists are already written).
+- **Safety:** one refresh or Rescan at a time (a lock: the second waits for
+  the first, they write the same lists); Rescan and Reload all games ask a
+  background refresh to stop after the folder it's on, and so does quitting.
+  It starts once per run, and not while another library read is about to
+  start. The lists are still written whole (a temporary file, then
+  renamed), so a read never sees half a file.
+- **Not changed:** what's looked at and written (build 2234's subfolder
+  dates included), Rescan, Reload all games (still reads the folders before
+  its reload), the test environment's imports.
+- **Tests:** the test environment's summary shows each start's "Background
+  refresh: N lists made again in M ms" line; the psx/Extra/ check (build
+  2234) now relies on it.
+- **Files:** `src/backend/providers/esde/EsdeProvider.h/.cpp` (lock,
+  `cancel_rom_folder_refresh`), `src/backend/model/internal/settings/Settings.h/.cpp`
+  (`startRomFolderRefresh`, `romFoldersRefreshed`), `src/backend/Backend.cpp`,
+  `src/frontend/main.qml`, `tests/testenv/run.sh`.
+- **Commit:** "Watched ROM folders are checked in the background, after the library is up".
+
 ### Game discovery skips the art folders
 
 - **What:** when Pegasus X looks for game files in a system folder (ROM
