@@ -5,6 +5,36 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Nintendo Switch 2 system for .nup files
+
+- **What:** a new built-in system, "Nintendo Switch 2" (`switch2`), for
+  `.nup` files (Peanuts Native's packages). It's in Settings > Game
+  directory > Add systems like the others, a folder named `switch2` is
+  recognized by its name, and it imports, rescans and is watched the same
+  way. It has no launch command: none is documented for Peanuts Native, so
+  none is made up; set one in Library (the system's emulator, or an
+  emulator of yours) once you have one. The original Nintendo Switch is
+  unchanged: it still takes .nca .nro .nso .nsp .xci, not .nup.
+- **How:** ES-DE's bundled lists stay as ES-DE ships them; the system is in
+  a small file of Pegasus X's own in the same format
+  (`resources/pegasusx_systems.xml`), read after ES-DE's list (and after
+  an ES-DE custom_systems file), so a `switch2` system there would be the
+  one used. It's read even when a custom_systems file says loadExclusive.
+- **Not changed:** the Switch system, ES-DE's files, the emulator lists,
+  the genre work, builds 2234-2241, themes, the Companion app. The
+  scrapers aren't told about Switch 2 (ScreenScraper has no id for it here;
+  LaunchBox already knew the name).
+- **Tests:** the fixture has MyGames/switch2/ (a .nup) and MyGames/switch/
+  (a .nsp and a .nup); the summary checks that the .nup is a Nintendo
+  Switch 2 game with no launch line, and that Nintendo Switch took only
+  the .nsp.
+- **Files:** `src/backend/providers/esde/resources/pegasusx_systems.xml`
+  (new), `src/backend/providers/esde/esde.qrc`,
+  `src/backend/providers/esde/EsdeProvider.cpp` (`load_import_setup`),
+  `src/backend/providers/esde/resources/README.md`,
+  `tests/testenv/fixture.sh`, `tests/testenv/run.sh`.
+- **Commit:** "Nintendo Switch 2 system for .nup files".
+
 ### Watched-folder refresh: no library re-read while the theme is in use
 
 - **What:** when the background check of the watched ROM folders (build

@@ -1369,6 +1369,12 @@ ImportSetup load_import_setup(const QString& esde_dir)
         bool unused = false;
         load_systems(log_tag, esde_list_file(QStringLiteral("es_systems.xml")), out.systems, out.order, unused);
     }
+    // Pegasus X's own systems (Nintendo Switch 2, .nup), last: a system of
+    // the same name above is the one kept; no launch command of their own
+    {
+        bool unused = false;
+        load_systems(log_tag, QStringLiteral(":/esde/pegasusx_systems.xml"), out.systems, out.order, unused);
+    }
 
     // the ROMs folders: ES-DE's setting, the usual "ROMs" folders, and the
     // parent folders of the game directories set in Pegasus

@@ -458,6 +458,28 @@ PY
     echo "    backups made before the changes (reason edit): $n_edit"
     strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: \".*\" -> \|games saved in" | sed 's/^/    /'
     echo
+    echo "## Nintendo Switch 2 (.nup)"
+    S2="$CFG/gamedirectory/switch2/metadata.pegasus.txt"
+    if grep -q "^collection: Nintendo Switch 2$" "$S2" 2>/dev/null && grep -q "Donkey Kong Bananza.nup" "$S2"; then
+        echo "    OK: MyGames/switch2 is Nintendo Switch 2, with its .nup game"
+    else
+        echo "    FAILED: no Nintendo Switch 2 list with Donkey Kong Bananza.nup (gamedirectory/switch2)"
+    fi
+    if grep -q "^launch:" "$S2" 2>/dev/null; then
+        echo "    FAILED: Nintendo Switch 2 has a launch line:"
+        grep "^launch:" "$S2" | sed 's/^/        /'
+    else
+        echo "    OK: no launch command for Nintendo Switch 2"
+    fi
+    SW="$CFG/gamedirectory/switch/metadata.pegasus.txt"
+    if grep -q "Super Mario Odyssey.nsp" "$SW" 2>/dev/null && ! grep -q "Stray Package.nup" "$SW"; then
+        echo "    OK: Nintendo Switch takes its .nsp, not the .nup"
+    else
+        echo "    FAILED: Nintendo Switch's list (gamedirectory/switch) isn't .nsp only:"
+        grep "^file:" "$SW" 2>/dev/null | sed 's/^/        /'
+    fi
+    strip_ansi "$R/logs/01-first-start.stdout" | grep -h "Test: ROM folder \`" | sed 's/^/    /'
+    echo
     echo "## Art folders aren't read for games (psx/media/, psx/skraper/ have .zip files)"
     if grep -E "^file: .*/MyGames/psx/(media|skraper)/" "$CFG/gamedirectory/psx/metadata.pegasus.txt" >/dev/null 2>&1; then
         echo "    FAILED: a file in psx's art folders is listed as a game:"

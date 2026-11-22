@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<!-- Pegasus X: systems ES-DE doesn't have, in ES-DE's format. Read after
+     ES-DE's own list (es_systems.xml), so a system of the same name there
+     (or in your ES-DE custom_systems) is the one used. -->
+<systemList>
+    <!-- Nintendo Switch 2: .nup files (Peanuts Native's packages). No launch
+         command: none is documented for it; set one in Library (the
+         system's emulator, or an emulator of yours). -->
+    <system>
+        <name>switch2</name>
+        <fullname>Nintendo Switch 2</fullname>
+        <path>%ROMPATH%/switch2</path>
+        <extension>.nup .NUP</extension>
+        <platform>switch2</platform>
+        <theme>switch2</theme>
+    </system>
+</systemList>

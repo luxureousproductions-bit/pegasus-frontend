@@ -4,5 +4,9 @@ unchanged from ES-DE (resources/systems/android/) and are under ES-DE's MIT
 license, see LICENSE-ES-DE.
 
 To update them, replace both XML files with the newer ones from ES-DE.
+
+pegasusx_systems.xml isn't ES-DE's: Pegasus X's own systems that ES-DE
+doesn't have (Nintendo Switch 2, .nup), in the same format, read after
+ES-DE's list.
 Users can still override any system or emulator with their own
 ES-DE/custom_systems/es_systems.xml and es_find_rules.xml.

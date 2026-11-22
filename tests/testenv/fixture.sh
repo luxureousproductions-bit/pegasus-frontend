@@ -6,6 +6,7 @@
 #   storage/ES-DE ............ an ES-DE setup (settings, a gamelist, art)
 #   storage/ROMs/snes, gba ... its ROMs folder (snes has a gamelist and art)
 #   MyGames/Nintendo 64 ...... a ROM folder without metadata, named the usual way
+#   MyGames/switch2, switch .. Nintendo Switch 2 (.nup) and Nintendo Switch
 #   MyGames/psx .............. a ROM folder with a gamelist.xml of its own and
 #                              a two-disc game (.cue/.bin + .m3u); its empty
 #                              Extra/ gets a game after the first start
@@ -88,6 +89,13 @@ pic "$N/fanart/Mario Kart 64 (USA).png" 1280x720 "#393" "MK64 fan art"
 # Pegasus' own layout: media/<game>/<kind>
 pic "$N/Star Fox 64 (USA)/boxFront.png" 400x280 "#339" "SF64 boxFront"
 pic "$N/Star Fox 64 (USA)/screenshot.png" 640x480 "#933" "SF64 screenshot"
+
+# -- Nintendo Switch 2 (.nup, Pegasus X's own system) next to Nintendo Switch ---------------
+# (a .nup in the switch folder isn't a Switch game: only switch2 takes .nup)
+mkdir -p "$T/MyGames/switch2" "$T/MyGames/switch"
+rom "$T/MyGames/switch2/Donkey Kong Bananza.nup"
+rom "$T/MyGames/switch/Super Mario Odyssey.nsp"
+rom "$T/MyGames/switch/Stray Package.nup"
 
 # -- a ROM folder with its own gamelist.xml and a two-disc game ----------------------------
 for d in 1 2; do

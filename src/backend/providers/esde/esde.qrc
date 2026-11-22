@@ -2,5 +2,6 @@
     <qresource prefix="/esde">
         <file alias="es_systems.xml">resources/es_systems.xml</file>
         <file alias="es_find_rules.xml">resources/es_find_rules.xml</file>
+        <file alias="pegasusx_systems.xml">resources/pegasusx_systems.xml</file>
     </qresource>
 </RCC>
