@@ -185,6 +185,9 @@ keys Return
 sleep 2
 shot 03-library-game
 stop 03-library
+# the game directory as Library > Genres left it (the scrapes below write genres too)
+mkdir -p "$R/after-genres"
+cp -r "$CFG/gamedirectory" "$R/after-genres/" 2>/dev/null
 
 # -- 4. Scraper: its pages, then the offline miximage generator on every system --------
 start 04-scraper "menu/settings/ScraperScreen.qml" 6
@@ -400,7 +403,7 @@ done
     strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: " | sort -u | sed 's/^/    /'
     echo
     echo "### Change this genre... (Platform -> Platformer; Shoot’em Up -> Shoot'em Up)"
-    python3 - "$CFG/gamedirectory" "$T" <<'PY' | sed 's/^/    /'
+    python3 - "$R/after-genres/gamedirectory" "$T" <<'PY' | sed 's/^/    /'
 import glob, os, sys
 gd, t = sys.argv[1:3]
 genres = {}   # game file name -> genres, in the game directory

@@ -167,10 +167,15 @@ FocusScope {
         var items = plan.change;
         var result = Internal.settings.saveGamesGenres(items);
         var n = result.saved || 0;
-        message = result.error
-            ? qsTr("Changed in %1 of %2 games. Not saved: %3").arg(n).arg(items.length).arg(result.error) + api.tr
-            : (n === 1 ? qsTr("\"%1\" is now \"%2\" in 1 game.") : qsTr("\"%1\" is now \"%2\" in %3 games."))
-                .arg(genre).arg(target).arg(n) + api.tr;
+        var spellingOnly = GenreKey.key(target) === genreKey;
+        if (result.error)
+            message = qsTr("Changed in %1 of %2 games. Not saved: %3").arg(n).arg(items.length).arg(result.error) + api.tr;
+        else if (spellingOnly)
+            message = (n === 1 ? qsTr("\"%1\" is now spelled \"%2\" in 1 more game.").arg(genre).arg(target)
+                               : qsTr("\"%1\" is now spelled \"%2\" in %3 more games.").arg(genre).arg(target).arg(n)) + api.tr;
+        else
+            message = (n === 1 ? qsTr("\"%1\" is now \"%2\" in 1 game.").arg(genre).arg(target)
+                               : qsTr("\"%1\" is now \"%2\" in %3 games.").arg(genre).arg(target).arg(n)) + api.tr;
         console.log("Genres: \"" + genre + "\" -> \"" + target + "\": " + n + " of " + items.length + " games saved"
                     + (result.error ? ", error: " + result.error : ""));
         // (as after a game saved in Library: the loaded games show it at

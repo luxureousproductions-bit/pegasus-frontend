@@ -5,6 +5,25 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Fix: Genres' result line and the test environment's genre check
+
+- **What:** the line after "Change N games" no longer passes an extra
+  argument for one game (Qt logged `QString::arg: Argument missing`), and
+  a change to a spelling of the same genre now reads ""Shoot'em Up" is now
+  spelled "Shoot'em Up" in 1 more game." (was "...is now "Shoot'em Up"...",
+  which read as if nothing changed). The test environment keeps a copy of
+  the game directory right after its Library steps (`after-genres/`) and
+  checks the genres there.
+- **Why:** build 2232's test run: the change was saved (`1 games saved in
+  .../snes/metadata.pegasus.txt`, an "edit" backup before it), but the
+  check read the files at the end of the run, after the scrape steps had
+  written Super Mario World's genre again ("Platform" from LaunchBox,
+  overwrite on), so it reported FAILED for that game.
+- **Not changed:** what is saved and how; the pages; the other checks.
+- **Files:** `src/frontend/menu/settings/GenresScreen.qml`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Fix: Genres' result line and the test environment's genre check".
+
 ### Fix: test_GenreKey didn't compile in build 2231
 
 - **What:** the `replace` and `same` tests held the JS function in a
