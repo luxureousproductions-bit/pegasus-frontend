@@ -8,6 +8,9 @@
 #   MyGames/Nintendo 64 ...... a ROM folder without metadata, named the usual way
 #   MyGames/psx .............. a ROM folder with a gamelist.xml of its own and
 #                              a two-disc game (.cue/.bin + .m3u)
+#   genres, for Library > Genres: Platform (Super Mario World) and platform
+#   (Crash Bandicoot), Shoot'em Up (Metroid Prime) and Shoot’em Up (Wind
+#   Waker, a curly apostrophe): two genres of two spellings each
 #   Pegasus/gamecube ......... a folder with a Pegasus metadata file
 #   storage/ROMs/metadata.pegasus.txt  your own file for a game ES-DE has too
 #   home/.config/pegasus-frontend/game_dirs.txt (Pegasus/gamecube, storage/ROMs)
@@ -96,6 +99,7 @@ cat > "$T/MyGames/psx/gamelist.xml" <<'XML'
     <path>./Crash Bandicoot (USA).chd</path>
     <name>Crash Bandicoot</name>
     <desc>From the folder's own gamelist.xml.</desc>
+    <genre>platform</genre>
     <image>./media/crash.png</image>
   </game>
 </gameList>
@@ -113,6 +117,11 @@ launch: dolphin-emu -b -e "{file.path}"
 game: Metroid Prime
 file: Metroid Prime (USA).iso
 description: Written in a Pegasus metadata file.
+genre: Shoot'em Up
+
+game: Wind Waker (USA)
+file: Wind Waker (USA).iso
+genre: Shoot’em Up
 TXT
 
 # -- your own file and an import both list a game --------------------------------------------

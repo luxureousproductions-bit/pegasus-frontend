@@ -3,6 +3,42 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-22
+
+### Genres: a genre's spellings side by side
+
+- **What:** in Library > Genres, a genre counted from more than one spelling
+  ("51 games · 2 spellings") lists its spellings at the top of its page,
+  above its games: "2 spellings, counted as one genre here:", then one row
+  each, the most used first. A row shows the spelling exactly as written,
+  between ‹ ›, with its game count (one game in amber). In every spelling
+  after the first, the characters that differ from the first are amber and
+  underlined (a different apostrophe, letter case, an extra space shown
+  as ·); a space that isn't a plain one (non-breaking, tab, wide) is shown
+  as ⍽ or ⇥ in any spelling. Under it, in words: "extra ’ U+2019 · missing '
+  U+0027", "extra · U+0020 · missing · U+0020 ×2 · letter case" (the
+  first: "the most used"). Each game row then says which spelling it has
+  (" · spelling 2"). The spelling rows can be moved to with the d-pad (so
+  a long list scrolls through them) and do nothing on A.
+- **Why:** "2 spellings" said that the files differ, not how: the only way
+  to see it was to open the games one by one.
+- **Not changed:** still view-only: no file is written. How genres are
+  counted (build 2228's key), the genre list, the log line, opening a game
+  and Back. The metadata editor and its keyboard.
+- **Tests:** `test_GenreKey`: the character-by-character comparison
+  (apostrophe, letter case), the marks (apostrophe, a doubled space, a
+  non-breaking space, letter case; plain spaces kept), the text escaped
+  (a genre can't make markup), the note in words. The test environment's
+  fixture now has two genres of two spellings each (Platform / platform,
+  Shoot'em Up / Shoot’em Up, see `fixture.sh`); `03-genre-games` and the
+  new `03-genre-spellings` show their pages, and `03-genre-game` opens the
+  first game below the spellings.
+- **Files:** `src/frontend/menu/settings/GenreKey.js` (`diff`, `markup`,
+  `note`), `src/frontend/menu/settings/GenresScreen.qml`,
+  `tests/frontend/genrekey/test_GenreKey.cpp`, `tests/testenv/fixture.sh`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Genres: a genre's spellings side by side".
+
 ## 2026-11-21
 
 ### Genres: spellings that only look different count as one

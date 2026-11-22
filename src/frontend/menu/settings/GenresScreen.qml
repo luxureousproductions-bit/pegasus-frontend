@@ -21,7 +21,9 @@ import QtQuick 2.6
 
 // Pegasus X: Settings > Gaming > Library > Genres. Every genre in the library
 // with how many games have it (one-offs in amber, so they stand out); a genre
-// lists its games, and a game opens in Library to fix its genre there.
+// lists its games, and a game opens in Library to fix its genre there. A
+// genre with more than one spelling lists them above its games, side by
+// side, what differs marked.
 // Only shows: nothing is merged or rewritten here.
 FocusScope {
     id: root
@@ -35,7 +37,8 @@ FocusScope {
     property string genre: ""        // the one whose games are listed (as shown)
     property string genreKey: ""     // ...and its key (GenreKey.key: every spelling of it)
     property var genreList: []       // [{ key, name, count, spellings }], A to Z (GenreKey.group)
-    property var gameList: []        // [{ title, coll, obj }] of `genre`
+    property var gameList: []        // [{ title, coll, obj, spelling }] of `genre`
+    property var spellingList: []    // [{ name, count }] of `genre`, most games first (GenreKey.group)
 
     // the genres Android uses to sort apps, as the keyboard's suggestions leave out
     function skipped(low) { return low === "application" || low === "emulator"; }
@@ -68,7 +71,7 @@ FocusScope {
             for (var n = 0; n < names.length; n++) {
                 if (GenreKey.key(names[n]) === key) {
                     var colls = g.collections;
-                    out.push({ "title": g.title, "obj": g,
+                    out.push({ "title": g.title, "obj": g, "spelling": String(names[n]).trim(),
                                "coll": colls && colls.count > 0 ? colls.get(0).name : "" });
                     break;
                 }
@@ -76,6 +79,20 @@ FocusScope {
         }
         out.sort(function(a, b) { return a.title.toLowerCase().localeCompare(b.title.toLowerCase()); });
         gameList = out;
+        var sp = [];
+        for (var r = 0; r < genreList.length; r++) {
+            if (genreList[r].key === key)
+                sp = genreList[r].spellings;
+        }
+        spellingList = sp;
+    }
+    // a game's spelling as its number in spellingList (1 = the most used)
+    function spellingNumber(name) {
+        for (var i = 0; i < spellingList.length; i++) {
+            if (spellingList[i].name === name)
+                return i + 1;
+        }
+        return 0;
     }
 
     readonly property var rows: {
@@ -84,8 +101,27 @@ FocusScope {
         if (page === "games") {
             out.push({ "kind": "info", "text": (gameList.length === 1 ? qsTr("1 game") : qsTr("%1 games").arg(gameList.length)) + api.tr,
                        "value": "" });
-            for (i = 0; i < gameList.length; i++)
-                out.push({ "kind": "game", "text": gameList[i].title, "value": gameList[i].coll, "index": i });
+            // its spellings side by side: each as written (what differs from
+            // the first in amber, a space as · there), how many games, and in
+            // words what differs, with the character codes
+            var many = spellingList.length > 1;
+            if (many) {
+                out.push({ "kind": "info", "text": qsTr("%1 spellings, counted as one genre here:").arg(spellingList.length) + api.tr,
+                           "value": "" });
+                var main = spellingList[0].name;
+                for (i = 0; i < spellingList.length; i++) {
+                    var sc = spellingList[i].count;
+                    out.push({ "kind": "spelling", "text": (i + 1) + "&nbsp;&nbsp;" + GenreKey.markup(spellingList[i].name, i === 0 ? "" : main),
+                               "note": i === 0 ? qsTr("the most used") + api.tr : GenreKey.note(spellingList[i].name, main),
+                               "value": (sc === 1 ? qsTr("1 game") : qsTr("%1 games").arg(sc)) + api.tr, "one": sc === 1 });
+                }
+                out.push({ "kind": "info", "text": qsTr("Its games:") + api.tr, "value": "" });
+            }
+            for (i = 0; i < gameList.length; i++) {
+                var num = many ? spellingNumber(gameList[i].spelling) : 0;
+                out.push({ "kind": "game", "text": gameList[i].title, "index": i,
+                           "value": gameList[i].coll + (num > 0 ? qsTr(" · spelling %1").arg(num) + api.tr : "") });
+            }
             return out;
         }
         var ones = 0;
@@ -147,6 +183,7 @@ FocusScope {
         genre = "";
         genreKey = "";
         gameList = [];
+        spellingList = [];
         readGenres();
         list.jumpTo(false);
         list.positionViewAtBeginning();
@@ -217,6 +254,8 @@ FocusScope {
         // focus moves at once (no slide to catch up with a held D-pad)
         highlightMoveDuration: 0
 
+        // (a spelling row does nothing on A: it can be moved to, so the
+        // d-pad scrolls through the spellings too)
         function selectable(i) {
             return i >= 0 && i < count && root.rows[i].kind !== "info";
         }
@@ -271,10 +310,11 @@ FocusScope {
 
         delegate: Item {
             readonly property bool isInfo: modelData.kind === "info"
+            readonly property bool isSpelling: modelData.kind === "spelling"
             readonly property bool highlighted: ListView.isCurrentItem && list.activeFocus && !isInfo
 
             width: ListView.view.width
-            height: isInfo ? vpx(42) : vpx(22) * 2.4
+            height: isInfo ? vpx(42) : (isSpelling ? vpx(76) : vpx(22) * 2.4)
 
             Rectangle {
                 width: parent.width
@@ -286,13 +326,32 @@ FocusScope {
             Text {
                 id: rowLabel
                 text: modelData.text
+                // a spelling: its marks (GenreKey.markup escapes the text);
+                // the rest as plain text (a title may have a "<")
+                textFormat: parent.isSpelling ? Text.StyledText : Text.PlainText
                 color: parent.isInfo ? "#999" : "#eee"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(21)
                 anchors.left: parent.left
                 anchors.leftMargin: vpx(30)
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenter: parent.isSpelling ? undefined : parent.verticalCenter
+                anchors.top: parent.isSpelling ? parent.top : undefined
+                anchors.topMargin: vpx(10)
                 width: parent.width * 0.6
+                elide: Text.ElideRight
+            }
+            // a spelling: how it differs from the first, in words and codes
+            Text {
+                visible: parent.isSpelling
+                text: modelData.note || ""
+                color: "#999"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(16)
+                anchors.left: rowLabel.left
+                anchors.leftMargin: vpx(28)
+                anchors.top: rowLabel.bottom
+                anchors.topMargin: vpx(6)
+                width: parent.width - vpx(90)
                 elide: Text.ElideRight
             }
             Text {
@@ -304,7 +363,9 @@ FocusScope {
                 anchors.leftMargin: vpx(16)
                 anchors.right: parent.right
                 anchors.rightMargin: vpx(30)
-                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenter: parent.isSpelling ? undefined : parent.verticalCenter
+                anchors.top: parent.isSpelling ? parent.top : undefined
+                anchors.topMargin: vpx(10)
                 horizontalAlignment: Text.AlignRight
                 elide: Text.ElideLeft
             }

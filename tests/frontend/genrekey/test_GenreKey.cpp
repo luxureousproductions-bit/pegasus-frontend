@@ -29,6 +29,7 @@ private:
     QJSEngine m_js;
 
     QString key(const QString& name);
+    QString call(const char* fn, const QString& a, const QString& b);
     // GenreKey.group() of games (one list of genre names per game)
     QJSValue group(const QList<QStringList>& games, bool skip_apps = false);
     static QList<QStringList> times(const QString& genre, int n)
@@ -50,11 +51,23 @@ private slots:
     void shown_spelling();
     void spellings_and_counts();
     void codes();
+    void diff_lines_up();
+    void markup_marks_what_differs();
+    void markup_is_escaped();
+    void note_in_words();
 };
 
 QString test_GenreKey::key(const QString& name)
 {
     const QJSValue out = m_js.globalObject().property(QStringLiteral("key")).call({ name });
+    return out.toString();
+}
+
+QString test_GenreKey::call(const char* fn, const QString& a, const QString& b)
+{
+    const QJSValue out = m_js.globalObject().property(QString::fromLatin1(fn)).call({ a, b });
+    if (out.isError())
+        qWarning() << out.toString();
     return out.toString();
 }
 
@@ -203,6 +216,58 @@ void test_GenreKey::codes()
 {
     const QJSValue out = m_js.globalObject().property(QStringLiteral("codes")).call({ QStringLiteral("a’ ") });
     QCOMPARE(out.toString(), QStringLiteral("U+0061 U+2019 U+00A0"));
+}
+
+// two spellings character by character: only the curly apostrophe differs
+void test_GenreKey::diff_lines_up()
+{
+    const QJSValue d = m_js.globalObject().property(QStringLiteral("diff"))
+        .call({ QStringLiteral("Beat’em Up"), QStringLiteral("Beat'em Up") });
+    QCOMPARE(d.property(QStringLiteral("onlyA")).property(QStringLiteral("length")).toInt(), 1);
+    QCOMPARE(d.property(QStringLiteral("onlyA")).property(0).toInt(), 4);
+    QCOMPARE(d.property(QStringLiteral("onlyB")).property(0).toInt(), 4);
+    QCOMPARE(d.property(QStringLiteral("caseA")).property(QStringLiteral("length")).toInt(), 0);
+    // letter case: lined up, marked as case
+    const QJSValue c = m_js.globalObject().property(QStringLiteral("diff"))
+        .call({ QStringLiteral("PLatform"), QStringLiteral("Platform") });
+    QCOMPARE(c.property(QStringLiteral("onlyA")).property(QStringLiteral("length")).toInt(), 0);
+    QCOMPARE(c.property(QStringLiteral("caseA")).property(QStringLiteral("length")).toInt(), 1);
+    QCOMPARE(c.property(QStringLiteral("caseA")).property(0).toInt(), 1);
+}
+
+// what differs from the first spelling in amber and underlined; a space as ·
+// where it differs or isn't a plain one; plain spaces kept as &nbsp;
+void test_GenreKey::markup_marks_what_differs()
+{
+    const QString hot = QStringLiteral("<font color=\"#e8b06a\"><u>%1</u></font>");
+    QCOMPARE(call("markup", QStringLiteral("Beat’em Up"), QStringLiteral("Beat'em Up")),
+             QStringLiteral("‹Beat") + hot.arg(QStringLiteral("’")) + QStringLiteral("em&nbsp;Up›"));
+    // the first spelling: nothing marked
+    QCOMPARE(call("markup", QStringLiteral("Beat'em Up"), QString()), QStringLiteral("‹Beat'em&nbsp;Up›"));
+    // a doubled space: the extra one, as ·
+    QCOMPARE(call("markup", QStringLiteral("Up  Down"), QStringLiteral("Up Down")),
+             QStringLiteral("‹Up&nbsp;") + hot.arg(QStringLiteral("·")) + QStringLiteral("Down›"));
+    // a non-breaking space: shown as ⍽ even in the first spelling
+    QCOMPARE(call("markup", QStringLiteral("Up\u00A0Down"), QString()),
+             QStringLiteral("‹Up") + hot.arg(QStringLiteral("⍽")) + QStringLiteral("Down›"));
+    // letter case
+    QCOMPARE(call("markup", QStringLiteral("PLatform"), QStringLiteral("Platform")),
+             QStringLiteral("‹P") + hot.arg(QStringLiteral("L")) + QStringLiteral("atform›"));
+}
+
+// a genre's text can't make markup of its own
+void test_GenreKey::markup_is_escaped()
+{
+    QCOMPARE(call("markup", QStringLiteral("<b>A&B</b>"), QString()), QStringLiteral("‹&lt;b&gt;A&amp;B&lt;/b&gt;›"));
+}
+
+void test_GenreKey::note_in_words()
+{
+    QCOMPARE(call("note", QStringLiteral("Beat’em Up"), QStringLiteral("Beat'em Up")),
+             QStringLiteral("extra ’ U+2019 · missing ' U+0027"));
+    QCOMPARE(call("note", QStringLiteral("beat'em  up/fantasy"), QStringLiteral("Beat'em Up / Fantasy")),
+             QStringLiteral("extra · U+0020 · missing · U+0020 ×2 · letter case"));
+    QCOMPARE(call("note", QStringLiteral("Action"), QStringLiteral("Action")), QString());
 }
 
 

@@ -127,17 +127,21 @@ keys Down Return
 sleep 1
 shot 03-library-review
 keys Escape
-# Genres (the row under Needs your check): a genre's games, one of them on its page, and back
+# Genres (the row under Needs your check): a genre's games, one of them on its page, and back.
+# The fixture's genres: Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up),
+# A to Z; a genre's page: its two spellings side by side (the first selected), then its games
 keys Down Return
 sleep 1
 shot 03-genres
 keys Return
 shot 03-genre-games
-keys Return
+keys Down Down Return
 sleep 1
 shot 03-genre-game
 keys Escape
 shot 03-genre-games-back
+keys Escape Down Return
+shot 03-genre-spellings
 keys Escape Escape
 shot 03-genres-back
 keys Down Down Down Down Down
