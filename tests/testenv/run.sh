@@ -379,6 +379,14 @@ import json, sys
 d = json.load(open(sys.argv[1]))
 for k in sorted(d): print("%6d  %s" % (d[k], k))
 PY
+    ls "$CFG/launchbox/index" > "$R/scraped-launchbox/index.txt" 2>/dev/null || true
+    # a Nintendo Switch 2 game (MyGames/switch2, a .nup) scraped from LaunchBox's database
+    start 13b-scrape-switch2 "" 8 "PEGASUSX_TEST_SCRAPE=Donkey Kong Bananza" "PEGASUSX_TEST_LAUNCHBOX=1"
+    wait_log "Scraper: Done\|no sure match\|no platform for\|no game called" 300 "$R/logs/13b-scrape-switch2.stdout"
+    sleep 2
+    stop 13b-scrape-switch2
+    grep -h "Scraper\|LaunchBox\|\[test\]" "$R/logs/13b-scrape-switch2.stdout" | sed 's/\x1b\[[0-9;]*m//g' > "$R/scraped-launchbox/switch2.log" || true
+    find "$CFG/downloaded_media/switch2" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-launchbox/switch2-files.txt" || true
 fi
 
 # -- summary --------------------------------------------------------------------------------------
@@ -516,6 +524,12 @@ PY
         echo "## Scrape from the LaunchBox database (no login)"
         grep -E "LaunchBox|Downloaded|Saving|not found|no sure|Done:" "$R/scraped-launchbox/scraper.log" 2>/dev/null | head -n 16 | sed 's/^/    /'
         sed 's/^/    file: /' "$R/scraped-launchbox/files.txt" 2>/dev/null | head -n 10
+        echo
+        echo "## Nintendo Switch 2 from the LaunchBox database"
+        grep "Nintendo Switch 2$" "$R/scraped-launchbox/platforms.txt" 2>/dev/null | sed 's/^/    platform in the download: /'
+        grep -i "switch_2\|switch 2" "$R/scraped-launchbox/index.txt" 2>/dev/null | sed 's/^/    index kept: /'
+        grep -E "Collection|LaunchBox|no sure|Saving|Done:|no platform|\[test\]" "$R/scraped-launchbox/switch2.log" 2>/dev/null | head -n 12 | sed 's/^/    /'
+        sed 's/^/    file: /' "$R/scraped-launchbox/switch2-files.txt" 2>/dev/null | head -n 10
         echo
     fi
     echo "## Library as read (last start)"

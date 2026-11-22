@@ -5,6 +5,29 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Scraper: Nintendo Switch 2 is a LaunchBox system
+
+- **What:** `Scraper::system_of()` now gives `switch2` for the Nintendo
+  Switch 2 collection (build 2242). It only knew the systems on its
+  ScreenScraper list and a few nicknames, so it gave nothing for Switch 2:
+  Update LaunchboxDB didn't read the "Nintendo Switch 2" platform from the
+  download, and every scrape route that uses `system_of()` had no system
+  for its games ("LaunchBox has no platform for the system"). `switch2` is
+  accepted as a LaunchBox-only system: LaunchBoxDb's `platform_for()`
+  already maps it to "Nintendo Switch 2", and the scraper already skips
+  ScreenScraper for a system that isn't on its list ("not a ScreenScraper
+  system: LaunchBox and libretro only" in the log).
+- **Not changed:** the ScreenScraper list and the other scraper tables (no
+  Switch 2 there), the LaunchBox name matching, the original Switch, the
+  genre work, themes, the Companion app.
+- **Tests:** the test environment's LaunchBox step (with the real
+  download) now has a Nintendo Switch 2 collection; a new step scrapes its
+  game (Donkey Kong Bananza, a .nup) from LaunchBox, and the summary shows
+  the platform's game count in the download, its index, the scrape's log
+  and the files saved.
+- **Files:** `src/backend/Scraper.cpp`, `tests/testenv/run.sh`.
+- **Commit:** "Scraper: Nintendo Switch 2 is a LaunchBox system".
+
 ### Nintendo Switch 2 system for .nup files
 
 - **What:** a new built-in system, "Nintendo Switch 2" (`switch2`), for

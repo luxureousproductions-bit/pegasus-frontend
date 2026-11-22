@@ -593,10 +593,15 @@ Scraper::Scraper(QObject* parent)
 QString Scraper::system_of(const QString& collection_name, const QString& short_name)
 {
     const auto& systems = screenscraper_systems();
+    // Pegasus X: systems ScreenScraper has no id for here, but LaunchBox's
+    // database has a platform for (LaunchBoxDb::platform_for): scraped from
+    // LaunchBox (and libretro, if it has them) only, as the scraper already
+    // does for a system it can't ask ScreenScraper about
+    static const QSet<QString> launchbox_only { QStringLiteral("switch2") };
     for (const QString& candidate : { short_name.toLower(), normalized(short_name), normalized(collection_name) }) {
         if (candidate.isEmpty())
             continue;
-        if (systems.contains(candidate))
+        if (systems.contains(candidate) || launchbox_only.contains(candidate))
             return candidate;
         const auto alias = common_names().find(candidate);
         if (alias != common_names().cend() && systems.contains(alias.value()))
