@@ -129,11 +129,12 @@ shot 03-library-review
 keys Escape
 # Genres (the row under Needs your check): a genre's games, one of them on its page, and back.
 # The fixture's genres: Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up),
-# A to Z; a genre's page: its two spellings side by side (the first selected), then its games
+# A to Z, under Hide genres...; a genre's page: its two spellings side by side (the first
+# selected), then its games
 keys Down Return
 sleep 1
 shot 03-genres
-keys Return
+keys Down Return
 shot 03-genre-games
 keys Down Down Return
 sleep 1
@@ -142,7 +143,17 @@ keys Escape
 shot 03-genre-games-back
 keys Escape Down Return
 shot 03-genre-spellings
-keys Escape Escape
+# Hide genres...: Platform hidden (kept in pegasusx.ini), then shown again
+keys Escape q Return
+shot 03-genres-hide
+keys Return
+shot 03-genres-hide-platform
+cp "$CFG/pegasusx.ini" "$R/files/pegasusx-after-hide.ini" 2>/dev/null
+keys Escape
+shot 03-genres-hidden
+keys Return Return Escape
+shot 03-genres-shown-again
+keys Escape
 shot 03-genres-back
 keys Down Down Down Down Down
 shot 03-library-down
@@ -354,6 +365,20 @@ done
         echo "    FAILED: ES-DE's screenshot isn't on your own file's Chrono Trigger"
     fi
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "already belongs to a different game|Imports onto your games" | head -n 5 | sed 's/^/    /'
+    echo
+    echo "## Library > Genres"
+    if grep -A3 "^\[genres\]" "$R/files/pegasusx-after-hide.ini" 2>/dev/null | grep -q "^hidden=platform$"; then
+        echo "    OK: Hide genres... kept Platform's key (genres/hidden=platform)"
+    else
+        echo "    FAILED: no genres/hidden=platform in pegasusx.ini after hiding Platform:"
+        grep -A3 "^\[genres\]" "$R/files/pegasusx-after-hide.ini" 2>/dev/null | sed 's/^/        /'
+    fi
+    if grep -q "^\[genres\]" "$CFG/pegasusx.ini" 2>/dev/null && grep -A3 "^\[genres\]" "$CFG/pegasusx.ini" | grep -q "^hidden="; then
+        echo "    FAILED: Platform shown again, but pegasusx.ini still has genres/hidden"
+    else
+        echo "    OK: shown again: genres/hidden gone from pegasusx.ini"
+    fi
+    strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: " | sort -u | sed 's/^/    /'
     echo
     echo "## ROM folders per system (Settings > Game directory > a system > Folders)"
     strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Folders:" | sed 's/^.*Test: Folders: /    /'

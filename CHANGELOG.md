@@ -5,6 +5,33 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Genres: hide genres from the list
+
+- **What:** Library > Genres has a "Hide genres..." row under its header
+  (its value: "none hidden" or "N hidden"). It opens a page listing every
+  genre, each "Shown" or "Hidden" (amber); A or a tap switches it, saved at
+  once. A hidden genre (all its spellings: it's kept by its key, as
+  counted since build 2228) is left out of the Genres list; the header
+  then adds " · N hidden". Back returns to the Hide genres... row.
+- **Stored:** `pegasusx.ini` (the Pegasus X folder), `[genres]`, `hidden=`,
+  the keys (lower case, apostrophes and spaces as the count makes them).
+  Shown again, its key is removed; with none hidden the entry is gone.
+- **Affects:** only the Genres list (and its header count). The games keep
+  their genres: no metadata file is written. Themes, the metadata editor's
+  genre field and its suggestions, the Scraper and anything else that
+  reads genres see every genre as before.
+- **Not changed:** the counting, the spelling rows (build 2229), opening a
+  genre and a game, Back, the keys.
+- **Tests:** the test environment, `03-genres-hide...`: Hide genres...,
+  Platform hidden (`03-genres-hidden`: the list without it, "1 hidden"),
+  then shown again; the summary checks `genres/hidden=platform` after
+  hiding and none after showing again (`files/pegasusx-after-hide.ini`).
+  The steps that open a genre move down one row (Hide genres... is first).
+- **Files:** `src/backend/model/internal/settings/Settings.h/.cpp`
+  (`hiddenGenres`, `setHiddenGenres`),
+  `src/frontend/menu/settings/GenresScreen.qml`, `tests/testenv/run.sh`.
+- **Commit:** "Genres: hide genres from the list".
+
 ### Genres: a genre's spellings side by side
 
 - **What:** in Library > Genres, a genre counted from more than one spelling

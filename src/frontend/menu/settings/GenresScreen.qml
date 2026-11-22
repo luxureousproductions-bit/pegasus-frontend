@@ -23,7 +23,8 @@ import QtQuick 2.6
 // with how many games have it (one-offs in amber, so they stand out); a genre
 // lists its games, and a game opens in Library to fix its genre there. A
 // genre with more than one spelling lists them above its games, side by
-// side, what differs marked.
+// side, what differs marked. Hide genres... leaves genres out of the list
+// (pegasusx.ini, genres/hidden: only this list reads it).
 // Only shows: nothing is merged or rewritten here.
 FocusScope {
     id: root
@@ -33,10 +34,12 @@ FocusScope {
 
     anchors.fill: parent
 
-    property string page: "genres"   // genres, games
+    property string page: "genres"   // genres, games, hide (Hide genres...)
     property string genre: ""        // the one whose games are listed (as shown)
     property string genreKey: ""     // ...and its key (GenreKey.key: every spelling of it)
-    property var genreList: []       // [{ key, name, count, spellings }], A to Z (GenreKey.group)
+    property var allGenres: []       // [{ key, name, count, spellings }], A to Z (GenreKey.group)
+    property var genreList: []       // ...without the hidden ones: the list shown
+    property var hiddenKeys: ({})    // key -> true: left out of the list (Hide genres...)
     property var gameList: []        // [{ title, coll, obj, spelling }] of `genre`
     property var spellingList: []    // [{ name, count }] of `genre`, most games first (GenreKey.group)
 
@@ -60,7 +63,44 @@ FocusScope {
                 parts.push("\"" + sp[s].name + "\" (" + sp[s].count + "): " + GenreKey.codes(sp[s].name));
             console.log("Genres: \"" + out[r].name + "\" counts " + sp.length + " spellings as one: " + parts.join(" | "));
         }
-        genreList = out;
+        allGenres = out;
+        applyHidden();
+    }
+    // the list shown: every genre but the hidden ones
+    function applyHidden() {
+        var shown = [];
+        for (var i = 0; i < allGenres.length; i++) {
+            if (!hiddenKeys[allGenres[i].key])
+                shown.push(allGenres[i]);
+        }
+        genreList = shown;
+    }
+    function hiddenCount() {
+        var n = 0;
+        for (var i = 0; i < allGenres.length; i++) {
+            if (hiddenKeys[allGenres[i].key])
+                n++;
+        }
+        return n;
+    }
+    function readHidden() {
+        var map = {};
+        var keys = Internal.settings.hiddenGenres();
+        for (var i = 0; i < keys.length; i++)
+            map[keys[i]] = true;
+        hiddenKeys = map;
+    }
+    // hidden <-> shown, saved at once (the keys of every hidden one, also
+    // those no game has now: they stay hidden if a game gets them again)
+    function toggleHidden(key) {
+        var map = Object.assign({}, hiddenKeys);
+        if (map[key])
+            delete map[key];
+        else
+            map[key] = true;
+        hiddenKeys = map;
+        Internal.settings.setHiddenGenres(Object.keys(map));
+        applyHidden();
     }
     function readGames(key) {
         var out = [];
@@ -80,9 +120,9 @@ FocusScope {
         out.sort(function(a, b) { return a.title.toLowerCase().localeCompare(b.title.toLowerCase()); });
         gameList = out;
         var sp = [];
-        for (var r = 0; r < genreList.length; r++) {
-            if (genreList[r].key === key)
-                sp = genreList[r].spellings;
+        for (var r = 0; r < allGenres.length; r++) {
+            if (allGenres[r].key === key)
+                sp = allGenres[r].spellings;
         }
         spellingList = sp;
     }
@@ -124,14 +164,29 @@ FocusScope {
             }
             return out;
         }
+        var hidden = hiddenCount();
+        if (page === "hide") {
+            out.push({ "kind": "info", "text": qsTr("A hidden genre stays out of the Genres list. Your games keep it.") + api.tr,
+                       "value": "" });
+            for (i = 0; i < allGenres.length; i++) {
+                var off = hiddenKeys[allGenres[i].key] === true;
+                out.push({ "kind": "hide", "text": allGenres[i].name, "key": allGenres[i].key, "one": off,
+                           "value": (off ? qsTr("Hidden") : qsTr("Shown")) + api.tr });
+            }
+            return out;
+        }
         var ones = 0;
         for (i = 0; i < genreList.length; i++) {
             if (genreList[i].count === 1)
                 ones++;
         }
-        out.push({ "kind": "info", "text": (genreList.length === 0 ? qsTr("No genres in your library yet")
-                                            : qsTr("%1 genres · %2 with only one game").arg(genreList.length).arg(ones)) + api.tr,
+        out.push({ "kind": "info", "text": (allGenres.length === 0 ? qsTr("No genres in your library yet")
+                                            : qsTr("%1 genres · %2 with only one game").arg(genreList.length).arg(ones)) + api.tr
+                                           + (hidden > 0 ? qsTr(" · %1 hidden").arg(hidden) + api.tr : ""),
                    "value": "" });
+        if (allGenres.length > 0)
+            out.push({ "kind": "hideopen", "text": qsTr("Hide genres...") + api.tr,
+                       "value": (hidden > 0 ? qsTr("%1 hidden").arg(hidden) : qsTr("none hidden")) + api.tr });
         for (i = 0; i < genreList.length; i++) {
             var c = genreList[i].count;
             var nSp = genreList[i].spellings.length;
@@ -145,7 +200,7 @@ FocusScope {
     // a row by its text (a genre: by its key, as the spelling shown may change)
     function select(kind, text) {
         for (var i = 0; i < rows.length; i++) {
-            if (rows[i].kind === kind && (kind === "genre" ? rows[i].key === GenreKey.key(text) : rows[i].text === text)) {
+            if (rows[i].kind === kind && (kind === "genre" || kind === "hide" ? rows[i].key === GenreKey.key(text) : rows[i].text === text)) {
                 list.currentIndex = i;
                 list.positionViewAtIndex(i, ListView.Center);
                 return;
@@ -158,9 +213,9 @@ FocusScope {
     function refresh() {
         readGenres();
         // the open genre as it's shown now (its most used spelling)
-        for (var g = 0; g < genreList.length; g++) {
-            if (genreList[g].key === genreKey)
-                genre = genreList[g].name;
+        for (var g = 0; g < allGenres.length; g++) {
+            if (allGenres[g].key === genreKey)
+                genre = allGenres[g].name;
         }
         if (page === "games") {
             var at = list.currentIndex >= 0 && list.currentIndex < rows.length ? rows[list.currentIndex].text : "";
@@ -184,6 +239,7 @@ FocusScope {
         genreKey = "";
         gameList = [];
         spellingList = [];
+        readHidden();
         readGenres();
         list.jumpTo(false);
         list.positionViewAtBeginning();
@@ -200,8 +256,22 @@ FocusScope {
         else if (row.kind === "game") {
             root.openGame(gameList[row.index].obj);
         }
+        else if (row.kind === "hideopen") {
+            page = "hide";
+            list.jumpTo(false);
+            list.positionViewAtBeginning();
+        }
+        else if (row.kind === "hide") {
+            toggleHidden(row.key);
+            select("hide", row.text);
+        }
     }
     function back() {
+        if (page === "hide") {
+            page = "genres";
+            select("hideopen", qsTr("Hide genres...") + api.tr);
+            return;
+        }
         if (page === "games") {
             page = "genres";
             readGenres();
@@ -232,7 +302,9 @@ FocusScope {
 
     ScreenHeader {
         id: header
-        text: root.page === "games" ? qsTr("Genres > %1").arg(root.genre) + api.tr : qsTr("Library > Genres") + api.tr
+        text: root.page === "games" ? qsTr("Genres > %1").arg(root.genre) + api.tr
+            : root.page === "hide" ? qsTr("Genres > Hide genres") + api.tr
+            : qsTr("Library > Genres") + api.tr
         z: 2
     }
 
@@ -355,7 +427,7 @@ FocusScope {
                 elide: Text.ElideRight
             }
             Text {
-                text: modelData.value + (modelData.kind === "genre" ? "   ›" : "")
+                text: modelData.value + (modelData.kind === "genre" || modelData.kind === "hideopen" ? "   ›" : "")
                 color: modelData.one ? "#e8b06a" : "#c0c0c0"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(21)
