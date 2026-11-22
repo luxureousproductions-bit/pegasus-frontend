@@ -438,14 +438,15 @@ Window {
     }
     // Pegasus X: the watched ROM folders are checked in the background once
     // the library is up. If lists were made again (games added or removed),
-    // the library is read again, but only while the theme is in front and
-    // active (not under the menu, a dialog or a game, so no splash on a
-    // return from a game): else when the menu is next closed, or at the next
-    // start (the lists are already written).
+    // the library read that shows them (a splash, the theme built again) is
+    // never done while the theme is in use: it waits for the return from a
+    // game (Pegasus X back from the background), for the menu to be closed,
+    // or for the next start (the lists are already written).
     Connections {
         id: romRefresh
         target: Internal.settings
         property bool pending: false
+        property bool wasAway: false   // Pegasus X went to the background (a game, the home screen)
         function tryReload() {
             if (!pending || !theme.activeFocus || Internal.scanner.running)
                 return;
@@ -456,9 +457,28 @@ Window {
         function onRomFoldersRefreshed(lists) {
             if (lists <= 0)
                 return;
-            pending = true;
-            tryReload();
+            pending = true;  // (read later: see above)
+            console.log("ROM folders: new or removed games, read when the theme is next left and returned to");
         }
+    }
+    Connections {
+        target: Qt.application
+        function onStateChanged() {
+            // (only the background counts: not the notification shade, which
+            // makes the app inactive while the theme is still in use)
+            if (Qt.application.state === Qt.ApplicationSuspended || Qt.application.state === Qt.ApplicationHidden)
+                romRefresh.wasAway = true;
+            else if (Qt.application.state === Qt.ApplicationActive && romRefresh.wasAway) {
+                romRefresh.wasAway = false;
+                romRefreshOnReturn.restart();
+            }
+        }
+    }
+    // back from a game: once the theme has its focus again
+    Timer {
+        id: romRefreshOnReturn
+        interval: 300
+        onTriggered: romRefresh.tryReload()
     }
     // Pegasus X: "Reload all games" lands on the theme (its home screen), the
     // menu closed; other reloads from the settings give the menu back

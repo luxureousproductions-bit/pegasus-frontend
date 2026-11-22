@@ -5,6 +5,25 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Watched-folder refresh: no library re-read while the theme is in use
+
+- **What:** when the background check of the watched ROM folders (build
+  2236) made lists again, the library was read again as soon as the theme
+  was in front, a few seconds after the start: the theme was closed, the
+  loading splash came back and your place (the Guide too) was lost. Now
+  it's only noted ("ROM folders: new or removed games, read when the theme
+  is next left and returned to" in the log), and the re-read happens when
+  Pegasus X comes back from the background (a game, or the home screen),
+  once the theme has its focus again, or when the menu is closed, or at the
+  next start (the lists are already written). Pulling down the
+  notification shade doesn't count as leaving.
+- **Why:** reported on the handheld: a surprise reload while using the
+  theme.
+- **Not changed:** the background check itself, what it writes, nothing
+  at all when nothing changed, Rescan, Reload all games, the genre work.
+- **Files:** `src/frontend/main.qml`.
+- **Commit:** "Watched-folder refresh: no library re-read while the theme is in use".
+
 ### Fix: the test environment's one-game genre
 
 - **What:** the fixture's one-game genre (Action) now comes from ES-DE's
