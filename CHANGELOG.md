@@ -5,6 +5,21 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Fix: the test environment's one-game genre
+
+- **What:** the fixture's one-game genre (Action) now comes from ES-DE's
+  snes gamelist (A Link to the Past) instead of a second `genre:` line on
+  Metroid Prime in the Pegasus metadata file.
+- **Why:** build 2239's test run read that second line together with the
+  first, as one genre "Shoot'em Up, Action", so the list had other rows than
+  the steps expected and the steps that followed changed the wrong genre
+  (fixture data only: the four game checks said FAILED). The app's own
+  checks in that run passed (the old hidden= entry gone, search, filter
+  and sort as logged).
+- **Not changed:** the app.
+- **Files:** `tests/testenv/fixture.sh`.
+- **Commit:** "Fix: the test environment's one-game genre".
+
 ### Genres: search, one-game filter and sort instead of hiding
 
 - **What:** Library > Genres no longer hides genres. "Hide genres...", its

@@ -12,7 +12,7 @@
 #   genres, for Library > Genres: Platform (Super Mario World) and platform
 #   (Crash Bandicoot), Shoot'em Up (Metroid Prime) and Shoot’em Up (Wind
 #   Waker, a curly apostrophe): two genres of two spellings each; and Action
-#   (Metroid Prime too), a genre of one game
+#   (A Link to the Past, in ES-DE's gamelist), a genre of one game
 #   Pegasus/gamecube ......... a folder with a Pegasus metadata file
 #   storage/ROMs/metadata.pegasus.txt  your own file for a game ES-DE has too
 #   home/.config/pegasus-frontend/game_dirs.txt (Pegasus/gamecube, storage/ROMs)
@@ -54,6 +54,10 @@ cat > "$S/ES-DE/gamelists/snes/gamelist.xml" <<'XML'
     <genre>Platform</genre>
     <releasedate>19901121T000000</releasedate>
     <players>2</players>
+  </game>
+  <game>
+    <path>./The Legend of Zelda - A Link to the Past (USA).sfc</path>
+    <genre>Action</genre>
   </game>
   <game>
     <path>./Chrono Trigger (USA).sfc</path>
@@ -124,7 +128,6 @@ game: Metroid Prime
 file: Metroid Prime (USA).iso
 description: Written in a Pegasus metadata file.
 genre: Shoot'em Up
-  Action
 
 game: Wind Waker (USA)
 file: Wind Waker (USA).iso
