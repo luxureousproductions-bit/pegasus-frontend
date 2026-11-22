@@ -109,6 +109,10 @@ cat > "$CFG/metadata/review.json" <<JSON
     "system": "n64", "closest": "Star Fox 64 3D", "info": "Nintendo 3DS · 2011", "score": 55, "launchbox": 1 } } }
 JSON
 
+# a game added inside a subfolder of a watched ROM folder (psx/Extra/): only Extra's date
+# changes, not psx's; the next start's refresh has to find it without a Rescan
+head -c 2048 /dev/urandom > "$T/MyGames/psx/Extra/Ape Escape (USA).chd"
+
 # -- 2. the settings ---------------------------------------------------------------
 start 02-settings "menu/settings/SettingsScreen.qml" 6
 shot 02-settings-top
@@ -441,6 +445,14 @@ PY
     n_edit="$(find "$CFG/backup" -name "*.edit.*" 2>/dev/null | wc -l)"
     echo "    backups made before the changes (reason edit): $n_edit"
     strip_ansi "$R/logs/03-library.stdout" | grep -h "Genres: \".*\" -> \|games saved in" | sed 's/^/    /'
+    echo
+    echo "## A game added in a subfolder of a watched folder (psx/Extra/, after the first start)"
+    if grep -q "Ape Escape (USA).chd" "$CFG/gamedirectory/psx/metadata.pegasus.txt" 2>/dev/null; then
+        echo "    OK: Ape Escape is in psx's list without a Rescan"
+    else
+        echo "    FAILED: Ape Escape isn't in gamedirectory/psx/metadata.pegasus.txt"
+    fi
+    strip_ansi "$R/logs/02-settings.stdout" 2>/dev/null | grep -h "ROM folders" | sed 's/^/    /' | head -n 5
     echo
     echo "## ROM folders per system (Settings > Game directory > a system > Folders)"
     strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Folders:" | sed 's/^.*Test: Folders: /    /'

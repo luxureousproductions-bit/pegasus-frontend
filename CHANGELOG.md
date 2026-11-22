@@ -5,6 +5,30 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Watched ROM folders: games added in a subfolder are found
+
+- **What:** when Pegasus X checks whether a watched ROM folder changed
+  (at start, and on Reload all games), it now also reads the dates of the
+  folder's subfolders, up to 3 levels down (switch/A/B/C), at most 1000
+  folders per watched folder; hidden folders and media/, .media/, skraper/
+  are left out of that walk (their art dates count as before). Only folder
+  dates are read, never the files. A folder changed since its list was made
+  is read again, as before.
+- **Why:** a game copied into an existing subfolder (switch/Zelda/) changes
+  only that subfolder's date, not the watched folder's, so it stayed out
+  until a manual Rescan.
+- **Limits:** a game more than 3 levels down, or in a tree of more than
+  1000 folders (the log says so), still needs a Rescan if its folder is
+  past what's read. A Rescan reads everything, as before.
+- **Not changed:** what a refresh reads and writes, the forced Rescan, the
+  art-folder dates, the watched list's file.
+- **Tests:** the test environment's fixture has an empty psx/Extra/; after
+  the first start a game is put in it, and the summary checks that the next
+  start's refresh lists it (Ape Escape) without a Rescan.
+- **Files:** `src/backend/providers/esde/EsdeProvider.cpp` (`folder_changed`),
+  `tests/testenv/fixture.sh`, `tests/testenv/run.sh`.
+- **Commit:** "Watched ROM folders: games added in a subfolder are found".
+
 ### Fix: Genres' result line and the test environment's genre check
 
 - **What:** the line after "Change N games" no longer passes an extra

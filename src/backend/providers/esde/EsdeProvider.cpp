@@ -2692,6 +2692,54 @@ int rescan_rom_folders()
     return refresh_rom_folders(true);
 }
 
+namespace {
+// Pegasus X: when a watched ROM folder last changed. A game added to a
+// subfolder (switch/Zelda/) changes only that subfolder's date, so the
+// subfolders count too, a few levels down (games deeper than that are rare)
+// and up to a number of folders, so a huge tree can't make the start slow:
+// only folder dates are read, never the files. Past the limit, the folders
+// read so far count (a Rescan still reads everything). The art folders
+// (media/, .media/, skraper/ and their kinds) count as before.
+constexpr int CHANGE_DEPTH = 3;          // switch/A/B/C
+constexpr int CHANGE_MAX_FOLDERS = 1000;
+QDateTime folder_changed(const QString& dir)
+{
+    QDateTime changed = QFileInfo(dir).lastModified();
+    for (const QString& sub : { QStringLiteral("media"), QStringLiteral(".media"), QStringLiteral("skraper") }) {
+        const QFileInfo media(dir % QLatin1Char('/') % sub);
+        if (!media.isDir())
+            continue;
+        changed = qMax(changed, media.lastModified());
+        for (const QFileInfo& kind : QDir(media.absoluteFilePath()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
+            changed = qMax(changed, kind.lastModified());
+    }
+    // its subfolders, level by level (hidden ones and the art folders left out)
+    QStringList level { dir };
+    int seen = 0;
+    for (int depth = 1; depth <= CHANGE_DEPTH && !level.isEmpty(); depth++) {
+        QStringList next;
+        for (const QString& parent : level) {
+            for (const QFileInfo& sub : QDir(parent).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot)) {
+                if (depth == 1) {
+                    const QString name = sub.fileName().toLower();
+                    if (name == QLatin1String("media") || name == QLatin1String("skraper"))
+                        continue;
+                }
+                if (++seen > CHANGE_MAX_FOLDERS) {
+                    Log::info(QStringLiteral("ROM folders"), LOGMSG("`%1`: more than %2 subfolders, only those dates are checked")
+                        .arg(dir).arg(CHANGE_MAX_FOLDERS));
+                    return changed;
+                }
+                changed = qMax(changed, sub.lastModified());
+                next.append(sub.absoluteFilePath());
+            }
+        }
+        level = next;
+    }
+    return changed;
+}
+} // namespace
+
 int refresh_rom_folders(bool force)
 {
     // a folder changed since its list was made (games added or removed): made again
@@ -2731,17 +2779,9 @@ int refresh_rom_folders(bool force)
             }
             old_format = old_format || !has_format;
         }
-        // art added to the folder's media (media/, media/<kind>/) counts too
-        QDateTime changed = dir_info.lastModified();
-        for (const QString& sub : { QStringLiteral("media"), QStringLiteral(".media"), QStringLiteral("skraper") }) {
-            const QFileInfo media(dir % QLatin1Char('/') % sub);
-            if (!media.isDir())
-                continue;
-            changed = qMax(changed, media.lastModified());
-            for (const QFileInfo& kind : QDir(media.absoluteFilePath()).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot))
-                changed = qMax(changed, kind.lastModified());
-        }
-        if (!force && (!listed.isValid() || (!old_format && changed <= listed)))
+        // the folder, its subfolders (games added in switch/Zelda/) and its
+        // art folders (media/, media/<kind>/): the newest date
+        if (!force && (!listed.isValid() || (!old_format && folder_changed(dir) <= listed)))
             continue;
         if (!esde_dir.isEmpty() && QFileInfo(esde_dir).isDir()) {
             ImportSetup esde_setup = load_import_setup(esde_dir);

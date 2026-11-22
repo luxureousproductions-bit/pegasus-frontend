@@ -7,7 +7,8 @@
 #   storage/ROMs/snes, gba ... its ROMs folder (snes has a gamelist and art)
 #   MyGames/Nintendo 64 ...... a ROM folder without metadata, named the usual way
 #   MyGames/psx .............. a ROM folder with a gamelist.xml of its own and
-#                              a two-disc game (.cue/.bin + .m3u)
+#                              a two-disc game (.cue/.bin + .m3u); its empty
+#                              Extra/ gets a game after the first start
 #   genres, for Library > Genres: Platform (Super Mario World) and platform
 #   (Crash Bandicoot), Shoot'em Up (Metroid Prime) and Shoot’em Up (Wind
 #   Waker, a curly apostrophe): two genres of two spellings each
@@ -19,7 +20,7 @@ T="$1"
 S="$T/storage"
 rm -rf "$T"
 mkdir -p "$S/ES-DE/settings" "$S/ES-DE/gamelists/snes" "$S/ROMs/snes" "$S/ROMs/gba" \
-         "$T/MyGames/Nintendo 64" "$T/MyGames/psx/media" "$T/Pegasus/gamecube" \
+         "$T/MyGames/Nintendo 64" "$T/MyGames/psx/media" "$T/MyGames/psx/Extra" "$T/Pegasus/gamecube" \
          "$T/home/.config/pegasus-frontend"
 
 # a picture with a label (ImageMagick)
