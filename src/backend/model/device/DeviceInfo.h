@@ -144,6 +144,7 @@ private:
     QTimer m_status_poll;    ///< Android: has anything changed (a cheap call)
     int m_status_version = -1;
     QTimer m_clock;          ///< fires right on the next minute
+    bool m_active = true;    ///< Pegasus X in front (on_app_state)
     bool m_wifi_on = false;
     int m_wifi_level = 0;
     int m_wifi_rssi = -127;

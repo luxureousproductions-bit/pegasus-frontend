@@ -537,12 +537,30 @@ Window {
             interval: 3000
             onTriggered: splashScreen.checkForUpdates()
         }
+        // (not while Pegasus X is away, eg. a game running: a check due then
+        // is made when it's back in front)
         Timer {
             id: updateCheckEvery
             interval: 6 * 60 * 60 * 1000
             repeat: true
             running: splashScreen.startupScreenDone && Internal.settings.checkUpdatesOnStart
-            onTriggered: splashScreen.checkForUpdates()
+            property bool due: false
+            onTriggered: {
+                if (Qt.application.state !== Qt.ApplicationActive) {
+                    due = true;
+                    return;
+                }
+                splashScreen.checkForUpdates();
+            }
+        }
+        Connections {
+            target: Qt.application
+            function onStateChanged() {
+                if (Qt.application.state === Qt.ApplicationActive && updateCheckEvery.due) {
+                    updateCheckEvery.due = false;
+                    splashScreen.checkForUpdates();
+                }
+            }
         }
         property bool firstCheck: true
         function checkForUpdates() {

@@ -5,6 +5,33 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Device listeners pause while Pegasus X is away
+
+- **What:** while Pegasus X isn't in front (a game running, the screen off,
+  the notification shade down), Android's frequent broadcasts aren't
+  listened to: battery changes, Wi-Fi on/off and signal, airplane mode,
+  volume and headphones, and the once-a-minute tick that read the
+  controllers, the clock format and the Bluetooth devices' batteries. The
+  30-second battery read stops too. Back in front, they're listened to
+  again and everything is read at once (battery, Wi-Fi, sound,
+  controllers, clock, Bluetooth batteries), so `api.device` is current
+  within half a second, as the status check already restarts then. The
+  6-hour update check no longer runs while Pegasus X is away: one that
+  falls due then is made when it's back in front.
+- **Why:** those broadcasts are delivered to Pegasus X's Java side even
+  while a game runs, and each minute's tick read every controller and
+  Bluetooth device (reflection, JSON). Qt's own timers already wait while
+  Android has Pegasus X in the background (the app doesn't run Qt in the
+  background), so the gain there is for the in-between states.
+- **Not changed:** what `api.device` reports; Bluetooth connect/disconnect,
+  the network, sound devices, controllers being plugged and the thermal
+  status are still told as they happen (they're rare); the status check,
+  the clock and free space were already paused; the start's update check.
+- **Files:** `src/app/platform/android/src/org/pegasus_frontend/android/SystemStatus.java`
+  (`pause`, `resume`), `src/backend/model/device/DeviceInfo.h/.cpp`,
+  `src/frontend/main.qml`.
+- **Commit:** "Device listeners pause while Pegasus X is away".
+
 ### Watched ROM folders are checked in the background, after the library is up
 
 - **What:** the check of the watched ROM folders for added or removed games

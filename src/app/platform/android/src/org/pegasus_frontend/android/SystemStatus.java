@@ -97,6 +97,14 @@ public class SystemStatus {
 
     private static void changed() { s_version++; }
 
+    // Pegasus X: the broadcasts that come often (battery, Wi-Fi signal, the
+    // minute's controller and Bluetooth battery reads, volume) are only
+    // listened to while Pegasus X is in front: pause() while it's away (a
+    // game running), resume() reads everything again when it's back
+    private static BroadcastReceiver s_receiver;
+    private static IntentFilter s_filter;
+    private static boolean s_paused = false;
+
     // Pegasus X frees the theme's cached graphics and unused QML components
     // (FrontendLayer::releaseMemory); registered by FrontendLayer at startup
     private static native void nativeLowMemory();
@@ -135,7 +143,8 @@ public class SystemStatus {
         filter.addAction(Intent.ACTION_TIME_TICK);
         filter.addAction(Intent.ACTION_TIME_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
-        final BroadcastReceiver receiver = new BroadcastReceiver() {
+        s_filter = filter;
+        s_receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context c, Intent intent) {
                 final String a = intent.getAction();
@@ -163,13 +172,8 @@ public class SystemStatus {
                 }
             }
         };
-        try {
-            final Intent sticky = ctx.registerReceiver(receiver, filter);
-            if (sticky != null && Intent.ACTION_BATTERY_CHANGED.equals(sticky.getAction()))
-                readBattery(sticky);
-        } catch (Exception e) {
-            // some builds refuse one action or another: the rest still works
-        }
+        if (!s_paused)
+            registerMain();
 
         // -- Bluetooth: on/off, devices connecting and leaving, their battery
         //    (that last one Android sends without documenting it; most do)
@@ -266,6 +270,50 @@ public class SystemStatus {
         readClock();
         readDark(ctx.getResources().getConfiguration());
         changed();
+    }
+
+    private static void registerMain() {
+        try {
+            final Intent sticky = s_ctx.registerReceiver(s_receiver, s_filter);
+            if (sticky != null && Intent.ACTION_BATTERY_CHANGED.equals(sticky.getAction()))
+                readBattery(sticky);
+        } catch (Exception e) {
+            // some builds refuse one action or another: the rest still works
+        }
+    }
+
+    public static void pause() {
+        s_main.post(new Runnable() { @Override public void run() {
+            if (s_paused)
+                return;
+            s_paused = true;
+            if (s_receiver == null)
+                return;  // not set up yet: setup() leaves it unregistered
+            try {
+                s_ctx.unregisterReceiver(s_receiver);
+            } catch (Exception e) {
+                // wasn't registered
+            }
+        } });
+    }
+
+    public static void resume() {
+        s_main.post(new Runnable() { @Override public void run() {
+            if (!s_paused)
+                return;
+            s_paused = false;
+            if (s_receiver == null)
+                return;  // setup() registers it
+            registerMain();  // (the battery comes back with it)
+            // what may have changed meanwhile
+            readWifi();
+            readAirplane();
+            readSound();
+            readGamepads();
+            readClock();
+            readBluetoothBatteries();
+            changed();
+        } });
     }
 
     // -- readers (main thread) ------------------------------------------------------

@@ -140,17 +140,31 @@ DeviceInfo::DeviceInfo(QObject* parent)
 
 void DeviceInfo::on_app_state(Qt::ApplicationState state)
 {
-    if (state == Qt::ApplicationActive) {
+    // Pegasus X: away (a game in front, the screen off), the 30-second battery
+    // read stops too, and Android's frequent broadcasts (battery, Wi-Fi
+    // signal, the minute's controller and Bluetooth reads) aren't listened
+    // to; back, everything is read again at once
+    const bool active = state == Qt::ApplicationActive;
+    if (active == m_active)
+        return;
+    m_active = active;
+    if (active) {
 #ifdef Q_OS_ANDROID
+        QAndroidJniObject::callStaticMethod<void>("org/pegasus_frontend/android/SystemStatus", "resume", "()V");
         m_status_poll.start(500);
         poll_status();
 #endif
         poll_battery();
+        m_battery_poll.start(30 * 1000);
         tick_clock();
         read_storage();
     }
     else {
+#ifdef Q_OS_ANDROID
+        QAndroidJniObject::callStaticMethod<void>("org/pegasus_frontend/android/SystemStatus", "pause", "()V");
+#endif
         m_status_poll.stop();
+        m_battery_poll.stop();
         m_clock.stop();
     }
 }
