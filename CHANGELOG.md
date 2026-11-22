@@ -5,6 +5,18 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### Fix: test_GenreKey didn't compile in build 2231
+
+- **What:** the `replace` and `same` tests held the JS function in a
+  `const QJSValue`; `QJSValue::call` isn't const in Qt 5, so the test
+  didn't compile and the test environment (which builds the tests too) and
+  the compile check stopped at it. The two handles are no longer const.
+- **Why:** build 2231's test environment and compile check failed on it
+  (Android built: the app itself was fine).
+- **Not changed:** the app; the tests' cases.
+- **Files:** `tests/frontend/genrekey/test_GenreKey.cpp`.
+- **Commit:** "Fix: test_GenreKey didn't compile in build 2231".
+
 ### Genres: change a genre in all its games
 
 - **What:** a genre's page in Library > Genres starts with "Change this

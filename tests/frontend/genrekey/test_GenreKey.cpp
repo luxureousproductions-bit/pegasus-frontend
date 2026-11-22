@@ -313,7 +313,7 @@ void test_GenreKey::replace()
     QFETCH(QString, from);
     QFETCH(QString, to);
     QFETCH(QStringList, expected);
-    const QJSValue fn = m_js.globalObject().property(QStringLiteral("replace"));
+    QJSValue fn = m_js.globalObject().property(QStringLiteral("replace"));
     const QJSValue out = fn.call({ m_js.toScriptValue(genres), key(from), to });
     QVERIFY2(!out.isError(), qPrintable(out.toString()));
     QCOMPARE(out.toVariant().toStringList(), expected);
@@ -321,7 +321,7 @@ void test_GenreKey::replace()
 
 void test_GenreKey::same()
 {
-    const QJSValue fn = m_js.globalObject().property(QStringLiteral("same"));
+    QJSValue fn = m_js.globalObject().property(QStringLiteral("same"));
     QVERIFY(fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }), m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }) }).toBool());
     QVERIFY(!fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("A"), QStringLiteral("B") }), m_js.toScriptValue(QStringList { QStringLiteral("B"), QStringLiteral("A") }) }).toBool());
     QVERIFY(!fn.call({ m_js.toScriptValue(QStringList { QStringLiteral("a") }), m_js.toScriptValue(QStringList { QStringLiteral("A") }) }).toBool());
