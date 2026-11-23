@@ -219,6 +219,103 @@ FocusScope {
         message = qsTr("Scraping \"%1\"...").arg(entry.title) + api.tr;
     }
 
+    // Pegasus X: Needs your check > Start on a game: search one LaunchboxDB
+    // system for it, any of them (its list saved the first time: read from
+    // the download, with its progress; B stops it)
+    property var lbEntry: null       // the game searched for
+    property string lbPlatform: ""   // the system searched
+    property var lbPlatforms: []     // every LaunchboxDB system (Settings.launchBoxPlatforms)
+    property var lbResults: []       // its closest games (Settings.launchBoxSearchOn)
+    property var lbState: ({})       // LaunchboxDB's status while a system's list is saved
+    property bool lbSaving: false
+    function openSystemSearch(entry) {
+        lbEntry = entry;
+        lbPlatforms = Internal.settings.launchBoxPlatforms();
+        lbSaving = false;
+        page = "lbsystems";
+        message = lbPlatforms.length === 0 ? qsTr("Download LaunchboxDB first (Scraper > Account settings).") + api.tr : "";
+        list.currentIndex = 1;
+        list.positionViewAtBeginning();
+    }
+    function searchSystem(platform) {
+        lbPlatform = platform;
+        for (var i = 0; i < lbPlatforms.length; i++) {
+            if (lbPlatforms[i].name === platform && lbPlatforms[i].saved) {
+                showSystemResults();
+                return;
+            }
+        }
+        // not saved yet: its list first (not while LaunchboxDB is busy with another)
+        if (Internal.settings.launchBoxStatus().working) {
+            message = qsTr("LaunchboxDB is busy: try again in a moment.") + api.tr;
+            return;
+        }
+        Internal.settings.launchBoxAddPlatforms([platform]);
+        var st = Internal.settings.launchBoxStatus();
+        if (!st.working) {
+            message = st.error ? st.error : qsTr("LaunchboxDB is busy: try again in a moment.") + api.tr;
+            return;
+        }
+        lbState = st;
+        lbSaving = true;
+        list.currentIndex = 2;  // Stop
+        list.positionViewAtBeginning();
+        message = "";
+    }
+    function selectSystemRow() {
+        for (var i = 0; i < list.rows.length; i++) {
+            if (list.rows[i].kind === "lbsystem" && list.rows[i].text === lbPlatform) {
+                list.currentIndex = i;
+                list.positionViewAtIndex(i, ListView.Center);
+                return;
+            }
+        }
+        list.currentIndex = 1;
+    }
+    function stopSystemSave() {
+        Internal.settings.launchBoxCancel();
+        lbSaving = false;
+        selectSystemRow();
+        message = qsTr("Stopped: %1 wasn't saved.").arg(lbPlatform) + api.tr;
+    }
+    function showSystemResults() {
+        lbResults = Internal.settings.launchBoxSearchOn(lbPlatform, lbEntry ? lbEntry.title : "");
+        page = "lbresults";
+        message = "";
+        list.currentIndex = 1;
+        list.positionViewAtBeginning();
+    }
+    function pickSystemResult(pick) {
+        var entry = lbEntry;
+        var error = Internal.settings.reviewScrape(api.collections, entry.path, "use", pick.id, lbPlatform);
+        page = "review";
+        reviews = Internal.settings.reviewList();
+        message = error !== "" ? error : qsTr("Scraping \"%1\" with %2 (%3)...").arg(entry.title).arg(pick.name).arg(pick.info) + api.tr;
+        list.currentIndex = 1;
+        list.positionViewAtBeginning();
+    }
+    Connections {
+        target: Internal.settings
+        function onLaunchBoxProgress(status) {
+            if (root.lbSaving)
+                root.lbState = status;
+        }
+        function onLaunchBoxFinished(status) {
+            if (!root.lbSaving)
+                return;
+            root.lbSaving = false;
+            root.lbState = status;
+            if (status.error) {
+                root.selectSystemRow();
+                root.message = qsTr("LaunchboxDB: %1").arg(status.error) + api.tr;
+                return;
+            }
+            root.lbPlatforms = Internal.settings.launchBoxPlatforms();
+            if (root.page === "lbsystems")
+                root.showSystemResults();
+        }
+    }
+
     // -- RetroAchievements ----------------------------------------------------------
     property bool raChecking: false
     property var raExtra: null   // the open game's x-ra-* fields after a check here (its file's, not the loaded ones)
@@ -1349,6 +1446,31 @@ FocusScope {
     }
     // back one page; with unsaved changes, asks first
     function back(force) {
+        // Needs your check's system search: a list being saved stops; the
+        // results go back to the systems, the systems to Needs your check
+        if (page === "lbsystems" && lbSaving) {
+            stopSystemSave();
+            return;
+        }
+        if (page === "lbresults") {
+            page = "lbsystems";
+            message = "";
+            selectSystemRow();
+            return;
+        }
+        if (page === "lbsystems") {
+            var entryPath = lbEntry ? lbEntry.path : "";
+            page = "review";
+            message = "";
+            reviews = Internal.settings.reviewList();
+            for (var rv = 0; rv < list.rows.length; rv++) {
+                if (list.rows[rv].kind === "reviewgame" && list.rows[rv].entry.path === entryPath) {
+                    list.currentIndex = rv;
+                    list.positionViewAtIndex(rv, ListView.Center);
+                }
+            }
+            return;
+        }
         if (dirty && !force) {
             chooser.openFor(qsTr("Save your changes to \"%1\"?").arg(page === "game" ? current("title") : collName) + api.tr, [
                 { "act": "save", "text": qsTr("Save") + api.tr },
@@ -1655,6 +1777,8 @@ FocusScope {
         text: (page === "collections" ? qsTr("Settings > Library")
              : page === "hidden" ? qsTr("Library > Hidden")
              : page === "review" ? qsTr("Library > Needs your check")
+             : page === "lbsystems" ? qsTr("Needs your check > Search a system")
+             : page === "lbresults" ? qsTr("Needs your check > %1").arg(root.lbPlatform)
              : page === "ramatches" ? qsTr("%1 > RetroAchievements").arg(root.collName)
              : page === "collection" ? qsTr("Library > %1").arg(root.collName)
              : qsTr("%1 > %2").arg(root.collName).arg(root.current("title"))) + api.tr
@@ -1744,6 +1868,34 @@ FocusScope {
                                                 : qsTr("No match found") + api.tr,
                                "value": e.closest ? (e.score || 0) + "%" : "—",
                                "warn": !!e.closest, "muted": !e.closest });
+                }
+                return out;
+            }
+            if (root.page === "lbsystems") {
+                out.push({ "kind": "section", "text": qsTr("Search a LaunchboxDB system for \"%1\"").arg(root.lbEntry ? root.lbEntry.title : "") + api.tr });
+                if (root.lbSaving) {
+                    var ls = root.lbState || {};
+                    out.push({ "kind": "info", "text": qsTr("Saving %1's list").arg(root.lbPlatform) + api.tr,
+                               "value": (ls.stage === "downloading" ? qsTr("downloading... %1%") : qsTr("reading... %1%")).arg(ls.progress || 0) + api.tr });
+                    out.push({ "kind": "lbstop", "text": qsTr("Stop") + api.tr, "value": "" });
+                    return out;
+                }
+                for (i = 0; i < root.lbPlatforms.length; i++) {
+                    var lp = root.lbPlatforms[i];
+                    out.push({ "kind": "lbsystem", "text": lp.name,
+                               "value": lp.saved ? qsTr("%1 games").arg(lp.games) + api.tr
+                                                 : qsTr("%1 games · about %2 MB to save").arg(lp.games).arg(Math.max(1, Math.round(lp.games * 1.7 / 1024))) + api.tr,
+                               "muted": !lp.saved });
+                }
+                return out;
+            }
+            if (root.page === "lbresults") {
+                out.push({ "kind": "section", "text": qsTr("\"%1\" on %2").arg(root.lbEntry ? root.lbEntry.title : "").arg(root.lbPlatform) + api.tr });
+                if (root.lbResults.length === 0)
+                    out.push({ "kind": "info", "text": qsTr("No match on this system.") + api.tr, "value": "" });
+                for (i = 0; i < root.lbResults.length; i++) {
+                    var lr = root.lbResults[i];
+                    out.push({ "kind": "lbpick", "text": lr.name, "pick": lr, "value": lr.info + " · " + lr.score + "%" });
                 }
                 return out;
             }
@@ -2161,6 +2313,12 @@ FocusScope {
             }
             else if (row.kind === "reviewgame")
                 root.reviewAct(row.entry, "use");
+            else if (row.kind === "lbsystem")
+                root.searchSystem(row.text);
+            else if (row.kind === "lbstop")
+                root.stopSystemSave();
+            else if (row.kind === "lbpick")
+                root.pickSystemResult(row.pick);
             else if (row.kind === "coll")
                 root.openCollection(row.coll);
             else if (row.kind === "game") {
@@ -2286,6 +2444,12 @@ FocusScope {
             else if (api.keys.isDetails(event)) {
                 event.accepted = true;
                 secondary(currentIndex);
+            }
+            else if ((event.key === 1048587 || event.key === Qt.Key_F5) && currentIndex >= 0 && currentIndex < rows.length
+                     && rows[currentIndex].kind === "reviewgame") {
+                // Start: search a LaunchboxDB system for it
+                event.accepted = true;
+                root.openSystemSearch(rows[currentIndex].entry);
             }
             else if (api.keys.isFilters(event)) {
                 // Y: hide or show a game
@@ -2420,7 +2584,9 @@ FocusScope {
         text: root.message !== "" ? root.message
             : root.page === "collections" ? qsTr("A open · B back · Edits are saved in Pegasus metadata files, so every theme shows them") + api.tr
             : root.page === "hidden" ? qsTr("A show it again · B back") + api.tr
-            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · B back") + api.tr
+            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · Start search a system · B back") + api.tr
+            : root.page === "lbsystems" ? (root.lbSaving ? qsTr("B stop") + api.tr : qsTr("A search this system · B back") + api.tr)
+            : root.page === "lbresults" ? qsTr("A use this match · B back") + api.tr
             : root.page === "ramatches" ? qsTr("A pick the game on RetroAchievements · B back") + api.tr
             : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr

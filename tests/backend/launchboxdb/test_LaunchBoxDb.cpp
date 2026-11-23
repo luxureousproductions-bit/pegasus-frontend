@@ -54,6 +54,10 @@ private slots:
     void android_namesake_is_not_guessed();
     void picked_game_found_on_fallback();
     void candidates_show_their_platform();
+    void saved_platform_list();
+    void search_one_platform();
+    void picked_on_a_searched_platform();
+    void extra_platform_joins_android_then_leaves();
 };
 
 QJsonObject test_LaunchBoxDb::game(int id, const QString& name, const QStringList& alt, const QString& release)
@@ -287,6 +291,70 @@ void test_LaunchBoxDb::candidates_show_their_platform()
     QVERIFY(both.size() >= 2);
     QCOMPARE(both.front().platform, QStringLiteral("Nintendo Switch 2"));
     QCOMPARE(both.at(1).platform, QStringLiteral("Nintendo Switch"));
+}
+
+// Needs your check > Start: the systems with a saved list
+void test_LaunchBoxDb::saved_platform_list()
+{
+    QStringList saved = Db::saved_platforms();
+    saved.sort();
+    QCOMPARE(saved, QStringList({ QStringLiteral("Android"), QStringLiteral("Nintendo 64"), QStringLiteral("Nintendo Switch"),
+                                  QStringLiteral("Nintendo Switch 2"), QStringLiteral("Sega 32X"), QStringLiteral("Sony Playstation 2") }));
+}
+
+// a system searched by hand: only that system's games, whatever the collection
+void test_LaunchBoxDb::search_one_platform()
+{
+    Db db;
+    const std::vector<Db::Game> found = db.candidates_on(QStringLiteral("Sony Playstation 2"), QStringLiteral("Need for Speed: Most Wanted"), 15);
+    QCOMPARE(static_cast<int>(found.size()), 1);
+    QCOMPARE(found.front().id, 50);
+    QCOMPARE(found.front().platform, QStringLiteral("Sony Playstation 2"));
+    QCOMPARE(found.front().year, 2005);
+    // a system without a saved list: nothing (its list is saved first)
+    QVERIFY(db.candidates_on(QStringLiteral("Sega Dreamcast"), QStringLiteral("Doom"), 15).empty());
+}
+
+// the pick is found on the system it was picked on, not the collection's
+void test_LaunchBoxDb::picked_on_a_searched_platform()
+{
+    Db db;
+    QCOMPARE(db.game_on(QStringLiteral("Sega 32X"), 40).name, QStringLiteral("Doom"));
+    QCOMPARE(db.game_on(QStringLiteral("Sega 32X"), 31).id, 0);  // that one is Nintendo 64's
+    QCOMPARE(db.game(QStringLiteral("switch"), 40).id, 0);       // not on Switch's own lists
+}
+
+// Extra systems for Android: a saved extra joins the Android comparisons;
+// unticked (its list removed), it leaves them; other systems never see it
+void test_LaunchBoxDb::extra_platform_joins_android_then_leaves()
+{
+    write_platform(QStringLiteral("Sega Saturn"), { game(60, QStringLiteral("Panzer Dragoon Saga")) });
+    QFile file(Db::dir() + QStringLiteral("/status.json"));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QJsonObject status = QJsonDocument::fromJson(file.readAll()).object();
+    file.close();
+    QJsonObject counts = status.value(QStringLiteral("platforms")).toObject();
+    counts.insert(QStringLiteral("Sega Saturn"), 1);
+    status.insert(QStringLiteral("platforms"), counts);
+    status.insert(QStringLiteral("games"), 7);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write(QJsonDocument(status).toJson());
+    file.close();
+
+    {
+        Db db;
+        QCOMPARE(db.best(QStringLiteral("android"), QStringLiteral("Panzer Dragoon Saga"), 60).game.id, 60);
+        QCOMPARE(db.best(QStringLiteral("n64"), QStringLiteral("Panzer Dragoon Saga"), 60).game.id, 0);
+        db.remove_platform(QStringLiteral("Sega Saturn"));
+        QCOMPARE(db.best(QStringLiteral("android"), QStringLiteral("Panzer Dragoon Saga"), 60).game.id, 0);
+    }
+    QVERIFY(!Db::saved_platforms().contains(QStringLiteral("Sega Saturn")));
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    const QJsonObject after = QJsonDocument::fromJson(file.readAll()).object();
+    QCOMPARE(after.value(QStringLiteral("games")).toInt(), 6);
+    QVERIFY(after.value(QStringLiteral("platforms")).toObject().contains(QStringLiteral("Android")));
+    // the others stay
+    QCOMPARE(Db::saved_platforms().size(), 6);
 }
 
 

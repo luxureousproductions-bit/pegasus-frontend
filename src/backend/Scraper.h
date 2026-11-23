@@ -67,6 +67,7 @@ struct Job {
     bool has_box3d = false;
     QStringList hidden_art;  ///< art removed in Library ("<kind>|<file>")
     int launchbox_id = 0;    ///< the LaunchBox game you picked (Needs your check)
+    QString launchbox_platform;  ///< ...on this LaunchBox platform (picked in a system search), else the system's
 };
 
 /// What a source gave for one game

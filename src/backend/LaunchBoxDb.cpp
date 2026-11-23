@@ -433,10 +433,11 @@ bool LaunchBoxDb::ready() const
     return !QDir(index_dir()).entryList({ QStringLiteral("*.json") }, QDir::Files).isEmpty();
 }
 
-void LaunchBoxDb::update(const QStringList& esde_systems, bool force)
+void LaunchBoxDb::update(const QStringList& esde_systems, bool force, const QStringList& extra_platforms)
 {
     if (m_working)
         return;
+    m_extra = extra_platforms;
     m_error.clear();
     m_cancel = false;
     m_working = true;
@@ -525,6 +526,8 @@ void LaunchBoxDb::build(const QStringList& esde_systems)
         for (const QString& platform : wanted)
             platforms.insert(platform);
     }
+    for (const QString& platform : m_extra)
+        platforms.insert(platform);
     // the platforms indexed before stay indexed
     const QJsonObject saved = read_json(status_path()).value(QStringLiteral("platforms")).toObject();
     for (auto it = saved.constBegin(); it != saved.constEnd(); ++it)
@@ -743,6 +746,56 @@ LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& 
     std::stable_sort(weak.begin(), weak.end(), [](const Game& a, const Game& b) { return a.score > b.score; });
     out.closest = std::move(weak);
     return out;
+}
+
+QVariantMap LaunchBoxDb::all_platforms()
+{
+    return read_json(platforms_path()).toVariantMap();
+}
+
+QStringList LaunchBoxDb::saved_platforms()
+{
+    QStringList out;
+    for (const QString& platform : read_json(status_path()).value(QStringLiteral("platforms")).toObject().keys()) {
+        if (QFileInfo::exists(index_path(platform)))
+            out.append(platform);
+    }
+    return out;
+}
+
+void LaunchBoxDb::remove_platform(const QString& platform)
+{
+    if (m_working)
+        return;
+    QFile::remove(index_path(platform));
+    m_loaded.remove(platform);
+    QJsonObject status = read_json(status_path());
+    QJsonObject counts = status.value(QStringLiteral("platforms")).toObject();
+    if (!counts.contains(platform))
+        return;
+    status.insert(QStringLiteral("games"), status.value(QStringLiteral("games")).toInt() - counts.value(platform).toInt());
+    counts.remove(platform);
+    status.insert(QStringLiteral("platforms"), counts);
+    write_json(status_path(), QJsonDocument(status));
+    Log::info(LOG_TAG, LOGMSG("%1: removed").arg(platform));
+}
+
+std::vector<LaunchBoxDb::Game> LaunchBoxDb::candidates_on(const QString& platform, const QString& name, int limit)
+{
+    if (!QFileInfo::exists(index_path(platform)))
+        return {};
+    return platform_candidates(platform, name, limit, false);
+}
+
+LaunchBoxDb::Game LaunchBoxDb::game_on(const QString& platform, int id)
+{
+    if (QFileInfo::exists(index_path(platform))) {
+        for (const Game& g : platform_games(platform)) {
+            if (g.id == id)
+                return g;
+        }
+    }
+    return Game();
 }
 
 LaunchBoxDb::Game LaunchBoxDb::game(const QString& esde_system, int id)

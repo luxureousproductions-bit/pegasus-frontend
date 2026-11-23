@@ -102,11 +102,16 @@ FocusScope {
         { "v": "launchbox", "t": "LaunchboxDB" },
     ]
     property var lb: Internal.settings.launchBoxStatus()   // the LaunchBox database
+    property var lbPlatforms: []   // Extra systems for Android: every LaunchBox platform (Settings.launchBoxPlatforms)
     Connections {
         target: Internal.settings
         function onLaunchBoxProgress(status) { root.lb = status; }
         function onLaunchBoxFinished(status) {
-            root.keepPosition(function() { root.lb = status; });
+            root.keepPosition(function() {
+                root.lb = status;
+                if (root.page === "android")
+                    root.lbPlatforms = Internal.settings.launchBoxPlatforms();
+            });
             root.message = status.error ? qsTr("LaunchboxDB: %1").arg(status.error) + api.tr
                                         : qsTr("LaunchboxDB ready: %1 games on %2 platforms").arg(status.games).arg(Object.keys(status.platforms || {}).length) + api.tr;
         }
@@ -341,6 +346,8 @@ FocusScope {
                        : (lb && lb.present) ? qsTr("Update the database") + api.tr : qsTr("Download the database") + api.tr,
                        "value": (lb && lb.working) ? "" : qsTr("over 100 MB, once") + api.tr });
             out.push({ "kind": "toggle", "key": "launchboxFill", "text": qsTr("Fill in what the main source doesn't have") + api.tr });
+            out.push({ "kind": "page", "to": "android", "text": qsTr("Extra systems for Android") + api.tr,
+                       "value": (s.androidExtra || []).length > 0 ? qsTr("%1 ticked").arg((s.androidExtra || []).length) + api.tr : "" });
             out.push({ "kind": "section", "text": "ScreenScraper" });
             out.push({ "kind": "text", "key": "ssUser", "text": qsTr("Username") + api.tr,
                        "value": s.ssUser !== "" ? s.ssUser : qsTr("not set") + api.tr, "muted": s.ssUser === "" });
@@ -350,6 +357,36 @@ FocusScope {
             out.push({ "kind": "help", "key": "ss", "text": qsTr("How to get an account") + api.tr, "value": "" });
             out.push({ "kind": "info", "text": qsTr("Status") + api.tr,
                        "value": checking ? qsTr("checking...") + api.tr : (accounts.ss || ""), "ok": !!accounts.ssOk });
+            return out;
+        }
+        // Pegasus X: the LaunchBox systems your Android collections are also
+        // compared with (a native port's console or PC original), each saved
+        // as a list of a few MB
+        if (page === "android") {
+            out.push({ "kind": "info", "text": qsTr("Android games are compared with your other systems' LaunchboxDB lists, and with the ones ticked here (each one saved, a few MB). About as close on two systems: Needs your check.") + api.tr, "value": "" });
+            out.push({ "kind": "info", "text": qsTr("Status") + api.tr, "value": lbSummary, "ok": !!(lb && lb.present) });
+            if (lbPlatforms.length === 0) {
+                out.push({ "kind": "info", "text": qsTr("Download the database first (Account settings).") + api.tr, "value": "" });
+                return out;
+            }
+            var ticked = s.androidExtra || [];
+            var unsaved = 0;
+            for (i = 0; i < lbPlatforms.length; i++) {
+                if (ticked.indexOf(lbPlatforms[i].name) >= 0 && !lbPlatforms[i].saved)
+                    unsaved++;
+            }
+            out.push({ "kind": "lbextra", "text": (lb && lb.working) ? qsTr("Stop") + api.tr : qsTr("Save the ticked systems now") + api.tr,
+                       "value": (lb && lb.working) ? "" : (unsaved > 0 ? qsTr("%1 to save").arg(unsaved) + api.tr : qsTr("all saved") + api.tr) });
+            out.push({ "kind": "section", "text": qsTr("LaunchboxDB systems") + api.tr });
+            for (i = 0; i < lbPlatforms.length; i++) {
+                var lp = lbPlatforms[i];
+                var on = ticked.indexOf(lp.name) >= 0;
+                // (a saved list takes about 1.7 KB a game: an estimate)
+                var mb = Math.max(1, Math.round(lp.games * 1.7 / 1024));
+                out.push({ "kind": "lbplatform", "text": lp.name, "check": on,
+                           "value": qsTr("%1 games · about %2 MB").arg(lp.games).arg(mb) + api.tr
+                                    + (lp.saved ? qsTr(" · saved") + api.tr : "") + "   " + (on ? "☑" : "☐") });
+            }
             return out;
         }
         if (page === "content") {
@@ -461,6 +498,7 @@ FocusScope {
         "accounts": qsTr("Scraper > Accounts"), "content": qsTr("Scraper > Content"),
         "miximage": qsTr("Scraper > Miximages"), "other": qsTr("Scraper > Other settings"),
         "running": qsTr("Scraper > Scraping"), "log": qsTr("Scraper > Log"),
+        "android": qsTr("Scraper > Accounts > Extra systems for Android"),
     })
 
     // -- Doing things ------------------------------------------------------------
@@ -468,6 +506,8 @@ FocusScope {
     function openPage(to) {
         if (to === "log")
             logLines = Internal.settings.scraperLog();
+        if (to === "android")
+            lbPlatforms = Internal.settings.launchBoxPlatforms();
         page = to;
         message = "";
         list.currentIndex = 0;
@@ -479,6 +519,15 @@ FocusScope {
         // scraping goes on in the background: back from its page leaves it running
         if (page === "main" || page === "running") {
             root.close();
+            return;
+        }
+        // Extra systems for Android: back to Account settings, on its row
+        if (page === "android") {
+            openPage("accounts");
+            for (var a = 0; a < rows.length; a++) {
+                if (rows[a].to === "android")
+                    list.currentIndex = a;
+            }
             return;
         }
         var from = page;
@@ -528,6 +577,29 @@ FocusScope {
             lb = Internal.settings.launchBoxStatus();
         }
         else if (row.kind === "offline") startGenerator();
+        else if (row.kind === "lbplatform") {
+            var list2 = (s.androidExtra || []).slice();
+            var at = list2.indexOf(row.text);
+            if (at < 0) {
+                list2.push(row.text);
+                set("androidExtra", list2);
+                message = qsTr("%1 ticked: Save the ticked systems now (or Update the database) saves it.").arg(row.text) + api.tr;
+            }
+            else {
+                list2.splice(at, 1);
+                set("androidExtra", list2);
+                var error = Internal.settings.launchBoxRemovePlatform(api.collections, row.text);
+                message = error !== "" ? error : qsTr("%1 unticked.").arg(row.text) + api.tr;
+                keepPosition(function() { root.lbPlatforms = Internal.settings.launchBoxPlatforms(); });
+            }
+        }
+        else if (row.kind === "lbextra") {
+            if (lb && lb.working)
+                Internal.settings.launchBoxCancel();
+            else if ((s.androidExtra || []).length > 0)
+                Internal.settings.launchBoxAddPlatforms(s.androidExtra);
+            lb = Internal.settings.launchBoxStatus();
+        }
         else if (row.kind === "stop") Internal.settings.stopScraper();
         else if (row.kind === "done") { page = "main"; message = ""; list.currentIndex = 0; }
     }

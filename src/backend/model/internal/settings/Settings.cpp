@@ -2223,6 +2223,9 @@ QVariantMap scraper_defaults()
         { QStringLiteral("source"), QStringLiteral("screenscraper") },
         { QStringLiteral("games"), QStringLiteral("all") },
         { QStringLiteral("systems"), QStringList() },
+        // Pegasus X: the LaunchBox platforms the Android collections are also
+        // compared with (saved by Update LaunchboxDB; Scraper > Accounts)
+        { QStringLiteral("androidExtra"), QStringList() },
         { QStringLiteral("ssUser"), QString() },
         { QStringLiteral("ssPassword"), QString() },
         { QStringLiteral("ssUse"), true },
@@ -2879,7 +2882,8 @@ QVariantList Settings::reviewList() const
     return scraper::Scraper::reviewList();
 }
 
-QString Settings::reviewScrape(QObject* collections, const QString& path, const QString& mode, int launchbox_id)
+QString Settings::reviewScrape(QObject* collections, const QString& path, const QString& mode, int launchbox_id,
+                               const QString& launchbox_platform)
 {
     if (m_scraper && m_scraper->running())
         return tr("The scraper is already running.");
@@ -2911,8 +2915,10 @@ QString Settings::reviewScrape(QObject* collections, const QString& path, const 
     scraper::Job job = make_scraper_job(*found_coll, found,
         scraper::Scraper::system_of(found_coll->name(), found_coll->shortName()), path);
     m_scrape_games.insert(path, found);
-    if (mode == QLatin1String("use"))
+    if (mode == QLatin1String("use")) {
         job.launchbox_id = launchbox_id;
+        job.launchbox_platform = launchbox_platform;  // a system you searched (else the system's own)
+    }
     std::vector<scraper::Job> jobs;
     jobs.push_back(std::move(job));
     m_single_game = found;
@@ -3296,12 +3302,71 @@ void Settings::launchBoxUpdate(QObject* collections, bool force)
         if (!system.isEmpty() && !systems.contains(system))
             systems.append(system);
     }
-    launchBox().update(systems, force);
+    // Pegasus X: the extra systems ticked for Android, saved too
+    launchBox().update(systems, force, scraperSettings().value(QStringLiteral("androidExtra")).toStringList());
 }
 
 void Settings::launchBoxCancel()
 {
     launchBox().cancel();
+}
+
+QVariantList Settings::launchBoxPlatforms() const
+{
+    const QVariantMap all = scraper::LaunchBoxDb::all_platforms();
+    const QStringList saved = scraper::LaunchBoxDb::saved_platforms();
+    QStringList names = all.keys();
+    names.sort(Qt::CaseInsensitive);
+    QVariantList out;
+    for (const QString& name : names) {
+        if (name.trimmed().isEmpty())
+            continue;
+        out.append(QVariantMap {
+            { QStringLiteral("name"), name },
+            { QStringLiteral("games"), all.value(name).toInt() },
+            { QStringLiteral("saved"), saved.contains(name) },
+        });
+    }
+    return out;
+}
+
+void Settings::launchBoxAddPlatforms(const QStringList& platforms)
+{
+    launchBox().update({}, false, platforms);
+}
+
+QString Settings::launchBoxRemovePlatform(QObject* collections, const QString& platform)
+{
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    for (int i = 0; list && i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll)
+            continue;
+        const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
+        if (scraper::LaunchBoxDb::saved_platforms_for(system).contains(platform))
+            return tr("%1 stays: your collection %2 uses it.").arg(platform, coll->name());
+    }
+    if (launchBox().working())
+        return tr("LaunchboxDB is busy: try again when it's done.");
+    launchBox().remove_platform(platform);
+    return {};
+}
+
+QVariantList Settings::launchBoxSearchOn(const QString& platform, const QString& name)
+{
+    QVariantList out;
+    for (const scraper::LaunchBoxDb::Game& g : launchBox().candidates_on(platform, name, 15)) {
+        QStringList info { g.platform };
+        if (g.year > 0)
+            info.append(QString::number(g.year));
+        out.append(QVariantMap {
+            { QStringLiteral("id"), g.id },
+            { QStringLiteral("name"), g.name },
+            { QStringLiteral("info"), info.join(QStringLiteral(" · ")) },
+            { QStringLiteral("score"), g.score },
+        });
+    }
+    return out;
 }
 
 QString Settings::runScraper(std::vector<scraper::Job>&& jobs, const QVariantMap& settings)

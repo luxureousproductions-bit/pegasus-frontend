@@ -105,10 +105,24 @@ public:
     bool ready() const;
 
     /// Downloads the database when it's missing or older than a week (or
-    /// `force`), then reads it into the indexes of `esde_systems`; progress
-    /// and finished tell how it went
-    void update(const QStringList& esde_systems, bool force);
+    /// `force`), then reads it into the indexes of `esde_systems` (and of
+    /// `extra_platforms`, LaunchBox names: Pegasus X's extra systems for
+    /// Android, or one picked in Needs your check); progress and finished
+    /// tell how it went
+    void update(const QStringList& esde_systems, bool force, const QStringList& extra_platforms = {});
     void cancel();
+    /// Pegasus X: every platform in the download, with its number of games
+    /// (from the last read; empty before the first)
+    static QVariantMap all_platforms();
+    /// Pegasus X: the platforms saved (with an index)
+    static QStringList saved_platforms();
+    /// Pegasus X: a saved platform's index removed (an extra system unticked)
+    void remove_platform(const QString& platform);
+    /// Pegasus X: the games of one platform closest to a name (a search in
+    /// Needs your check), best first, at most `limit`
+    std::vector<Game> candidates_on(const QString& platform, const QString& name, int limit);
+    /// Pegasus X: one game of one platform by its id, or a game with id 0
+    Game game_on(const QString& platform, int id);
 
     /// The games of a system closest to a name, best first (score set),
     /// at most `limit` (its fallback platforms' too: search_platforms; on
@@ -130,6 +144,7 @@ signals:
 private:
     void download(const QStringList& esde_systems);
     void build(const QStringList& esde_systems);
+    QStringList m_extra;   ///< update()'s extra platforms, for build()
     const std::vector<Game>& platform_games(const QString& platform);
     std::vector<Game> platform_candidates(const QString& platform, const QString& name, int limit, bool strip_edition);
 

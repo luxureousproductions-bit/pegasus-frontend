@@ -5,6 +5,48 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### LaunchboxDB: search any system from Needs your check; extra systems for Android
+
+- **Needs your check > Start on a game: search a system.** A list of every
+  LaunchboxDB system (from the last Update), the ones already saved with
+  their game count, the others with an estimate of what saving them
+  costs ("about N MB to save"). A on a system: if its list is saved, its
+  closest games for that title (up to 15, each with system, year and
+  score); if not, its list is saved first (read from the LaunchboxDB
+  download, 1 to 3 minutes; the download first if it isn't there), with
+  its progress, then the results. B (or Stop) stops it at any point: the
+  read stops between games and nothing is written; B on the results goes
+  back to the systems, B on the systems to Needs your check. A on a
+  result scrapes the game with it (LaunchboxDB, on the system it was
+  picked on). The page's hint line has the new key. A saved system stays
+  saved, so a second search on it is instant.
+- **Scraper > Account settings > Extra systems for Android.** Every
+  LaunchboxDB system with its game count and estimated size, ticked or
+  not. Ticked systems are saved with the next Update LaunchboxDB, or now
+  with "Save the ticked systems now" (Stop on the same row). Unticking a
+  system removes its list, unless one of your collections uses that
+  system (it says which). Saved systems are what Android collections are
+  compared against (build 2248's tie rule, unchanged: within 5 points
+  goes to Needs your check, choices with system and year).
+- **Note:** a system saved from Needs your check is also a saved system,
+  so it joins the Android comparisons too (and shows as ticked-or-saved
+  in Extra systems for Android, where it can be removed).
+- **Not changed:** ScreenScraper and its matching; matching for every
+  collection that isn't Android (their own system's list first, the
+  Switch 2 to Switch fallback); the tie margin; what Update LaunchboxDB
+  saves for your collections.
+- **Tests:** `test_LaunchBoxDb`: the saved systems list, a search on one
+  system (and none on an unsaved one), a pick found on the system it was
+  picked on, an extra system joining the Android comparisons and leaving
+  them when removed (non-Android collections never see it, the other
+  systems stay).
+- **Files:** `src/backend/LaunchBoxDb.h/.cpp`, `src/backend/Scraper.h/.cpp`,
+  `src/backend/model/internal/settings/Settings.h/.cpp`,
+  `src/frontend/menu/settings/MetadataEditor.qml`,
+  `src/frontend/menu/settings/ScraperScreen.qml`,
+  `tests/backend/launchboxdb/test_LaunchBoxDb.cpp`.
+- **Commit:** "LaunchboxDB: search any system from Needs your check; extra systems for Android".
+
 ### Fixes: Back from Scraper options, a game's "Nothing saved", Android namesakes
 
 - **Back from Scraper options (a game in Library):** the Scraper opened on

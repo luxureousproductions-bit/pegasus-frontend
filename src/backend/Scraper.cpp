@@ -1075,7 +1075,9 @@ void Scraper::next()
             const Job& job = m_jobs[m_index];
             if (m_known_lb_id > 0 && lbReady()) {
                 // the match you picked in Needs your check
-                const LaunchBoxDb::Game game = m_lb->game(job.system, m_known_lb_id);
+                const LaunchBoxDb::Game game = job.launchbox_platform.isEmpty()
+                    ? m_lb->game(job.system, m_known_lb_id)
+                    : m_lb->game_on(job.launchbox_platform, m_known_lb_id);  // picked on a system you searched
                 m_lb_done = true;
                 if (game.id > 0)
                     parseLaunchBox(game, false);

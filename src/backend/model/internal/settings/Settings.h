@@ -340,6 +340,18 @@ public:
     /// library's systems (launchBoxProgress, launchBoxFinished)
     Q_INVOKABLE void launchBoxUpdate(QObject* collections, bool force);
     Q_INVOKABLE void launchBoxCancel();
+    /// Pegasus X: every LaunchBox platform: [{ name, games, saved }], A to Z
+    /// (empty before the database was first read)
+    Q_INVOKABLE QVariantList launchBoxPlatforms() const;
+    /// Pegasus X: one more platform saved (read from the download, which is
+    /// downloaded first if missing; launchBoxProgress, launchBoxFinished)
+    Q_INVOKABLE void launchBoxAddPlatforms(const QStringList& platforms);
+    /// Pegasus X: a saved platform's list removed, unless a collection of
+    /// yours needs it; returns an error, or empty
+    Q_INVOKABLE QString launchBoxRemovePlatform(QObject* collections, const QString& platform);
+    /// Pegasus X: a platform's games closest to a name (Needs your check's
+    /// system search): [{ id, name, info, score }]
+    Q_INVOKABLE QVariantList launchBoxSearchOn(const QString& platform, const QString& name);
     /// the test environment: read the LaunchBox database in before the test scrape
     Q_INVOKABLE bool testLaunchBox() const { return qEnvironmentVariable("PEGASUSX_TEST_LAUNCHBOX") == QLatin1String("1"); }
 
@@ -412,7 +424,8 @@ public:
     /// Needs your check: [{ path, title, collection, system, closest, info, score, launchbox }]
     Q_INVOKABLE QVariantList reviewList() const;
     /// a game there: "use" its closest match (LaunchBox id), or "choose" from the matches
-    Q_INVOKABLE QString reviewScrape(QObject* collections, const QString& path, const QString& mode, int launchbox_id);
+    Q_INVOKABLE QString reviewScrape(QObject* collections, const QString& path, const QString& mode, int launchbox_id,
+                                     const QString& launchbox_platform = QString());
     /// never scraped again (Complete my library, the Scraper's runs)
     Q_INVOKABLE void setNeverScrape(const QString& path, const QString& title, bool never);
     /// Pegasus X: what the scraper did lately (Library > Scraper > Log)
