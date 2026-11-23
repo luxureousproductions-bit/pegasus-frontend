@@ -2801,7 +2801,8 @@ FocusScope {
                         radius: parent.radius
                         color: "#3aa"
                         NumberAnimation on x {
-                            running: busyBar.visible && scrapeView.visible
+                            // (on the scrape's state only: the bar's own visibility made a binding loop)
+                            running: artPreview.scraping && scrapeView.total <= 0
                             from: -busyBar.width
                             to: busyBar.parent.width
                             duration: 1400

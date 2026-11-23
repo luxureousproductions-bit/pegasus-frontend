@@ -5,6 +5,16 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Fix: the scrape progress bar's binding loop
+
+- **What:** the moving bar of the scrape progress panel (shown only when a
+  scrape's total isn't known) now runs on the scrape's state alone; its
+  own visibility in the condition made Qt log "Binding loop detected for
+  property running" (build 2246's test run).
+- **Not changed:** what the panel shows; everything else.
+- **Files:** `src/frontend/menu/settings/MetadataEditor.qml`.
+- **Commit:** "Fix: the scrape progress bar's binding loop".
+
 ### Library: a scrape's progress in the preview panel
 
 - **What:** while a scrape runs (any route: a collection, a game, Complete
