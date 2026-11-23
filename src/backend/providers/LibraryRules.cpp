@@ -31,7 +31,7 @@
 #include "model/gaming/GameFileListModel.h"
 #include "model/gaming/GameListModel.h"
 #include "utils/HashMap.h"
-#ifdef Q_OS_ANDROID
+#if defined(Q_OS_ANDROID) || defined(PEGASUSX_TESTENV)
 #include "platform/AndroidHelpers.h"
 #endif
 #ifdef WITH_COMPAT_ESDE
@@ -43,6 +43,8 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
@@ -62,6 +64,10 @@ QString hidden_path()
 QString kinds_path()
 {
     return paths::writableConfigDir() % QStringLiteral("/pegasusx-android-kinds.json");
+}
+QString app_selection_path()
+{
+    return paths::writableConfigDir() % QStringLiteral("/pegasusx-android-apps.json");
 }
 QString settings_path()
 {
@@ -216,6 +222,48 @@ void name_forks(std::vector<model::Game*>& list)
     }
 }
 
+// the section each Android entry got when the rules last ran (game_key -> kind)
+QMutex last_kinds_mutex;
+QVariantMap last_kinds;
+
+// the installed apps that can be opened: package -> Android says it's a game
+HashMap<QString, bool> installed_apps()
+{
+    HashMap<QString, bool> out;
+#if defined(Q_OS_ANDROID) || defined(PEGASUSX_TESTENV)
+    for (const QString& line : ::android::android_app_list()) {
+        const QStringList parts = line.split(QLatin1Char('\t'));
+        if (parts.size() >= 4)
+            out.emplace(parts.at(1), parts.at(3) == QLatin1String("1"));
+    }
+#endif
+    return out;
+}
+
+// the emulators ES-DE knows (their packages)
+QSet<QString> emulator_packages()
+{
+#ifdef WITH_COMPAT_ESDE
+    return providers::esde::emulator_packages();
+#else
+    return {};
+#endif
+}
+
+bool is_emulator_package(const QSet<QString>& emulators, const QString& package)
+{
+    if (package.isEmpty())
+        return false;
+    if (emulators.contains(package))
+        return true;
+    // forks and other builds of a known one ("org.ppsspp.ppsspp" -> "org.ppsspp.ppssppgold")
+    for (const QString& known : emulators) {
+        if (package.startsWith(known % QLatin1Char('.')))
+            return true;
+    }
+    return package.contains(QLatin1String("retroarch"));
+}
+
 void merge_android(std::vector<model::Collection*>& collections, std::vector<model::Game*>& games, bool merge_games)
 {
     std::vector<model::Collection*> app_sources;
@@ -238,29 +286,10 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
     // your metadata, then what the app itself says (Android's "game" flag),
     // then whether it's a known emulator
     const QVariantMap moved = providers::library::load_kinds();
-    HashMap<QString, bool> flagged_game;
-#ifdef Q_OS_ANDROID
-    for (const QString& line : ::android::android_app_list()) {
-        const QStringList parts = line.split(QLatin1Char('\t'));
-        if (parts.size() >= 4)
-            flagged_game.emplace(parts.at(1), parts.at(3) == QLatin1String("1"));
-    }
-#endif
-    QSet<QString> emulators;
-#ifdef WITH_COMPAT_ESDE
-    emulators = providers::esde::emulator_packages();
-#endif
+    const HashMap<QString, bool> flagged_game = installed_apps();
+    const QSet<QString> emulators = emulator_packages();
     const auto is_emulator = [&emulators](const QString& package) {
-        if (package.isEmpty())
-            return false;
-        if (emulators.contains(package))
-            return true;
-        // forks and other builds of a known one ("org.ppsspp.ppsspp" -> "org.ppsspp.ppssppgold")
-        for (const QString& known : emulators) {
-            if (package.startsWith(known % QLatin1Char('.')))
-                return true;
-        }
-        return package.contains(QLatin1String("retroarch"));
+        return is_emulator_package(emulators, package);
     };
 
     // every game once, remembering which came from a games collection
@@ -332,18 +361,66 @@ void merge_android(std::vector<model::Collection*>& collections, std::vector<mod
             genres.append(kind);
         kind_of.emplace(game, kind);
     }
+    {
+        // (Settings > Library: a hidden entry is gone from the library after
+        // this, so its section is kept here for it)
+        QVariantMap kinds;
+        for (const auto& pair : kind_of)
+            kinds.insert(providers::library::game_key(*pair.first), pair.second);
+        QMutexLocker lock(&last_kinds_mutex);
+        last_kinds = std::move(kinds);
+    }
+
+    // the installed apps you didn't pick in Android apps to import stay out
+    // (only entries that are an app, android:<package>; your other entries stay)
+    bool picked_known = false;
+    QStringList picked = providers::library::app_selection(&picked_known);
+    if (!picked_known) {
+        // none picked yet (the first start with the picker): the apps the
+        // library has now are the ones picked, so nothing you have goes
+        for (model::Game* const game : all) {
+            const QString key = providers::library::game_key(*game);
+            if (key.startsWith(QLatin1String("android:")) && !picked.contains(key.mid(8)))
+                picked.append(key.mid(8));
+        }
+        if (!picked.isEmpty()) {
+            providers::library::save_app_selection(picked, {});
+            picked_known = true;
+            Log::info(LOG_TAG, LOGMSG("Android apps to import: the %1 apps in your library now (first start with the app picker)")
+                .arg(picked.size()));
+        }
+    }
+    QSet<model::Game*> not_picked;
+    if (picked_known) {
+        const QSet<QString> picked_set(picked.cbegin(), picked.cend());
+        for (model::Game* const game : all) {
+            const QString key = providers::library::game_key(*game);
+            if (!key.startsWith(QLatin1String("android:")))
+                continue;
+            const QString package = key.mid(8);
+            if (flagged_game.find(package) != flagged_game.cend() && !picked_set.contains(package))
+                not_picked.insert(game);
+        }
+        if (!not_picked.isEmpty())
+            Log::info(LOG_TAG, LOGMSG("Android apps to import: %1 installed apps not picked, left out").arg(not_picked.size()));
+    }
 
     // what goes where
     std::vector<model::Game*> android_list;
     std::vector<model::Game*> games_list;
     if (merge_games) {
-        android_list = all;
+        for (model::Game* const game : all) {
+            if (!not_picked.contains(game))
+                android_list.push_back(game);
+        }
     }
     else {
         // Android Games is its own collection: every entry in the Games
         // section goes there (also apps you moved to Games in Settings >
         // Library), the apps and emulators stay in Android
         for (model::Game* const game : all) {
+            if (not_picked.contains(game))
+                continue;
             if (kind_of[game] == QLatin1String("Game"))
                 games_list.push_back(game);
             else
@@ -564,6 +641,104 @@ bool set_kind(const QString& key, const QString& kind)
         return false;
     }
     return true;
+}
+
+QString last_kind(const QString& key)
+{
+    QMutexLocker lock(&last_kinds_mutex);
+    return last_kinds.value(key).toString();
+}
+
+QStringList app_selection(bool* known)
+{
+    QFile file(app_selection_path());
+    if (known)
+        *known = file.exists();
+    if (!file.open(QIODevice::ReadOnly))
+        return {};
+    QStringList out;
+    for (const QJsonValue& value : QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("apps")).toArray()) {
+        const QString package = value.toString();
+        if (!package.isEmpty() && !out.contains(package))
+            out.append(package);
+    }
+    return out;
+}
+
+bool save_app_selection(const QStringList& packages, const QVariantMap& kinds)
+{
+    QStringList sorted = packages;
+    sorted.removeDuplicates();
+    sorted.sort();
+    QSaveFile file(app_selection_path());
+    if (!file.open(QIODevice::WriteOnly)
+            || file.write(QJsonDocument(QJsonObject { { QStringLiteral("apps"), QJsonArray::fromStringList(sorted) } })
+                          .toJson(QJsonDocument::Indented)) < 0
+            || !file.commit()) {
+        Log::warning(LOG_TAG, LOGMSG("Could not write `%1`").arg(app_selection_path()));
+        return false;
+    }
+    // their sections: kept as your moves (Settings > Library), one write
+    if (kinds.isEmpty())
+        return true;
+    QVariantMap moved = load_kinds();
+    bool changed = false;
+    for (auto it = kinds.cbegin(); it != kinds.cend(); ++it) {
+        const QString kind = it.value().toString();
+        if (kind != QLatin1String("Game") && kind != QLatin1String("Application") && kind != QLatin1String("Emulator"))
+            continue;
+        const QString key = QStringLiteral("android:") % it.key();
+        if (moved.value(key).toString() != kind) {
+            moved.insert(key, kind);
+            changed = true;
+        }
+    }
+    if (!changed)
+        return true;
+    QSaveFile kinds_file(kinds_path());
+    if (!kinds_file.open(QIODevice::WriteOnly)
+            || kinds_file.write(QJsonDocument(QJsonObject::fromVariantMap(moved)).toJson(QJsonDocument::Indented)) < 0
+            || !kinds_file.commit()) {
+        Log::warning(LOG_TAG, LOGMSG("Could not write `%1`").arg(kinds_path()));
+        return false;
+    }
+    return true;
+}
+
+std::vector<AppChoice> app_choices()
+{
+    std::vector<AppChoice> out;
+#if defined(Q_OS_ANDROID) || defined(PEGASUSX_TESTENV)
+    bool known = false;
+    const QStringList picked = app_selection(&known);
+    const QVariantMap moved = load_kinds();
+    const QSet<QString> emulators = emulator_packages();
+    for (const QString& line : ::android::android_app_list()) {
+        const QStringList parts = line.split(QLatin1Char('\t'));
+        if (parts.size() < 4)
+            continue;
+        AppChoice app;
+        app.label = parts.at(0);
+        app.package = parts.at(1);
+        // none picked yet: every app is imported (as before the picker)
+        app.selected = !known || picked.contains(app.package);
+        const QString key = QStringLiteral("android:") % app.package;
+        app.kind = moved.value(key).toString();
+        if (app.kind.isEmpty())
+            app.kind = last_kind(key);
+        if (app.kind.isEmpty()) {
+            app.kind = parts.at(3) == QLatin1String("1") ? QStringLiteral("Game")
+                     : is_emulator_package(emulators, app.package) ? QStringLiteral("Emulator")
+                     : QStringLiteral("Application");
+        }
+        out.push_back(std::move(app));
+    }
+    std::sort(out.begin(), out.end(), [](const AppChoice& a, const AppChoice& b) {
+        const int by_label = a.label.compare(b.label, Qt::CaseInsensitive);
+        return by_label != 0 ? by_label < 0 : a.package < b.package;
+    });
+#endif
+    return out;
 }
 
 HiddenList load_hidden()

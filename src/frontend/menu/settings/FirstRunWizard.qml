@@ -32,6 +32,7 @@ FocusScope {
     property int step: 1
     property int tick: 0   // bumped when a step's screen closes, so the texts read again
     property bool libraryChanged: false   // game folders or an import: read again before step 4
+    property bool appsPicked: false       // Android apps to import: read again by the end of setup too
 
     anchors.fill: parent
     enabled: focus
@@ -55,6 +56,9 @@ FocusScope {
             refreshStatus();
     }
     function finish() {
+        // the picked apps, when setup ends before step 4 read the library again
+        if (appsPicked && libraryChanged)
+            Internal.settings.reloadLibrary();
         Internal.settings.setWizardStep(0);
         Internal.settings.setRootSetupAsked();
         root.close();
@@ -124,10 +128,15 @@ FocusScope {
             ];
             case 2:
                 var have = Internal.settings.gameDirectorySystems().length;
-                return [
-                    { "act": "dirs", "text": qsTr("Add systems...") + api.tr, "value": have === 0 ? qsTr("nothing added yet") + api.tr : "" },
-                    { "act": "next", "text": qsTr("Next") + api.tr, "value": "" },
-                ];
+                var two = [ { "act": "dirs", "text": qsTr("Add systems...") + api.tr, "value": have === 0 ? qsTr("nothing added yet") + api.tr : "" } ];
+                // Android apps to import (every app until you pick)
+                if (Qt.platform.os === "android" || Internal.settings.androidAppChoices().length > 0) {
+                    var picked = Internal.settings.androidAppSelection().length;
+                    two.push({ "act": "apps", "text": qsTr("Android apps to import...") + api.tr,
+                               "value": (picked === 0 ? qsTr("every app") : picked === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(picked)) + api.tr });
+                }
+                two.push({ "act": "next", "text": qsTr("Next") + api.tr, "value": "" });
+                return two;
             case 3: return [
                 { "act": "import", "text": qsTr("Import gamelist...") + api.tr, "value": "" },
                 { "act": "next", "text": qsTr("Skip") + api.tr, "value": "" },
@@ -157,6 +166,9 @@ FocusScope {
                 break;
             case "dirs":
                 openSub("GameDirectory.qml", { "addOnly": true });
+                break;
+            case "apps":
+                openSub("AndroidAppPicker.qml", {});
                 break;
             case "import":
                 openSub("EsdeImport.qml", {});
@@ -192,6 +204,12 @@ FocusScope {
             libraryChanged = true;
             tick++;  // the texts read the directory again
             list.currentIndex = 1;  // Next
+        }
+        else if (from.indexOf("AndroidAppPicker") >= 0) {
+            libraryChanged = true;  // read again before step 4
+            appsPicked = true;
+            tick++;  // its row's count
+            list.currentIndex = list.count - 1;  // Next
         }
         else if (from.indexOf("EsdeImport") >= 0) {
             libraryChanged = true;

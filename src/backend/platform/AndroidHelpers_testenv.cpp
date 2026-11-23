@@ -19,7 +19,8 @@
 // (qmake PEGASUSX_TESTENV=1), so the ES-DE import, ROM folders and Library
 // code can run on Linux. The "device storage" is PEGASUSX_TEST_STORAGE (else
 // the home folder); installed apps come from PEGASUSX_TEST_PACKAGES
-// (comma separated package names).
+// (comma separated package names), the apps that can be opened from
+// PEGASUSX_TEST_APPS (see android_app_list).
 
 #include "AndroidHelpers.h"
 
@@ -65,7 +66,19 @@ QStringList installed_packages()
 QStringList resolve_components(const QStringList& components) { return components; }
 QString find_game_activity(const QString&) { return {}; }
 QString app_label(const QString& package_name) { return installed_packages().contains(package_name) ? package_name : QString(); }
-QStringList android_app_list() { return {}; }
+// PEGASUSX_TEST_APPS: "Label|package|1;Label 2|package2|0" (1: Android says
+// it's a game), as androidAppList() gives them
+QStringList android_app_list()
+{
+    QStringList out;
+    for (const QString& entry : qEnvironmentVariable("PEGASUSX_TEST_APPS").split(QLatin1Char(';'), Qt::SkipEmptyParts)) {
+        const QStringList parts = entry.split(QLatin1Char('|'));
+        if (parts.size() >= 2)
+            out.append(parts.at(0) + QLatin1Char('\t') + parts.at(1) + QLatin1Char('\t') + parts.at(1)
+                       + QStringLiteral("/.Main\t") + (parts.value(2) == QLatin1String("1") ? QLatin1Char('1') : QLatin1Char('0')));
+    }
+    return out;
+}
 void request_saf_permission(const std::function<void()>& cb) { if (cb) cb(); }
 
 QString run_am_call(const QStringList&) { return QStringLiteral("Not on Android (test environment)"); }

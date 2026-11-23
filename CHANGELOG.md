@@ -5,6 +5,60 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Android apps to import (a picker); a hidden app keeps its section
+
+- **Android apps to import:** a new screen listing every installed app that
+  can be opened, with its icon and name, a tick, and its section
+  (Application, Emulator or Games). Only the ticked apps are in the library,
+  each in its section. Search apps... narrows the list (part of a name or
+  package); Select all and Deselect all act on the apps shown (all of them
+  without a search). A ticks or unticks, X (or a tap on the section) changes
+  the section, B clears the search, then goes back; LB/RB top and bottom,
+  LT/RT 10 rows, as in Genres. Touch works on every row. Each change is
+  saved at once (`pegasusx-android-apps.json` in the config folder; the
+  sections of the ticked apps go into the Android moves file, as a move in
+  Library does, so an app update doesn't change them). The library takes it
+  when it's read again: on leaving Library, or in setup.
+- **Where:** Settings > Library > the Android collection ("Android apps to
+  import", under "Android games"), and Library > Options (so it can still be
+  reached when no app is picked and there's no Android collection); first-
+  time setup, step 2 ("Android apps to import..."), on Android only.
+- **Existing libraries:** the first start of this build keeps every app the
+  library has now as picked (hidden ones too), with the section it has; no
+  app goes. Until that's written (eg. before the first scan), every app is
+  imported, as before.
+- **New installs:** the first scan imports every app, as before, and keeps
+  them as picked; setup's step 2 has the picker to untick what you don't
+  want.
+- **How it works:** Pegasus' own app import still reads every app into the
+  game list cache (so ticking one later needs no rescan); the library rules
+  leave out the installed apps (android:<package> entries) that aren't
+  ticked. Your other Android entries (a game you added, a ROM launched with
+  an app) aren't touched. An app that isn't installed isn't in the picker
+  and isn't changed.
+- **Fix: a hidden app showed in Games.** Hiding a game takes it out of the
+  library, so Library > Android listed the hidden ones from the hidden list,
+  which has no section: all of them went under Games. The library rules now
+  remember each Android entry's section when they run (before the hidden
+  ones are left out), and the hidden list gives it: a hidden app stays in its
+  own section (your move first). Hiding and showing again are as before.
+- **Not changed:** Hide and Show it again; Move to Games / Apps / Emulators
+  (and Back to automatic); Android games' own collection; the scraper; ES-DE
+  import; non-Android collections; themes.
+- **Tests:** the test environment (`PEGASUSX_TEST_APPS`: apps that can be
+  opened, on Linux): a first start keeps the library's apps as picked; the
+  picker ticks, unticks, changes a section, searches, Deselect all / Select
+  all on the search; the library then has only the picked ones; Library >
+  Android shows the hidden emulator under Emulators (screenshots).
+- **Files:** `src/backend/providers/LibraryRules.h/.cpp`,
+  `src/backend/model/internal/settings/Settings.h/.cpp`,
+  `src/backend/platform/AndroidHelpers_testenv.cpp`,
+  `src/frontend/menu/settings/AndroidAppPicker.qml` (new),
+  `src/frontend/menu/settings/MetadataEditor.qml`,
+  `src/frontend/menu/settings/FirstRunWizard.qml`,
+  `src/frontend/frontend.qrc`, `tests/testenv/run.sh`.
+- **Commit:** "Android apps to import: a picker; a hidden app keeps its section".
+
 ### LaunchboxDB: search any system from Needs your check; extra systems for Android
 
 - **Needs your check > Start on a game: search a system.** A list of every

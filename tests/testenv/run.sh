@@ -402,6 +402,76 @@ PY
     stop 13c-scrape-progress
 fi
 
+# -- 14. Android apps to import (the app picker) and a hidden app's section --------------------
+# Four "installed" apps (PEGASUSX_TEST_APPS); three of them are in an Android collection of the
+# game directory (the test environment has no Pegasus app import of its own): Notes (an app),
+# Drift Racer (Android says it's a game), Retro Emu (an emulator: "retroarch"), hidden. Camera
+# isn't in the library. The first start with the picker keeps the three as picked.
+APPS="Notes|com.test.notes|0;Drift Racer|com.test.drift|1;Retro Emu|com.test.retroarch|0;Camera|com.test.camera|0"
+mkdir -p "$CFG/gamedirectory/android"
+cat > "$CFG/gamedirectory/android/metadata.pegasus.txt" <<'TXT'
+collection: Android
+shortname: android
+
+game: Notes
+file: android:com.test.notes
+
+game: Drift Racer
+file: android:com.test.drift
+
+game: Retro Emu
+file: android:com.test.retroarch
+TXT
+python3 - "$CFG/pegasusx-hidden.json" <<'PY'
+import json, os, sys
+path = sys.argv[1]
+data = json.load(open(path)) if os.path.exists(path) else {}
+data.setdefault("collections", [])
+data.setdefault("games", []).append({"path": "android:com.test.retroarch", "title": "Retro Emu", "collections": ["Android"]})
+json.dump(data, open(path, "w"), indent=4)
+PY
+rm -f "$CFG/pegasusx-android-apps.json"
+find "$HOME" -name "gameindex-v1.json" -delete 2>/dev/null
+start 14-apps-first "" 10 "PEGASUSX_TEST_APPS=$APPS"
+wait_log "Android apps to import" 30 "$R/logs/14-apps-first.stdout"
+stop 14-apps-first
+cp "$CFG/pegasusx-android-apps.json" "$R/files/apps-after-first-start.json" 2>/dev/null
+# the picker: Camera ticked and moved to Emulator (X), Notes unticked; Search apps... "dri":
+# Deselect all shown, then Select all shown (Drift Racer off and on again); B clears the search
+start 14-apps-picker "menu/settings/AndroidAppPicker.qml" 5 "PEGASUSX_TEST_APPS=$APPS"
+shot 14-picker
+keys Down Down Down Return i
+keys Down Down Return
+shot 14-picker-changed
+keys q Return
+sleep 1
+xdotool type --clearmodifiers --delay 150 "dri"
+sleep 1
+keys Return
+shot 14-picker-search
+keys Down Down Return
+shot 14-picker-deselect-shown
+keys Up Return
+shot 14-picker-select-shown
+keys Escape
+shot 14-picker-cleared
+stop 14-apps-picker
+cp "$CFG/pegasusx-android-apps.json" "$R/files/apps-after-picker.json" 2>/dev/null
+cp "$CFG/pegasusx-android-kinds.json" "$R/files/android-kinds-after-picker.json" 2>/dev/null
+# the library as read now: Drift Racer only (Notes not picked, Retro Emu hidden; Camera has
+# no entry here: on Android, Pegasus' own app import has every app)
+start 14-apps-theme "" 10 "PEGASUSX_TEST_APPS=$APPS" "PEGASUSX_TEST_DUMP=$R/apps-library.txt"
+stop 14-apps-theme
+# Library > Android: Retro Emu (hidden) under Emulators, not Games
+start 14-apps-library "menu/settings/MetadataEditor.qml" 6 "PEGASUSX_TEST_APPS=$APPS"
+shot 14-library
+keys Down Down Down Return
+sleep 2
+shot 14-library-android
+keys Down Down Down Down Down Down Down Down Down Down
+shot 14-library-android-down
+stop 14-apps-library
+
 # -- summary --------------------------------------------------------------------------------------
 # the game directory as it is at the end (written along the way)
 find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
@@ -545,6 +615,42 @@ PY
         sed 's/^/    file: /' "$R/scraped-launchbox/switch2-files.txt" 2>/dev/null | head -n 10
         echo
     fi
+    echo "## Android apps to import"
+    strip_ansi "$R/logs/14-apps-first.stdout" "$R/logs/14-apps-picker.stdout" "$R/logs/14-apps-theme.stdout" \
+        | grep -h "Android apps to import" | sed 's/^/    /'
+    python3 - "$R/files" "$R/apps-library.txt" <<'PY' | sed 's/^/    /'
+import json, os, sys
+files, dump = sys.argv[1:3]
+def load(name):
+    try:
+        return json.load(open(os.path.join(files, name)))
+    except Exception:
+        return None
+first = load("apps-after-first-start.json")
+want = ["com.test.drift", "com.test.notes", "com.test.retroarch"]
+print(("OK: " if first and first.get("apps") == want else "FAILED: ")
+      + "first start with the picker: the apps in the library kept as picked (hidden Retro Emu too): %r" % (first,))
+after = load("apps-after-picker.json")
+want = ["com.test.camera", "com.test.drift", "com.test.retroarch"]
+print(("OK: " if after and after.get("apps") == want else "FAILED: ")
+      + "after the picker: Camera ticked, Notes unticked, Drift Racer off and on again: %r" % (after,))
+kinds = load("android-kinds-after-picker.json") or {}
+print(("OK: " if kinds.get("android:com.test.camera") == "Emulator" else "FAILED: ")
+      + "Camera's section (X): %r" % (kinds.get("android:com.test.camera"),))
+print(("OK: " if kinds.get("android:com.test.drift") == "Game" and kinds.get("android:com.test.retroarch") == "Emulator" else "FAILED: ")
+      + "the picked apps keep their sections: Drift Racer %r, Retro Emu %r"
+      % (kinds.get("android:com.test.drift"), kinds.get("android:com.test.retroarch")))
+titles = []
+try:
+    titles = [l for l in open(dump, encoding="utf-8").read().split("\n") if l and not l.startswith(" ")]
+except Exception:
+    pass
+for title, inside in (("Drift Racer", True), ("Notes", False), ("Retro Emu", False)):
+    print(("OK: " if (title in titles) == inside else "FAILED: ")
+          + "%s %s the library" % (title, "in" if inside else "not in"))
+PY
+    echo "    (Library > Android, the hidden Retro Emu under Emulators: screenshots 14-library-android*)"
+    echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40
     echo

@@ -36,6 +36,8 @@ namespace model { class GameFile; }
 //     entry is tagged Game, Emulator or Application (tags), and apps and
 //     emulators also get that genre (as XboxOSv2 expects). Entries with the
 //     exact same title show once: yours > ES-DE import > Pegasus' import.
+//     Installed apps you didn't pick in Android apps to import are left out
+//     (none picked yet: the apps in the library then are, once).
 //   - Hidden games and collections are left out.
 namespace providers {
 namespace library {
@@ -64,6 +66,26 @@ QString source_of(const model::Game&);
 /// Android entries you moved to Game / Application / Emulator, by game_key
 QVariantMap load_kinds();
 bool set_kind(const QString& key, const QString& kind);  ///< empty kind: back to automatic
+
+/// The section each Android entry had when the library rules last ran, by
+/// game_key (hidden ones too: they're left out after this is known)
+QString last_kind(const QString& key);
+
+/// Settings > Library > Android apps to import: the installed apps that can
+/// be opened (Pegasus X itself left out), A to Z by name
+struct AppChoice {
+    QString package;
+    QString label;
+    QString kind;       ///< Game / Application / Emulator: your move, else what it was, else automatic
+    bool selected = false;
+};
+std::vector<AppChoice> app_choices();
+/// The apps picked (packages), or none yet: `known` false (every app is
+/// imported, as before the picker)
+QStringList app_selection(bool* known = nullptr);
+/// Keeps the picked apps; `kinds` (package -> Game / Application / Emulator):
+/// their sections, kept as moves (see set_kind)
+bool save_app_selection(const QStringList& packages, const QVariantMap& kinds);
 
 /// Merge Android Games into Android (Android Apps always is)
 bool merge_android_enabled();

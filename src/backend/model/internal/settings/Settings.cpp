@@ -1927,6 +1927,9 @@ QVariantMap Settings::hiddenItems() const
             { QStringLiteral("path"), entry.path },
             { QStringLiteral("title"), entry.title },
             { QStringLiteral("collections"), entry.collections },
+            // its Android section (Game / Application / Emulator) when the
+            // library was last read: it isn't in the library itself any more
+            { QStringLiteral("kind"), providers::library::last_kind(entry.path) },
         });
     }
     return QVariantMap {
@@ -1988,6 +1991,31 @@ QVariantMap Settings::androidKinds() const
 void Settings::setAndroidKind(const QString& key, const QString& kind)
 {
     providers::library::set_kind(key, kind);
+    emit libraryRulesChanged();
+}
+
+QVariantList Settings::androidAppChoices() const
+{
+    QVariantList out;
+    for (const providers::library::AppChoice& app : providers::library::app_choices()) {
+        out.append(QVariantMap {
+            { QStringLiteral("package"), app.package },
+            { QStringLiteral("label"), app.label },
+            { QStringLiteral("kind"), app.kind },
+            { QStringLiteral("selected"), app.selected },
+        });
+    }
+    return out;
+}
+
+QStringList Settings::androidAppSelection() const
+{
+    return providers::library::app_selection();
+}
+
+void Settings::setAndroidAppChoices(const QStringList& packages, const QVariantMap& kinds)
+{
+    providers::library::save_app_selection(packages, kinds);
     emit libraryRulesChanged();
 }
 

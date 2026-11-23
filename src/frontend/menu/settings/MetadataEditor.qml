@@ -68,7 +68,7 @@ FocusScope {
     property string libStart: ""
     function libState() {
         return JSON.stringify({ "h": Internal.settings.hiddenItems(), "k": Internal.settings.androidKinds(),
-                                "m": Internal.settings.mergeAndroid });
+                                "m": Internal.settings.mergeAndroid, "a": Internal.settings.androidAppSelection() });
     }
 
     Component.onCompleted: {
@@ -611,6 +611,13 @@ FocusScope {
     property var kinds: Internal.settings.androidKinds()   // game key -> moved section
     property bool mergeAndroid: Internal.settings.mergeAndroid
     property bool libChanged: false      // hidden / moved / merged: read again on the way out
+    // Android apps to import (AndroidAppPicker): on Android (and the test
+    // environment's apps)
+    readonly property bool appPickerAvailable: Qt.platform.os === "android" || Internal.settings.androidAppChoices().length > 0
+    function appImportValue() {
+        var n = Internal.settings.androidAppSelection().length;
+        return (n === 0 ? qsTr("every app") : n === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(n)) + api.tr;
+    }
 
     function isCollectionHidden(name) {
         return hidden.collections.indexOf(name) >= 0;
@@ -1841,6 +1848,8 @@ FocusScope {
                 out.push({ "kind": "hiddenlist", "text": qsTr("Hidden games and collections") + api.tr,
                            "value": hiddenCount > 0 ? qsTr("%1 hidden").arg(hiddenCount) + api.tr : qsTr("none") + api.tr,
                            "muted": hiddenCount === 0 });
+                if (root.appPickerAvailable)
+                    out.push({ "kind": "appimport", "text": qsTr("Android apps to import") + api.tr, "value": root.appImportValue() });
                 out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
                 out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
                            "value": root.dataDir, "muted": false });
@@ -1974,10 +1983,13 @@ FocusScope {
                 var cHidden = root.isCollectionHidden(root.collName);
                 out.push({ "kind": "hidecoll", "text": qsTr("Show in themes") + api.tr, "hidden": cHidden,
                            "value": cHidden ? qsTr("Hidden") + api.tr : qsTr("Shown") + api.tr });
-                if (root.isAndroidCollection(root.collObj))
+                if (root.isAndroidCollection(root.collObj)) {
                     out.push({ "kind": "mergeandroid", "text": qsTr("Android games") + api.tr,
                                "value": root.mergeAndroid ? qsTr("Inside Android (Games section)") + api.tr
                                                           : qsTr("Their own collection: Android Games") + api.tr });
+                    if (root.appPickerAvailable)
+                        out.push({ "kind": "appimport", "text": qsTr("Android apps to import") + api.tr, "value": root.appImportValue() });
+                }
             }
             for (i = 0; i < fields.length; i++) {
                 var f = fields[i];
@@ -2223,9 +2235,17 @@ FocusScope {
                 if (root.coll2Name !== "")
                     gone = gone.concat(root.hiddenGamesOf(root.coll2Name));
                 for (i = 0; i < gone.length; i++) {
-                    if (!root.missingOnly && !known[gone[i].path])
-                        groups[0].rows.push({ "kind": "unhidegame", "text": gone[i].title, "entry": gone[i], "hidden": true,
-                                              "value": qsTr("Hidden") + api.tr });
+                    if (root.missingOnly || known[gone[i].path])
+                        continue;
+                    // its own section: your move, else the one it had when the
+                    // library was read (it isn't in the library itself any more)
+                    var hgi = 0;
+                    if (android) {
+                        var hidKind = root.kinds[gone[i].path] || gone[i].kind || "Game";
+                        hgi = hidKind === "Application" ? 1 : hidKind === "Emulator" ? 2 : 0;
+                    }
+                    groups[hgi].rows.push({ "kind": "unhidegame", "text": gone[i].title, "entry": gone[i], "hidden": true,
+                                            "value": qsTr("Hidden") + api.tr });
                 }
                 for (var gs = 0; gs < groups.length; gs++) {
                     if (android && groups[gs].rows.length === 0)
@@ -2326,6 +2346,10 @@ FocusScope {
                     root.androidActions(row.game);
                 else
                     root.openGame(row.game);
+            }
+            else if (row.kind === "appimport") {
+                appPicker.start();
+                appPicker.focus = true;
             }
             else if (row.kind === "mergeandroid") {
                 root.keepPosition(function() {
@@ -3902,6 +3926,20 @@ FocusScope {
     }
 
     // -- Genres: every genre and its games (a game opens on its page here) -----------
+
+    AndroidAppPicker {
+        id: appPicker
+        startOnLoad: false
+        visible: focus
+        z: 6
+        onClose: {
+            list.focus = true;
+            if (appPicker.changed) {
+                root.libChanged = true;
+                root.message = qsTr("Your picked apps are read in once you leave Library.") + api.tr;
+            }
+        }
+    }
 
     GenresScreen {
         id: genres

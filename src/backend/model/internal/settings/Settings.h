@@ -256,7 +256,8 @@ public:
     // Library: hidden games and collections, one Android collection
     bool mergeAndroid() const;
     void setMergeAndroid(bool);
-    /// { collections: [names], games: [{ path, title, collections }] }
+    /// { collections: [names], games: [{ path, title, collections, kind }] }
+    /// (kind: an Android entry's section when the library was last read)
     Q_INVOKABLE QVariantMap hiddenItems() const;
     /// What a game is hidden by: its first file's path, or its URI
     Q_INVOKABLE QString gameKey(QObject* game) const;
@@ -267,6 +268,14 @@ public:
     Q_INVOKABLE QVariantMap androidKinds() const;
     /// Moves an Android entry to a section; an empty kind: back to automatic
     Q_INVOKABLE void setAndroidKind(const QString& key, const QString& kind);
+    /// Android apps to import: the installed apps that can be opened, A to
+    /// Z: [{ package, label, kind, selected }]
+    Q_INVOKABLE QVariantList androidAppChoices() const;
+    /// ...the packages picked (empty before any is: every app imported)
+    Q_INVOKABLE QStringList androidAppSelection() const;
+    /// ...keeps the picked apps and their sections (package -> Game /
+    /// Application / Emulator); read again with the library (reloadLibrary)
+    Q_INVOKABLE void setAndroidAppChoices(const QStringList& packages, const QVariantMap& kinds);
     /// Puts a moved Android entry in its section right away, without reading
     /// the library again: its tags, and with Merge off, Android or Android
     /// Games. False when that can't be done live (back to automatic, or no
