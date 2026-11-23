@@ -5,6 +5,61 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-22
 
+### LaunchBox: Switch 2 falls back to Switch, Android to your other platforms
+
+- **What:** when a game is matched against LaunchBox's database without
+  asking (a scrape, Complete my library, LaunchBox filling in after
+  ScreenScraper):
+  - **Nintendo Switch 2:** the "Nintendo Switch 2" platform first; with no
+    match there at the auto-match threshold, "Nintendo Switch" (a Switch
+    game with a Switch 2 upgrade). On both: the Switch 2 one. A name with
+    "Nintendo Switch 2 Edition" at the end ("- ...", "– ...", ": ...", or
+    "Switch 2 Edition") counts as the name without it, on both sides, so
+    "Breath of the Wild" matches its Switch 2 Edition by itself. (Only for
+    Switch 2 games: other names are compared as before.)
+  - **Android collections (Android, Android Games, Android Apps):** the
+    "Android" platform first; else every other platform that's saved (the
+    platforms of your collections), the best match used. When two or more
+    platforms' best matches are within 5 points of each other, none is
+    guessed: the game goes to Library > Needs your check, its line naming
+    each one with its platform, and "Use" there becomes "Choose".
+  "Choose" (interactive, and Needs your check) lists the matches of the
+  same platforms, each with its platform, the system's own first on the
+  same score; a match you picked is found on any of them and is used as
+  it is. A game that still doesn't match goes to Needs your check, as
+  before.
+- **Update LaunchboxDB:** with a Switch 2 collection, the "Nintendo Switch"
+  platform is saved too, also without a Switch collection. Android Games
+  and Android Apps now count as LaunchBox's "Android" platform (before,
+  only a collection called Android did), so it's saved for them too.
+- **Why the Android fallback only searches the platforms you have:**
+  saving every LaunchBox platform (190 platforms, ~190,000 games against
+  ~18,600 for 7 now) would make the saved data about 10× bigger (roughly
+  300 MB+), Update LaunchboxDB would hold several hundred MB in memory
+  while writing it, and searching it all would load most of it; looking a
+  platform up in the download only when needed would take tens of seconds
+  or more per game. Only the platforms already saved are searched, and
+  each is loaded the first time a fallback needs it in a run: no extra
+  download, disk or Update time. A recomp whose original console has no
+  collection of yours isn't found by itself (Needs your check, Choose).
+- **Not changed:** the original Switch and every other collection (their
+  own platform only, names compared as before); ScreenScraper and its
+  system list; the threshold; saving; library refresh; XBSX; the genre
+  tools; the controls.
+- **Tests:** `test_LaunchBoxDb` (new): the platforms saved and searched,
+  Switch 2 on its own platform first, the fall back to Switch, the Edition
+  names (5 spellings, and on the LaunchBox side), Edition left alone for
+  the original Switch, no fallback for the Switch, Android first, the
+  Android fallback (an alternate name on Nintendo 64), the tie (Nintendo
+  64 and Sega 32X: none used, both kept with their platform), a picked id
+  found on a fallback platform, Choose's list with platforms.
+- **Files:** `src/backend/LaunchBoxDb.h/.cpp` (`saved_platforms_for`,
+  `search_platforms`, `best`, `platform_candidates`, Edition names, the
+  Android names), `src/backend/Scraper.cpp` (`lbAuto`),
+  `tests/backend/launchboxdb/` (new), `tests/backend/backend.pro`,
+  `tests/CMakeLists.txt`.
+- **Commit:** "LaunchBox: Switch 2 falls back to Switch, Android to your other platforms".
+
 ### Scraper: Nintendo Switch 2 is a LaunchBox system
 
 - **What:** `Scraper::system_of()` now gives `switch2` for the Nintendo

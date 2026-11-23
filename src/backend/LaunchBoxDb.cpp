@@ -38,6 +38,7 @@
 #include <QXmlStreamReader>
 #include <QtConcurrent/QtConcurrentRun>
 #include <algorithm>
+#include <iterator>
 #include <unordered_map>
 
 
@@ -97,6 +98,18 @@ QSet<QString> words_of(const QString& text)
         }
     }
     return out;
+}
+
+// Pegasus X: a Nintendo Switch 2 name without its " - Nintendo Switch 2
+// Edition" (or "– Nintendo Switch 2 Edition", ": Switch 2 Edition"...) at the
+// end, so "Breath of the Wild" and its Switch 2 Edition match by themselves
+QString without_switch2_edition(const QString& name)
+{
+    static const QRegularExpression rx(QStringLiteral("\\s*[-\u2013\u2014:]?\\s*(nintendo\\s+)?switch\\s*2\\s+edition\\s*$"),
+                                       QRegularExpression::CaseInsensitiveOption);
+    QString out = name;
+    out.remove(rx);
+    return out.trimmed().isEmpty() ? name : out;
 }
 
 int name_score(const QString& wanted, const QString& found)
@@ -302,6 +315,52 @@ QString LaunchBoxDb::image_url(const QString& file)
     return QStringLiteral("https://images.launchbox-app.com/") % file;
 }
 
+QStringList LaunchBoxDb::saved_platforms_for(const QString& esde_system)
+{
+    QStringList out;
+    const QString own = platform_for(esde_system);
+    if (!own.isEmpty())
+        out.append(own);
+    if (esde_system == QLatin1String("switch2"))
+        out.append(platform_for(QStringLiteral("switch")));
+    return out;
+}
+
+namespace {
+bool is_android_system(const QString& esde_system)
+{
+    return esde_system == QLatin1String("android") || esde_system == QLatin1String("androidapps")
+        || esde_system == QLatin1String("androidgames");
+}
+} // namespace
+
+QStringList LaunchBoxDb::search_platforms(const QString& esde_system) const
+{
+    QStringList out;
+    const QString own = platform_for(esde_system);
+    if (own.isEmpty())
+        return out;
+    out.append(own);
+    if (esde_system == QLatin1String("switch2")) {
+        out.append(platform_for(QStringLiteral("switch")));
+    }
+    else if (is_android_system(esde_system)) {
+        // every other platform saved (no more is read in for it)
+        QStringList saved = read_json(status_path()).value(QStringLiteral("platforms")).toObject().keys();
+        saved.sort(Qt::CaseInsensitive);
+        for (const QString& platform : saved) {
+            if (platform != own)
+                out.append(platform);
+        }
+    }
+    QStringList indexed;
+    for (const QString& platform : out) {
+        if (QFileInfo::exists(index_path(platform)))
+            indexed.append(platform);
+    }
+    return indexed;
+}
+
 QString LaunchBoxDb::platform_for(const QString& esde_system)
 {
     static const QHash<QString, QString> map {
@@ -337,7 +396,7 @@ QString LaunchBoxDb::platform_for(const QString& esde_system)
         { "3do", "3DO Interactive Multiplayer" }, { "c64", "Commodore 64" }, { "amiga", "Commodore Amiga" },
         { "amigacd32", "Commodore Amiga CD32" }, { "dos", "MS-DOS" }, { "pc", "Windows" }, { "windows", "Windows" },
         { "scummvm", "ScummVM" }, { "arcade", "Arcade" }, { "mame", "Arcade" }, { "fbneo", "Arcade" },
-        { "android", "Android" }, { "zxspectrum", "Sinclair ZX Spectrum" }, { "amstradcpc", "Amstrad CPC" },
+        { "android", "Android" }, { "androidapps", "Android" }, { "androidgames", "Android" }, { "zxspectrum", "Sinclair ZX Spectrum" }, { "amstradcpc", "Amstrad CPC" },
         { "apple2", "Apple II" }, { "channelf", "Fairchild Channel F" }, { "odyssey2", "Magnavox Odyssey 2" },
         { "gx4000", "Amstrad GX4000" }, { "x68000", "Sharp X68000" }, { "pc98", "NEC PC-9801" }, { "pc88", "NEC PC-8801" },
         { "cdimono1", "Philips CD-i" }, { "supervision", "Watara Supervision" }, { "gamecom", "Tiger Game.com" },
@@ -460,10 +519,10 @@ void LaunchBoxDb::build(const QStringList& esde_systems)
     emit progress(status());
     QSet<QString> platforms;
     for (const QString& system : esde_systems) {
-        const QString platform = platform_for(system);
-        if (platform.isEmpty())
+        const QStringList wanted = saved_platforms_for(system);
+        if (wanted.isEmpty())
             Log::info(LOG_TAG, LOGMSG("No LaunchBox platform known for the system `%1`").arg(system));
-        else
+        for (const QString& platform : wanted)
             platforms.insert(platform);
     }
     // the platforms indexed before stay indexed
@@ -589,19 +648,22 @@ const std::vector<LaunchBoxDb::Game>& LaunchBoxDb::platform_games(const QString&
     return m_loaded.insert(platform, std::move(games)).value();
 }
 
-std::vector<LaunchBoxDb::Game> LaunchBoxDb::candidates(const QString& esde_system, const QString& name, int limit)
+std::vector<LaunchBoxDb::Game> LaunchBoxDb::platform_candidates(const QString& platform, const QString& name,
+                                                                 int limit, bool strip_edition)
 {
     std::vector<Game> out;
-    const QString platform = platform_for(esde_system);
-    if (platform.isEmpty())
-        return out;
-    const QString key = plain_key(name);
+    // (a Switch 2 name: its "Nintendo Switch 2 Edition" counts as nothing, both sides)
+    const auto plain = [strip_edition](const QString& text) {
+        return strip_edition ? without_switch2_edition(text) : text;
+    };
+    const QString wanted = plain(name);
+    const QString key = plain_key(wanted);
     for (const Game& g : platform_games(platform)) {
-        int score = name_score(name, g.name);
+        int score = name_score(wanted, plain(g.name));
         for (const QString& alt : g.alt_names) {
             if (score >= 100)
                 break;
-            score = std::max(score, plain_key(alt) == key ? 98 : name_score(name, alt) - 2);
+            score = std::max(score, plain_key(plain(alt)) == key ? 98 : name_score(wanted, plain(alt)) - 2);
         }
         if (score <= 0)
             continue;
@@ -615,10 +677,72 @@ std::vector<LaunchBoxDb::Game> LaunchBoxDb::candidates(const QString& esde_syste
     return out;
 }
 
+std::vector<LaunchBoxDb::Game> LaunchBoxDb::candidates(const QString& esde_system, const QString& name, int limit)
+{
+    std::vector<Game> out;
+    const bool strip = esde_system == QLatin1String("switch2");
+    const QStringList platforms = search_platforms(esde_system);
+    if (platforms.isEmpty()) {
+        // (no index for it: as before, nothing)
+        return out;
+    }
+    for (const QString& platform : platforms) {
+        std::vector<Game> found = platform_candidates(platform, name, limit, strip);
+        out.insert(out.end(), std::make_move_iterator(found.begin()), std::make_move_iterator(found.end()));
+    }
+    // best first; the same score: the system's own platform first (the order above)
+    std::stable_sort(out.begin(), out.end(), [](const Game& a, const Game& b) { return a.score > b.score; });
+    if (static_cast<int>(out.size()) > limit)
+        out.resize(static_cast<size_t>(limit));
+    return out;
+}
+
+LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& name, int needed)
+{
+    Match out;
+    const bool strip = esde_system == QLatin1String("switch2");
+    const QStringList platforms = search_platforms(esde_system);
+    const QString own = platform_for(esde_system);
+    std::vector<Game> bests;  // each fallback platform's best
+    std::vector<Game> weak;   // the best of every platform searched, none sure enough
+    for (const QString& platform : platforms) {
+        std::vector<Game> found = platform_candidates(platform, name, 1, strip);
+        if (found.empty())
+            continue;
+        // the system's own platform first: a sure match there is used
+        if (platform == own && found.front().score >= needed) {
+            out.game = std::move(found.front());
+            return out;
+        }
+        if (found.front().score >= needed)
+            bests.push_back(std::move(found.front()));
+        else
+            weak.push_back(std::move(found.front()));
+    }
+    std::stable_sort(bests.begin(), bests.end(), [](const Game& a, const Game& b) { return a.score > b.score; });
+    if (!bests.empty()) {
+        // two or more platforms about as sure: not guessed (Needs your check)
+        std::vector<Game> tied;
+        for (const Game& g : bests) {
+            if (g.score >= bests.front().score - TIE_MARGIN)
+                tied.push_back(g);
+        }
+        if (tied.size() >= 2) {
+            out.tie = true;
+            out.closest = std::move(tied);
+            return out;
+        }
+        out.game = std::move(bests.front());
+        return out;
+    }
+    std::stable_sort(weak.begin(), weak.end(), [](const Game& a, const Game& b) { return a.score > b.score; });
+    out.closest = std::move(weak);
+    return out;
+}
+
 LaunchBoxDb::Game LaunchBoxDb::game(const QString& esde_system, int id)
 {
-    const QString platform = platform_for(esde_system);
-    if (!platform.isEmpty()) {
+    for (const QString& platform : search_platforms(esde_system)) {
         for (const Game& g : platform_games(platform)) {
             if (g.id == id)
                 return g;

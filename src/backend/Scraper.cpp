@@ -1741,24 +1741,47 @@ void Scraper::lbAuto(bool after_other)
         name = search_name_of(m_hash_name + QStringLiteral(".x"), m_hash_name);
     if (after_other && m_changes.contains(QStringLiteral("title")))
         name = m_changes.value(QStringLiteral("title")).toString();
-    const std::vector<LaunchBoxDb::Game> found = m_lb->candidates(job.system, name, 5);
     const int needed = m_settings.value(QStringLiteral("minMatch"), 60).toInt();
-    if (found.empty() || found.front().score < needed) {
-        note(LOGMSG("LaunchBox: no sure match for \"%1\" on %2%3").arg(name, LaunchBoxDb::platform_for(job.system))
-             .arg(found.empty() ? QString() : QStringLiteral(" (closest \"%1\", %2 of %3 needed)")
-                                      .arg(found.front().name).arg(found.front().score).arg(needed)));
+    // Pegasus X: the system's own platform first, then its fallbacks
+    // (Nintendo Switch for Switch 2; the other saved platforms for Android)
+    const LaunchBoxDb::Match match = m_lb->best(job.system, name, needed);
+    if (match.game.id <= 0) {
+        const std::vector<LaunchBoxDb::Game>& found = match.closest;
+        if (match.tie) {
+            // about as sure on two or more platforms: not guessed
+            QStringList which;
+            for (const LaunchBoxDb::Game& g : found)
+                which.append(QStringLiteral("\"%1\" (%2, %3)").arg(g.name, lbCandidate(g).value(QStringLiteral("info")).toString()).arg(g.score));
+            note(LOGMSG("LaunchBox: \"%1\" matches on more than one platform, none is guessed: %2").arg(name, which.join(QStringLiteral("; "))));
+        }
+        else {
+            note(LOGMSG("LaunchBox: no sure match for \"%1\" on %2%3").arg(name, m_lb->search_platforms(job.system).join(QStringLiteral(", ")))
+                 .arg(found.empty() ? QString() : QStringLiteral(" (closest \"%1\", %2 of %3 needed)")
+                                          .arg(found.front().name).arg(found.front().score).arg(needed)));
+        }
         if (!found.empty() && !after_other) {
+            QString info = lbCandidate(found.front()).value(QStringLiteral("info")).toString();
+            if (match.tie) {
+                // each one with its platform (lbCandidate's info starts with it);
+                // none to use as it is: Choose lists them
+                QStringList others;
+                for (size_t i = 1; i < found.size(); i++)
+                    others.append(QStringLiteral("%1 (%2)").arg(found[i].name, lbCandidate(found[i]).value(QStringLiteral("info")).toString()));
+                info += tr(" · as close on other platforms: %1").arg(others.join(QStringLiteral("; ")));
+            }
             m_review_hint = QVariantMap {
                 { QStringLiteral("closest"), found.front().name },
-                { QStringLiteral("info"), lbCandidate(found.front()).value(QStringLiteral("info")) },
+                { QStringLiteral("info"), info },
                 { QStringLiteral("score"), found.front().score },
-                { QStringLiteral("launchbox"), found.front().id },
+                { QStringLiteral("launchbox"), match.tie ? 0 : found.front().id },
             };
         }
         fillMore();
         return;
     }
-    parseLaunchBox(found.front(), after_other);
+    if (match.game.platform != LaunchBoxDb::platform_for(job.system))
+        note(LOGMSG("LaunchBox: no sure match on %1, found on %2").arg(LaunchBoxDb::platform_for(job.system), match.game.platform));
+    parseLaunchBox(match.game, after_other);
     fillMore();
 }
 

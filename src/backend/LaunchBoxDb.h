@@ -70,6 +70,14 @@ public:
         std::vector<Image> images;
         int score = 0;        ///< how sure the match is, 0..100 (candidates())
     };
+    /// Pegasus X: what best() found
+    struct Match {
+        Game game;                  ///< the match to use; id 0 if none was sure enough
+        std::vector<Game> closest;  ///< none sure enough: the closest, best first; a tie: the tied ones
+        bool tie = false;           ///< fallback platforms' best matches about as good: none is guessed
+    };
+    /// two platforms' best matches this close in score are a tie (best())
+    static constexpr int TIE_MARGIN = 5;
 
     explicit LaunchBoxDb(QObject* parent = nullptr);
 
@@ -78,6 +86,14 @@ public:
     static QString index_dir();
     /// LaunchBox's name for an ES-DE system, empty if none known
     static QString platform_for(const QString& esde_system);
+    /// Pegasus X: the platforms Update LaunchboxDB saves for a system: its
+    /// own, and for Nintendo Switch 2 also Nintendo Switch (its fallback)
+    static QStringList saved_platforms_for(const QString& esde_system);
+    /// Pegasus X: the platforms searched for a system, in order: its own,
+    /// then its fallbacks: Nintendo Switch for Nintendo Switch 2; for the
+    /// Android collections every other platform that's saved (the ones of
+    /// your collections). Only platforms with an index.
+    QStringList search_platforms(const QString& esde_system) const;
     static QString image_url(const QString& file);
 
     /// { present, date, size (MB), platforms, games, working, stage, progress, error }
@@ -95,9 +111,14 @@ public:
     void cancel();
 
     /// The games of a system closest to a name, best first (score set),
-    /// at most `limit`
+    /// at most `limit` (its fallback platforms' too: search_platforms; on
+    /// the same score its own platform's first)
     std::vector<Game> candidates(const QString& esde_system, const QString& name, int limit);
-    /// one game by its id (from the library index), or a game with id 0
+    /// Pegasus X: the match to use without asking: the system's own
+    /// platform's best if it's at least `needed`; else its fallbacks' (the
+    /// best of them; two platforms within TIE_MARGIN of it: a tie, none used)
+    Match best(const QString& esde_system, const QString& name, int needed);
+    /// one game by its id (from the library index; its fallbacks' too), or a game with id 0
     Game game(const QString& esde_system, int id);
 
 signals:
@@ -108,6 +129,7 @@ private:
     void download(const QStringList& esde_systems);
     void build(const QStringList& esde_systems);
     const std::vector<Game>& platform_games(const QString& platform);
+    std::vector<Game> platform_candidates(const QString& platform, const QString& name, int limit, bool strip_edition);
 
     QNetworkAccessManager* m_net = nullptr;
     QNetworkReply* m_reply = nullptr;
