@@ -387,6 +387,19 @@ PY
     stop 13b-scrape-switch2
     grep -h "Scraper\|LaunchBox\|\[test\]" "$R/logs/13b-scrape-switch2.stdout" | sed 's/\x1b\[[0-9;]*m//g' > "$R/scraped-launchbox/switch2.log" || true
     find "$CFG/downloaded_media/switch2" -type f 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-launchbox/switch2-files.txt" || true
+    # the same scrape with Library open on a collection: its preview panel shows the progress
+    # while it runs, the picture again once it's done
+    start 13c-scrape-progress "menu/settings/MetadataEditor.qml" 6 "PEGASUSX_TEST_SCRAPE=Donkey Kong Bananza" "PEGASUSX_TEST_LAUNCHBOX=1"
+    keys Down Down Down Down Down Return
+    sleep 1
+    shot 13c-library-collection
+    wait_log "Scraper: Scraping 1 games" 300 "$R/logs/13c-scrape-progress.stdout"
+    sleep 1
+    shot 13c-scrape-progress
+    wait_log "Scraper: Done" 120 "$R/logs/13c-scrape-progress.stdout"
+    sleep 2
+    shot 13c-scrape-done
+    stop 13c-scrape-progress
 fi
 
 # -- summary --------------------------------------------------------------------------------------

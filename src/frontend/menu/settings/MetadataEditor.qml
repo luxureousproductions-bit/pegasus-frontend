@@ -2503,6 +2503,9 @@ FocusScope {
         id: artPreview
 
         readonly property bool split: root.page === "game" || root.page === "collection"
+        // Pegasus X: a scrape running (any route, any source): its progress
+        // here instead of the picture, until it's over
+        readonly property bool scraping: !!(root.run && root.run.running)
         readonly property var row: (list.currentIndex >= 0 && list.currentIndex < list.rows.length) ? list.rows[list.currentIndex] : null
         readonly property var shown: root.previewFor(row)
         readonly property string file: shown.file || ""
@@ -2536,6 +2539,7 @@ FocusScope {
 
         Rectangle {
             id: frame
+            visible: !artPreview.scraping
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
@@ -2643,6 +2647,7 @@ FocusScope {
 
         Text {
             id: caption
+            visible: !artPreview.scraping
             anchors.bottom: strip.visible ? strip.top : parent.bottom
             anchors.bottomMargin: strip.visible ? vpx(10) : 0
             width: parent.width
@@ -2659,7 +2664,7 @@ FocusScope {
         // row edits it, touch one to go to its row
         ListView {
             id: strip
-            visible: artPreview.thumbs.length > 1
+            visible: artPreview.thumbs.length > 1 && !artPreview.scraping
             anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(parent.width, contentWidth)
@@ -2716,6 +2721,111 @@ FocusScope {
                         list.currentIndex = modelData.index;
                         list.focus = true;
                     }
+                }
+            }
+        }
+
+        // Pegasus X: the scrape going on: the game, its collection and system,
+        // the source, how far it is, and what it saved so far
+        Rectangle {
+            id: scrapeView
+            readonly property var r: root.run || ({})
+            readonly property int total: r.total || 0
+            readonly property int done: r.done || 0
+            visible: artPreview.scraping
+            anchors.fill: parent
+            color: "#333"
+            border.color: "#444"
+            border.width: vpx(1)
+            Column {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.margins: vpx(24)
+                spacing: vpx(14)
+                Text {
+                    width: parent.width
+                    text: qsTr("Scraping") + api.tr
+                    color: "#999"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(16)
+                }
+                Text {
+                    width: parent.width
+                    text: scrapeView.r.current || ""
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(24)
+                    wrapMode: Text.Wrap
+                    maximumLineCount: 2
+                    elide: Text.ElideRight
+                }
+                Text {
+                    width: parent.width
+                    visible: text !== ""
+                    text: (scrapeView.r.collection || "") + (scrapeView.r.system ? " · " + scrapeView.r.system : "")
+                    color: "#bbb"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(17)
+                    elide: Text.ElideRight
+                }
+                Text {
+                    width: parent.width
+                    visible: !!scrapeView.r.source
+                    text: qsTr("Source: %1").arg(scrapeView.r.source === "screenscraper" ? "ScreenScraper"
+                                                 : scrapeView.r.source === "launchbox" ? "LaunchboxDB"
+                                                 : qsTr("libretro thumbnails")) + api.tr
+                    color: "#bbb"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(17)
+                }
+                // how far: games done of the total (a moving bar when it isn't known)
+                Rectangle {
+                    width: parent.width
+                    height: vpx(10)
+                    radius: height / 2
+                    color: "#222"
+                    clip: true
+                    Rectangle {
+                        visible: scrapeView.total > 0
+                        width: scrapeView.total > 0 ? parent.width * Math.min(1, scrapeView.done / scrapeView.total) : 0
+                        height: parent.height
+                        radius: parent.radius
+                        color: "#3aa"
+                    }
+                    Rectangle {
+                        id: busyBar
+                        visible: scrapeView.total <= 0
+                        width: parent.width * 0.3
+                        height: parent.height
+                        radius: parent.radius
+                        color: "#3aa"
+                        NumberAnimation on x {
+                            running: busyBar.visible && scrapeView.visible
+                            from: -busyBar.width
+                            to: busyBar.parent.width
+                            duration: 1400
+                            loops: Animation.Infinite
+                        }
+                    }
+                }
+                Text {
+                    width: parent.width
+                    text: (scrapeView.total > 0
+                           ? qsTr("%1 of %2").arg(Math.min(scrapeView.done + 1, scrapeView.total)).arg(scrapeView.total)
+                           : qsTr("%1 done").arg(scrapeView.done)) + api.tr
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(18)
+                }
+                Text {
+                    width: parent.width
+                    text: qsTr("Saved %1 · Not found %2 · Failed %3").arg(scrapeView.r.saved || 0)
+                          .arg(scrapeView.r.notFound || 0).arg(scrapeView.r.failed || 0) + api.tr
+                    color: "#bbb"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(16)
+                    wrapMode: Text.Wrap
                 }
             }
         }

@@ -3,6 +3,36 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-23
+
+### Library: a scrape's progress in the preview panel
+
+- **What:** while a scrape runs (any route: a collection, a game, Complete
+  my library, Needs your check; LaunchboxDB or ScreenScraper), the preview
+  panel on the right of a collection's or a game's page in Library shows
+  it instead of the picture: "Scraping", the game being scraped, its
+  collection and system, the source it's looked up in (ScreenScraper,
+  LaunchboxDB, or libretro thumbnails when neither has the system), a bar
+  of the games done and "X of Y" (a moving bar and a running count if the
+  total weren't known), and Saved / Not found / Failed so far. When the
+  scrape ends (done, stopped, or failed) the panel shows the picture
+  again, as before.
+- **How:** the scraper's state (what the panel and the other scrape views
+  already read) also tells the current game's collection, system and
+  source; the source is worked out the way the scraper picks it. Nothing
+  in how it scrapes changed.
+- **Not changed:** the panel when nothing is scraping; the scrape itself,
+  matching, the ScreenScraper list, the Switch 2 / Android fallbacks, the
+  genre tools, the keys, touch, saving, the library refresh, themes, the
+  Companion app.
+- **Tests:** the test environment opens Library on a collection while a
+  LaunchBox scrape runs (`13c-library-collection`, `13c-scrape-progress`,
+  `13c-scrape-done`).
+- **Files:** `src/backend/Scraper.cpp` (`state()`: collection, system,
+  source), `src/frontend/menu/settings/MetadataEditor.qml` (the panel),
+  `tests/testenv/run.sh`.
+- **Commit:** "Library: a scrape's progress in the preview panel".
+
 ## 2026-11-22
 
 ### LaunchBox: Switch 2 falls back to Switch, Android to your other platforms

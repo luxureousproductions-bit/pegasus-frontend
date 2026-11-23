@@ -621,8 +621,29 @@ void Scraper::note(const QString& line)
 
 QVariantMap Scraper::state() const
 {
+    // Pegasus X: the game being scraped: its collection and system, and the
+    // source it's looked up in (as search() and the automatic run decide:
+    // ScreenScraper for one of its systems with the source set to it, else
+    // LaunchBox's database if it has the system, else libretro's pictures).
+    // Only told: nothing here changes how it's scraped.
+    QString collection, system, source_now;
+    if (m_running && m_index < m_jobs.size()) {
+        const Job& job = m_jobs[m_index];
+        collection = job.collection;
+        system = job.system;
+        const QString source = m_settings.value(QStringLiteral("source")).toString();
+        if (source == QLatin1String("screenscraper") && !m_dev_id.isEmpty() && screenscraper_systems().contains(job.system))
+            source_now = QStringLiteral("screenscraper");
+        else if (lbReady() && m_lb->hasSystem(job.system))
+            source_now = QStringLiteral("launchbox");
+        else
+            source_now = QStringLiteral("libretro");
+    }
     return QVariantMap {
         { QStringLiteral("running"), m_running },
+        { QStringLiteral("collection"), collection },
+        { QStringLiteral("system"), system },
+        { QStringLiteral("source"), source_now },
         { QStringLiteral("done"), static_cast<int>(m_index) },
         { QStringLiteral("total"), static_cast<int>(m_jobs.size()) },
         { QStringLiteral("current"), m_current },
