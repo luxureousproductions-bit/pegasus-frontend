@@ -34,7 +34,7 @@ class test_LaunchBoxDb : public QObject {
 
 private:
     using Db = scraper::LaunchBoxDb;
-    static QJsonObject game(int id, const QString& name, const QStringList& alt = {});
+    static QJsonObject game(int id, const QString& name, const QStringList& alt = {}, const QString& release = {});
     static void write_platform(const QString& platform, const QJsonArray& games);
 
 private slots:
@@ -51,16 +51,17 @@ private slots:
     void android_own_platform_first();
     void android_falls_back();
     void android_tie_is_not_guessed();
+    void android_namesake_is_not_guessed();
     void picked_game_found_on_fallback();
     void candidates_show_their_platform();
 };
 
-QJsonObject test_LaunchBoxDb::game(int id, const QString& name, const QStringList& alt)
+QJsonObject test_LaunchBoxDb::game(int id, const QString& name, const QStringList& alt, const QString& release)
 {
     return QJsonObject {
         { QStringLiteral("id"), id }, { QStringLiteral("n"), name },
         { QStringLiteral("alt"), QJsonArray::fromStringList(alt) },
-        { QStringLiteral("rel"), QString() }, { QStringLiteral("ov"), QString() },
+        { QStringLiteral("rel"), release }, { QStringLiteral("ov"), QString() },
         { QStringLiteral("dev"), QJsonArray() }, { QStringLiteral("pub"), QJsonArray() },
         { QStringLiteral("gen"), QJsonArray() }, { QStringLiteral("pl"), 0 }, { QStringLiteral("rt"), 0.0 },
         { QStringLiteral("img"), QJsonArray() },
@@ -97,7 +98,13 @@ void test_LaunchBoxDb::initTestCase()
         game(11, QStringLiteral("Donkey Kong Bananza")),
         game(12, QStringLiteral("The Legend of Zelda: Breath of the Wild")),
     });
-    write_platform(QStringLiteral("Android"), { game(20, QStringLiteral("Minecraft")) });
+    write_platform(QStringLiteral("Android"), {
+        game(20, QStringLiteral("Minecraft")),
+        game(21, QStringLiteral("Need for Speed: Most Wanted"), {}, QStringLiteral("2012-11-01")),
+    });
+    write_platform(QStringLiteral("Sony Playstation 2"), {
+        game(50, QStringLiteral("Need for Speed: Most Wanted"), {}, QStringLiteral("2005-11-15")),
+    });
     write_platform(QStringLiteral("Nintendo 64"), {
         game(30, QStringLiteral("The Legend of Zelda: Ocarina of Time"), { QStringLiteral("Ship of Harkinian") }),
         game(31, QStringLiteral("Doom")),
@@ -106,7 +113,7 @@ void test_LaunchBoxDb::initTestCase()
     write_platform(QStringLiteral("Sega 32X"), { game(40, QStringLiteral("Doom")) });
     // the platforms saved (what Update LaunchboxDB writes into status.json)
     QJsonObject counts;
-    for (const char* p : { "Nintendo Switch 2", "Nintendo Switch", "Android", "Nintendo 64", "Sega 32X" })
+    for (const char* p : { "Nintendo Switch 2", "Nintendo Switch", "Android", "Nintendo 64", "Sega 32X", "Sony Playstation 2" })
         counts.insert(QString::fromLatin1(p), 1);
     QFile status(Db::dir() + QStringLiteral("/status.json"));
     QVERIFY(status.open(QIODevice::WriteOnly | QIODevice::Truncate));
@@ -133,7 +140,7 @@ void test_LaunchBoxDb::searched_platforms()
     // Android: its own, then every other saved platform
     const QStringList android = db.search_platforms(QStringLiteral("android"));
     QCOMPARE(android.first(), QStringLiteral("Android"));
-    QCOMPARE(android.size(), 5);
+    QCOMPARE(android.size(), 6);
     QCOMPARE(db.search_platforms(QStringLiteral("androidgames")), android);
 }
 
@@ -233,6 +240,25 @@ void test_LaunchBoxDb::android_tie_is_not_guessed()
         platforms.append(g.platform);
     platforms.sort();
     QCOMPARE(platforms, QStringList({ QStringLiteral("Nintendo 64"), QStringLiteral("Sega 32X") }));
+}
+
+// as sure on Android (the 2012 game) and on PlayStation 2 (the 2005 one, of
+// which the Android entry is a native port): the Android one isn't taken
+// by itself, none is guessed, both are kept with their platform and year
+void test_LaunchBoxDb::android_namesake_is_not_guessed()
+{
+    Db db;
+    const Db::Match m = db.best(QStringLiteral("androidgames"), QStringLiteral("Need for Speed Most Wanted"), 60);
+    QCOMPARE(m.game.id, 0);
+    QVERIFY(m.tie);
+    QStringList found;
+    for (const Db::Game& g : m.closest)
+        found.append(QStringLiteral("%1 %2").arg(g.platform).arg(g.year));
+    found.sort();
+    QCOMPARE(found, QStringList({ QStringLiteral("Android 2012"), QStringLiteral("Sony Playstation 2 2005") }));
+    // the original Switch and other collections: their own platform's sure match, as before
+    QCOMPARE(db.best(QStringLiteral("switch2"), QStringLiteral("Donkey Kong Bananza"), 60).game.platform,
+             QStringLiteral("Nintendo Switch 2"));
 }
 
 // a match you picked (Needs your check) is found on a fallback platform too

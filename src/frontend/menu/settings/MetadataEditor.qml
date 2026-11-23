@@ -772,8 +772,8 @@ FocusScope {
     Connections {
         target: Internal.settings
         function onScraperFinished(state) {
-            if (state.saved > 0)
-                // (the loaded games take what the scraper saves in place: no read on leaving)
+            // (the loaded games take what the scraper saves in place: no read on leaving)
+            // only a scrape started from this game's page (Scrape this game)
             if (!root.scrapingGame)
                 return;
             root.keepPosition(function() { root.scrapingGame = false; });

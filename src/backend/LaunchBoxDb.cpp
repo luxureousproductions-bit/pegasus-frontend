@@ -703,14 +703,19 @@ LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& 
     const bool strip = esde_system == QLatin1String("switch2");
     const QStringList platforms = search_platforms(esde_system);
     const QString own = platform_for(esde_system);
-    std::vector<Game> bests;  // each fallback platform's best
+    // an Android collection's own platform isn't taken by itself: a game
+    // there is often a native port of a console or PC game, which has a
+    // namesake on Android (Need for Speed: Most Wanted, 2005 on PS2, 2012 on
+    // Android): it's compared with the other platforms like them
+    const bool own_first = !is_android_system(esde_system);
+    std::vector<Game> bests;  // each platform's best that's sure enough (bar the own one taken first)
     std::vector<Game> weak;   // the best of every platform searched, none sure enough
     for (const QString& platform : platforms) {
         std::vector<Game> found = platform_candidates(platform, name, 1, strip);
         if (found.empty())
             continue;
         // the system's own platform first: a sure match there is used
-        if (platform == own && found.front().score >= needed) {
+        if (own_first && platform == own && found.front().score >= needed) {
             out.game = std::move(found.front());
             return out;
         }

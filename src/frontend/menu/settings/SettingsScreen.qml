@@ -144,6 +144,12 @@ FocusScope {
                 subscreen.focus = true;
                 if (subscreen.item.refresh)
                     subscreen.item.refresh();
+                // Pegasus X: the Scraper opened from a game in Library fills the
+                // screen: it goes, or it stays drawn over the game while the keys
+                // go to the game under it (unloaded after this signal: not from
+                // inside its own close)
+                if (String(modal.source).indexOf("ScraperSection.qml") >= 0)
+                    Qt.callLater(function() { modal.source = ""; });
             }
         }
     }

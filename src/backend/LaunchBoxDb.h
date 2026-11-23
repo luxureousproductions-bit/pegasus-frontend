@@ -116,7 +116,9 @@ public:
     std::vector<Game> candidates(const QString& esde_system, const QString& name, int limit);
     /// Pegasus X: the match to use without asking: the system's own
     /// platform's best if it's at least `needed`; else its fallbacks' (the
-    /// best of them; two platforms within TIE_MARGIN of it: a tie, none used)
+    /// best of them; two platforms within TIE_MARGIN of it: a tie, none used).
+    /// For the Android collections the Android platform's best isn't taken
+    /// first: it's one of them (an Android port and its console original).
     Match best(const QString& esde_system, const QString& name, int needed);
     /// one game by its id (from the library index; its fallbacks' too), or a game with id 0
     Game game(const QString& esde_system, int id);

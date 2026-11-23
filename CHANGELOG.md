@@ -5,6 +5,45 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Fixes: Back from Scraper options, a game's "Nothing saved", Android namesakes
+
+- **Back from Scraper options (a game in Library):** the Scraper opened on
+  top of the game stayed loaded and drawn over everything after Back,
+  while the keys went to the game's page under it: the screen looked
+  frozen, and the presses that followed went on, unseen, to the pages
+  under it and out of Library, whose library read on the way out (with its
+  loading screen) looked like a restart. Now the Scraper is unloaded when
+  Back closes it (just after its close signal, not from inside it), and
+  the game's page is in front with its keys. Only the Scraper opened from
+  Library; the other screens opened on top are as before.
+- **"Nothing saved" after any scrape:** in Library, the check that a
+  finished scrape was the one started from that game's page had a stray
+  `if (state.saved > 0)` in front of it (a comment line between them), so
+  a scrape that saved nothing skipped the check and the game's page said
+  "Nothing saved: ..." for any scrape (Complete my library, a collection).
+  The stray line is gone.
+- **Android collections, a namesake on another platform:** the Android
+  platform's sure match is no longer taken by itself: it's compared with
+  your other saved platforms' best matches. If one of them is about as
+  good (within 5 points), none is guessed: the game goes to Needs your
+  check with each one listed with its platform and year (eg. "Need for
+  Speed: Most Wanted" on Android, 2012, and on PlayStation 2, 2005), and
+  Choose lists them. A clearly better match elsewhere is used; an Android
+  match with no namesake elsewhere is used as before. Other collections:
+  unchanged (their own platform's sure match first). ScreenScraper isn't
+  changed: it's asked about one system per game (Android's, for these),
+  so comparing would mean asking it again per other system, against its
+  daily quota; not in this change.
+- **Tests:** `test_LaunchBoxDb`: a new case (the Android 2012 entry and the
+  PlayStation 2 2005 one: none used, both kept with platform and year;
+  Switch 2 still takes its own platform's match), and the platform count
+  for Android updated (a sixth saved platform in the test data).
+- **Files:** `src/frontend/menu/settings/SettingsScreen.qml`,
+  `src/frontend/menu/settings/MetadataEditor.qml`,
+  `src/backend/LaunchBoxDb.h/.cpp` (`best`),
+  `tests/backend/launchboxdb/test_LaunchBoxDb.cpp`.
+- **Commit:** "Fixes: Back from Scraper options, a game's Nothing saved, Android namesakes".
+
 ### Fix: the scrape progress bar's binding loop
 
 - **What:** the moving bar of the scrape progress panel (shown only when a
