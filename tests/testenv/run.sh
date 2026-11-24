@@ -431,31 +431,22 @@ data.setdefault("collections", [])
 data.setdefault("games", []).append({"path": "android:com.test.retroarch", "title": "Retro Emu", "collections": ["Android"]})
 json.dump(data, open(path, "w"), indent=4)
 PY
-# a new install with apps: setup (from step 2) has Android apps to import with none picked,
-# the picker opens with every app unticked; with none picked there's no Android collection,
-# and Library > Options still has the picker
-PRIV="$(dirname "$(find "$HOME" -name "pegasusx-root-asked" 2>/dev/null | head -n 1)")"
-rm -f "$CFG/pegasusx-android-apps.json"
-echo 2 > "$PRIV/pegasusx-wizard"
+# a new install with apps (setup still to do: the test environment never runs setup, so
+# pegasusx-root-asked isn't there): the picker opens with every app unticked; with none
+# picked there's no Android collection, and Library > Options still has the picker
+rm -f "$CFG/pegasusx-android-apps.json" "$CFG/pegasusx-root-asked" "$CFG/pegasusx-wizard"
 find "$HOME" -name "gameindex-v1.json" -delete 2>/dev/null
-start 14-apps-new "" 12 "PEGASUSX_TEST_APPS=$APPS"
-shot 14-new-setup
-keys Down Return
-sleep 1
+start 14-apps-new "menu/settings/AndroidAppPicker.qml" 8 "PEGASUSX_TEST_APPS=$APPS"
 shot 14-new-picker
-keys Escape Return
-sleep 1
-keys Down Return
-sleep 3
-keys Down Return
-sleep 2
 stop 14-apps-new
 cp "$CFG/pegasusx-android-apps.json" "$R/files/apps-new-install.json" 2>/dev/null
 start 14-apps-new-library "menu/settings/MetadataEditor.qml" 6 "PEGASUSX_TEST_APPS=$APPS"
 keys e
 shot 14-new-library-options
 stop 14-apps-new-library
-rm -f "$CFG/pegasusx-android-apps.json" "$PRIV/pegasusx-wizard"
+# a library from an older build: setup done (as on a device after setup), no picks saved
+rm -f "$CFG/pegasusx-android-apps.json"
+echo asked > "$CFG/pegasusx-root-asked"
 find "$HOME" -name "gameindex-v1.json" -delete 2>/dev/null
 start 14-apps-first "" 10 "PEGASUSX_TEST_APPS=$APPS"
 wait_log "Android apps to import" 30 "$R/logs/14-apps-first.stdout"
@@ -657,7 +648,7 @@ print(("OK: " if setup == {"apps": []} else "FAILED: ")
       + "a new install (first start, setup to do): no app picked: %r" % (setup,))
 new = load("apps-new-install.json")
 print(("OK: " if new == {"apps": []} else "FAILED: ")
-      + "a new install with apps, setup step 2 and the picker opened and closed: still none picked: %r" % (new,))
+      + "a new install with apps (setup to do), the picker opened: none picked: %r" % (new,))
 first = load("apps-after-first-start.json")
 want = ["com.test.drift", "com.test.notes", "com.test.retroarch"]
 print(("OK: " if first and first.get("apps") == want else "FAILED: ")
@@ -682,7 +673,7 @@ for title, inside in (("Drift Racer", True), ("Notes", False), ("Retro Emu", Fal
           + "%s %s the library" % (title, "in" if inside else "not in"))
 PY
     echo "    (Library > Android, the hidden Retro Emu under Emulators: screenshots 14-library-android*;"
-    echo "     a new install: 14-new-setup, 14-new-picker, 14-new-library-options; the round prompts: 14-picker*)"
+    echo "     a new install: 14-new-picker, 14-new-library-options; the round prompts: 14-picker*)"
     echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40

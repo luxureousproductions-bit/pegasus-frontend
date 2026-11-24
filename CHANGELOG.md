@@ -5,6 +5,18 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Test environment: the new-install and older-library cases of Android apps to import
+
+- **What:** the test environment never runs first-time setup, so to Pegasus
+  X it's always a new install: build 2251's run found that, and its "older
+  library" checks failed for that reason (not the app). The new-install
+  case now opens the picker directly (setup to do); the older-library case
+  marks setup as done first (`pegasusx-root-asked`), as on a device after
+  setup.
+- **Not changed:** the app; only `tests/testenv/run.sh`.
+- **Files:** `tests/testenv/run.sh`.
+- **Commit:** "Test environment: new-install and older-library cases of the app picker".
+
 ### Android apps to import: none picked on a new install; round button prompts
 
 - **New installs start with no app picked.** When Pegasus X starts with
