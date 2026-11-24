@@ -5,6 +5,15 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Test fix: test_BackupReset's damaged-file case
+
+- **What:** the test cut its own backup file short and then compared the
+  folders with the snapshot taken before the cut, so the changed test file
+  itself made it fail. It compares with a snapshot taken after the cut now.
+- **Not changed:** the app.
+- **Files:** `tests/backend/backup/test_BackupReset.cpp`.
+- **Commit:** "Test fix: test_BackupReset's damaged-file case".
+
 ### Fix: Backup & reset's build (C++11)
 
 - **What:** two lists in `BackupReset.cpp` were filled with `{ ... }` items

@@ -296,11 +296,12 @@ void test_BackupReset::damaged_backup_changes_nothing()
     QVERIFY(!result.error.isEmpty());
     QVERIFY(result.saved_first.isEmpty());
     QCOMPARE(snapshot(m_tmp.path()), before);
-    // cut short
+    // cut short (the file itself changes here: compared from after it's cut)
     write(file, bytes.left(bytes.size() / 2));
+    const QMap<QString, QByteArray> before_cut = snapshot(m_tmp.path());
     QVERIFY(!backup::read_info(file).error.isEmpty());
     QVERIFY(!backup::restore(m_places, file, 2253).error.isEmpty());
-    QCOMPARE(snapshot(m_tmp.path()), before);
+    QCOMPARE(snapshot(m_tmp.path()), before_cut);
 }
 
 void test_BackupReset::not_a_backup_changes_nothing()
@@ -368,7 +369,7 @@ void test_BackupReset::start_over_deletes_only_its_list()
     QStringList removed;
     QCOMPARE(backup::wipe(m_places, &removed), QString());
     // gone
-    for (const QString& rel : { "pegasusx.ini", "settings.txt", "game_dirs.txt", "favorites.txt", "stats.db",
+    for (const QString rel : { "pegasusx.ini", "settings.txt", "game_dirs.txt", "favorites.txt", "stats.db",
                                 "pegasusx-hidden.json", "pegasusx-android-apps.json", "pegasusx-themes", "gamedirectory",
                                 "metadata", "theme_settings", "downloaded_media", "backup", "launchbox" })
         QVERIFY2(!QFileInfo(data(rel)).exists() && !QFileInfo(data(rel)).isSymLink(), qPrintable(rel));
