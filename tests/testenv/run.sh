@@ -358,14 +358,20 @@ shot 08b-system-menu
 keys Return
 sleep 1
 shot 08b-folders
-# Add a folder...: the picker (on the drives), LB to the last folder browsed (the SD card's
-# ROMs); "Use this folder" there reads only its snes folder
+# Add a folder...: the picker (on the drives); Y: the quick jumps, the last one is
+# "Suggested" (the last folder browsed: the SD card's ROMs); X "Use this folder" there
+# reads only its snes folder
 keys Down Return
 sleep 1
-keys q
+shot 08b-folders-picker-drives
+keys f Right Right Right Right Right Right Right Return
 sleep 1
 shot 08b-folders-picker
-keys Down Return
+# LB / RB 10 rows, LT / RT bottom / top (the list stays in the folder)
+keys Page_Down
+shot 08b-folders-picker-bottom
+keys Page_Up
+keys i
 sleep 4
 shot 08b-folders-added
 # the list stays on the third row, now the SD card's folder: remove it and its games
@@ -376,8 +382,38 @@ sleep 1
 shot 08b-folders-removed
 stop 08b-folders
 # the same steps, and the edge cases, through the same functions (checked in the summary)
-start 08c-folder-checks "menu/settings/GameDirectory.qml" 3 "PEGASUSX_TEST_SD=$SD" "PEGASUSX_TEST_FOLDERS=$SD"
-wait_log "Test: Folders: done" 60 "$R/logs/08c-folder-checks.stdout"
+# a ROM folder with a metadata file of its own (read once at import: titles,
+# fields, art, each game's launch and workdir; then Restore from it)
+OWN="$T/OwnMeta/snes"
+mkdir -p "$OWN/art" "$OWN/tools"
+head -c 4096 /dev/urandom > "$OWN/Alpha Quest (USA).sfc"
+head -c 4096 /dev/urandom > "$OWN/Beta Racer (USA).sfc"
+printf '\x89PNG\r\n\x1a\n' > "$OWN/art/alpha-box.png"
+cat > "$OWN/metadata.pegasus.txt" <<'TXT'
+collection: My SNES
+shortname: snes
+launch: /usr/bin/snes9x "{file.path}"
+
+game: Alpha Quest Deluxe
+file: Alpha Quest (USA).sfc
+developer: Test Dev
+publisher: Test Pub
+genre: RPG
+players: 2
+release: 1994-05-01
+summary: A short one.
+x-test-field: kept
+assets.box_front: art/alpha-box.png
+launch: ./run-alpha.sh "{file.path}"
+workdir: tools
+
+game: Beta Racer
+file: Beta Racer (USA).sfc
+launch: /opt/emu/beta {file.path}
+workdir: /tmp/beta
+TXT
+start 08c-folder-checks "menu/settings/GameDirectory.qml" 3 "PEGASUSX_TEST_SD=$SD" "PEGASUSX_TEST_FOLDERS=$SD" "PEGASUSX_TEST_OWNMETA=$OWN"
+wait_log "Test: Own metadata: done" 90 "$R/logs/08c-folder-checks.stdout"
 stop 08c-folder-checks
 
 start 09-esde-import "menu/settings/EsdeImport.qml" 6
@@ -578,6 +614,12 @@ shot 15-backup-main
 keys Return
 sleep 2
 shot 15-backup-page
+# Save to: the folder picker (one hint bar), closed again with B (on the drives)
+keys Return
+sleep 1
+shot 15-backup-picker
+keys Escape
+sleep 1
 keys Down Down Return
 wait_log "Backup & reset: backup" 60 "$R/logs/15-backup.stdout"
 sleep 1
@@ -743,6 +785,9 @@ PY
     echo
     echo "## ROM folders per system (Settings > Game directory > a system > Folders)"
     strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Folders:" | sed 's/^.*Test: Folders: /    /'
+    echo
+    echo "## A ROM folder's own metadata file (read at import, then Restore)"
+    strip_ansi "$R/logs/08c-folder-checks.log" 2>/dev/null | grep -h "Test: Own metadata:" | sed 's/^.*Test: Own metadata: /    /'
     echo
     echo "## Scrape without a login (Hasheous + libretro)"
     grep -E "libretro|Hasheous|Saving|not found|no source" "$R/scraped-free/scraper.log" 2>/dev/null | head -n 12 | sed 's/^/    /'

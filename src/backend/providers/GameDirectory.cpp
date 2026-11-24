@@ -582,6 +582,73 @@ int remove_system_folder(const QString& system_file, const QString& folder, bool
     return removed;
 }
 
+int remove_games_with_files(const QString& system_file, const QStringList& files, const QString& reason)
+{
+    bool ok = false;
+    const QStringList lines = read_lines(system_file, &ok);
+    if (!ok)
+        return -1;
+    const bool nocase = storage_ignores_case();
+    QSet<QString> wanted;
+    for (const QString& f : files)
+        wanted.insert(folder_identity(f, nocase));
+    const QDir base(QFileInfo(system_file).absolutePath());
+
+    QStringList kept;
+    int removed = 0;
+    int block_first = -1;
+    bool block_game = false, block_hit = false;
+    const auto flush = [&](int upto) {
+        if (block_first < 0)
+            return;
+        if (block_game && block_hit) {
+            removed++;
+            return;
+        }
+        for (int i = block_first; i < upto; i++)
+            kept.append(lines.at(i));
+    };
+    for (int i = 0; i < lines.size(); i++) {
+        const QString& line = lines.at(i);
+        const bool game = line.startsWith(QLatin1String("game:"));
+        if (game || line.startsWith(QLatin1String("collection:"))) {
+            flush(i);
+            block_first = i;
+            block_game = game;
+            block_hit = false;
+            continue;
+        }
+        if (block_first < 0) {
+            kept.append(line);
+            continue;
+        }
+        if (!block_game)
+            continue;
+        QStringList listed;
+        if (line.startsWith(QLatin1String("file:")))
+            listed.append(line.mid(5).trimmed());
+        else if (line.startsWith(QLatin1String("files:"))) {
+            for (int j = i + 1; j < lines.size() && lines.at(j).startsWith(QLatin1Char(' ')); j++)
+                listed.append(lines.at(j).trimmed());
+        }
+        for (const QString& f : listed) {
+            const bool uri = f.contains(QLatin1String("://")) || f.startsWith(QLatin1String("android:"));
+            if (!uri && wanted.contains(folder_identity(QFileInfo(base, f).absoluteFilePath(), nocase)))
+                block_hit = true;
+        }
+    }
+    flush(lines.size());
+    if (removed == 0)
+        return 0;  // none of them here: the file stays as it is
+    backup(system_file, reason);
+    while (!kept.isEmpty() && kept.last().trimmed().isEmpty())
+        kept.removeLast();
+    if (!write_all(system_file, kept.join(QLatin1Char('\n')) % QLatin1Char('\n')))
+        return -1;
+    Log::info(LOG_TAG, LOGMSG("`%1`: %2 games taken out (%3)").arg(system_file).arg(removed).arg(reason));
+    return removed;
+}
+
 bool migrated()
 {
     return QFileInfo::exists(dir() % QStringLiteral("/.migrated"));

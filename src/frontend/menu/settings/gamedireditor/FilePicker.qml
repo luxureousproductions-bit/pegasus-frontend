@@ -104,7 +104,8 @@ FocusScope {
             out.push({ "t": qsTr("Suggested") + api.tr, "act": "go", "path": startFolder });
         return out;
     }
-    // picking a folder: the buttons at the bottom
+    // picking a folder: the buttons over the list ("Use this folder" first:
+    // X, or a tap, or d-pad up to it)
     readonly property var folderButtons: !pickFolders ? []
         : allowNewFolder ? [ { "t": qsTr("Use this folder") + api.tr, "act": "use" }, { "t": qsTr("Create new folder...") + api.tr, "act": "new" } ]
         : [ { "t": qsTr("Use this folder") + api.tr, "act": "use" } ]
@@ -147,6 +148,16 @@ FocusScope {
     }
     // the drive list (it has no ".." row)
     readonly property bool onDrives: folderModel.folder !== undefined && folderModel.indexOfName("..") !== 0  // re-read when the folder changes
+    // the folder's own name, and the one above it (for the "up" row)
+    readonly property string folderName: {
+        var f = String(folderModel.folder).replace(/\/+$/, "");
+        return f.substring(f.lastIndexOf("/") + 1) || f || "/";
+    }
+    readonly property string parentName: {
+        var f = String(folderModel.folder).replace(/\/+$/, "");
+        f = f.substring(0, f.lastIndexOf("/"));
+        return f.substring(f.lastIndexOf("/") + 1) || qsTr("Drives") + api.tr;
+    }
     function resetPosition() {
         // the first entry after ".."
         list.currentIndex = (list.count > 1 && folderModel.indexOfName("..") === 0) ? 1 : 0;
@@ -154,6 +165,7 @@ FocusScope {
     }
     function enter(name) {
         if (name === "..") {
+            // back up: on the folder just left
             const current = folderModel.folder;
             const child = current.substring(current.lastIndexOf("/") + 1);
             folderModel.cd(name);
@@ -171,48 +183,54 @@ FocusScope {
         }
         root.resetPosition();
     }
-
-    Keys.onPressed: {
-        if (event.isAutoRepeat)
-            return;
-        if (api.keys.isCancel(event)) {
-            // B: up a folder; on the drive list, out of the browser
-            event.accepted = true;
-            if (folderModel.indexOfName("..") !== 0) {
-                root.remember();
-                root.cancel();
-            }
-            else {
-                root.enter("..");
-                list.focus = true;
-            }
-        }
-        else if (api.keys.isDetails(event)) {
-            // X: out of the browser, from any folder
-            event.accepted = true;
+    // B: up a folder; on the drive list, out of the browser
+    function goUp() {
+        if (root.onDrives) {
             root.remember();
             root.cancel();
         }
-        else if (api.keys.isPrevPage(event)) {
-            // LB: back to the last folder
+        else {
+            root.enter("..");
+            list.focus = true;
+        }
+    }
+
+    Keys.onPressed: {
+        if (event.isAutoRepeat && !(api.keys.isPrevPage(event) || api.keys.isNextPage(event)))
+            return;
+        if (api.keys.isCancel(event)) {
             event.accepted = true;
-            if (Internal.settings.lastBrowseFolder !== "") {
-                folderModel.cd(Internal.settings.lastBrowseFolder);
-                root.resetPosition();
-                list.focus = true;
+            root.goUp();
+        }
+        else if (api.keys.isDetails(event)) {
+            event.accepted = true;
+            if (root.pickFolders) {
+                // X: this folder
+                root.jump(root.folderButtons[0]);
+            }
+            else {
+                // (picking a file: out of the browser, as before)
+                root.remember();
+                root.cancel();
             }
         }
-        else if (api.keys.isNextPage(event)) {
-            // RB: the drives
+        else if (api.keys.isPrevPage(event) || api.keys.isNextPage(event)) {
+            // LB / RB: 10 rows up / down, stopping at the ends
             event.accepted = true;
-            root.showDrives();
             list.focus = true;
+            var to = list.currentIndex + (api.keys.isNextPage(event) ? 10 : -10);
+            list.currentIndex = Math.max(0, Math.min(list.count - 1, to));
+        }
+        else if (api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
+            // LT / RT: the top / the bottom
+            event.accepted = true;
+            list.focus = true;
+            list.currentIndex = api.keys.isPageDown(event) ? list.count - 1 : 0;
         }
         else if (api.keys.isFilters(event)) {
             event.accepted = true;
             (jumpRow.activeFocus ? list : jumpRow).focus = true;
         }
-
     }
 
 
@@ -275,25 +293,36 @@ FocusScope {
             anchors.bottomMargin: vpx(15)
             anchors.horizontalCenter: parent.horizontalCenter
 
+            // where you are: the folder's name, its whole path under it
             Rectangle {
                 id: path
                 width: parent.width
-                height: pathText.height
+                height: pathColumn.height + vpx(14)
                 color: "#222"
 
-                Text {
-                    id: pathText
-                    text: root.onDrives ? qsTr("Drives") + api.tr : folderModel.folder
-                    width: parent.width
-
-                    color: "#bbb"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(18)
-
-                    lineHeight: 2.5
-                    verticalAlignment: Text.AlignVCenter
-                    leftPadding: font.pixelSize; rightPadding: leftPadding
-                    elide: Text.ElideMiddle
+                Column {
+                    id: pathColumn
+                    anchors.verticalCenter: parent.verticalCenter
+                    x: vpx(18)
+                    width: parent.width - vpx(36)
+                    spacing: vpx(2)
+                    Text {
+                        width: parent.width
+                        text: root.onDrives ? qsTr("Drives") + api.tr : root.folderName
+                        color: "#eee"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(20)
+                        font.bold: true
+                        elide: Text.ElideRight
+                    }
+                    Text {
+                        width: parent.width
+                        text: root.onDrives ? qsTr("Open a drive to start") + api.tr : folderModel.folder
+                        color: "#9a9a9a"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(15)
+                        elide: Text.ElideMiddle
+                    }
                 }
             }
             ListView {
@@ -308,7 +337,7 @@ FocusScope {
                 spacing: vpx(8)
                 clip: true
                 model: root.shortcuts
-                KeyNavigation.down: list
+                KeyNavigation.down: root.pickFolders ? buttonRow : list
                 Keys.onPressed: {
                     if (api.keys.isAccept(event) && !event.isAutoRepeat) {
                         event.accepted = true;
@@ -334,11 +363,78 @@ FocusScope {
                     }
                 }
             }
-            Rectangle {
-                width: parent.width
+
+            // picking a folder: "Use this folder" (and "Create new folder..."),
+            // over the list so it's always in view
+            Row {
+                id: buttonRow
+                visible: root.pickFolders
                 anchors.top: jumpRow.bottom
                 anchors.topMargin: vpx(8)
-                anchors.bottom: buttonRow.visible ? buttonRow.top : helpLine.top
+                width: parent.width
+                height: visible ? vpx(18) * 2.4 : 0
+                spacing: vpx(8)
+                property int current: 0
+                onActiveFocusChanged: if (activeFocus) current = 0
+                Keys.onLeftPressed: current = Math.max(0, current - 1)
+                Keys.onRightPressed: current = Math.min(root.folderButtons.length - 1, current + 1)
+                Keys.onUpPressed: jumpRow.focus = true
+                Keys.onDownPressed: list.focus = true
+                Keys.onPressed: {
+                    if (api.keys.isAccept(event) && !event.isAutoRepeat) {
+                        event.accepted = true;
+                        root.jump(root.folderButtons[current]);
+                    }
+                }
+                Repeater {
+                    model: root.folderButtons
+                    delegate: Rectangle {
+                        readonly property bool on: (buttonRow.activeFocus && index === buttonRow.current) || buttonMouse.containsMouse
+                        readonly property bool use: modelData.act === "use"
+                        // "Use this folder" the wider one
+                        width: root.folderButtons.length === 1 ? buttonRow.width
+                             : use ? (buttonRow.width - buttonRow.spacing) * 0.62 : (buttonRow.width - buttonRow.spacing) * 0.38
+                        height: buttonRow.height
+                        color: on ? "#4ae" : (use ? "#2f6f6f" : "#555")
+                        opacity: root.onDrives ? 0.45 : 1
+                        Row {
+                            anchors.centerIn: parent
+                            spacing: vpx(10)
+                            // its button: X
+                            Image {
+                                visible: parent.parent.use && status === Image.Ready
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: vpx(26); height: vpx(26)
+                                source: parent.parent.use ? "qrc:/frontend/assets/gamepad/x360/x.png" : ""
+                                sourceSize.width: vpx(52)
+                                sourceSize.height: vpx(52)
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                            }
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.t
+                                color: parent.parent.on ? "#111" : "#eee"
+                                font.family: globalFonts.sans
+                                font.pixelSize: vpx(18)
+                                font.bold: parent.parent.use
+                            }
+                        }
+                        MouseArea {
+                            id: buttonMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: root.jump(modelData)
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                width: parent.width
+                anchors.top: buttonRow.visible ? buttonRow.bottom : jumpRow.bottom
+                anchors.topMargin: vpx(8)
+                anchors.bottom: helpLine.top
                 anchors.bottomMargin: vpx(8)
                 color: "#333"
 
@@ -352,27 +448,37 @@ FocusScope {
 
                     model: folderModel
                     delegate: fileDelegate
-                    // up from the top row: the quick jumps; down from the
-                    // last one: the buttons (picking a folder)
+                    // up from the top row: "Use this folder" (picking a
+                    // folder), else the quick jumps
                     Keys.onUpPressed: {
                         if (currentIndex <= 0)
-                            jumpRow.focus = true;
+                            (root.pickFolders ? buttonRow : jumpRow).focus = true;
                         else
                             decrementCurrentIndex();
                     }
-                    Keys.onDownPressed: {
-                        if (currentIndex >= count - 1 && root.pickFolders)
-                            buttonRow.focus = true;
-                        else
-                            incrementCurrentIndex();
-                    }
+                    Keys.onDownPressed: incrementCurrentIndex()
 
                     focus: true
+                    boundsBehavior: Flickable.StopAtBounds
                     highlightRangeMode: ListView.ApplyRange
                     preferredHighlightBegin: height * 0.5 - vpx(18) * 1.25
                     preferredHighlightEnd: height * 0.5 + vpx(18) * 1.25
-                    highlightMoveDuration: 0
+                    // the row lights at once; the list scrolls to it smoothly
+                    highlight: Item {}
+                    highlightMoveDuration: 120
+                    highlightMoveVelocity: -1
                     onCurrentIndexChanged: previewDelay.restart()
+                }
+                // where the list is (a long folder)
+                Rectangle {
+                    visible: list.visibleArea.heightRatio < 1
+                    anchors.right: list.right
+                    anchors.rightMargin: vpx(3)
+                    y: list.y + list.visibleArea.yPosition * list.height
+                    width: vpx(4)
+                    height: Math.max(vpx(24), list.visibleArea.heightRatio * list.height)
+                    radius: width / 2
+                    color: "#777"
                 }
 
                 // the highlighted picture, once the cursor stops on it
@@ -416,61 +522,20 @@ FocusScope {
                 }
             }
 
-            // picking a folder: Use this folder / Create new folder, square
-            // buttons at the bottom as in Pegasus' dialogs
-            Row {
-                id: buttonRow
-                visible: root.pickFolders
-                anchors.bottom: helpLine.top
-                anchors.bottomMargin: vpx(8)
-                width: parent.width
-                height: vpx(18) * 2.4
-                property int current: 0
-                onActiveFocusChanged: if (activeFocus) current = 0
-                Keys.onLeftPressed: current = Math.max(0, current - 1)
-                Keys.onRightPressed: current = Math.min(root.folderButtons.length - 1, current + 1)
-                Keys.onUpPressed: list.focus = true
-                Keys.onPressed: {
-                    if (api.keys.isAccept(event) && !event.isAutoRepeat) {
-                        event.accepted = true;
-                        root.jump(root.folderButtons[current]);
-                    }
-                }
-                Repeater {
-                    model: root.folderButtons
-                    delegate: Rectangle {
-                        readonly property bool on: (buttonRow.activeFocus && index === buttonRow.current) || buttonMouse.containsMouse
-                        width: buttonRow.width / Math.max(1, root.folderButtons.length)
-                        height: buttonRow.height
-                        color: on ? "#4ae" : (index === 0 ? "#555" : "#666")
-                        Text {
-                            anchors.centerIn: parent
-                            text: modelData.t
-                            color: "#eee"
-                            font.family: globalFonts.sans
-                            font.pixelSize: vpx(18)
-                            font.bold: index === 0
-                        }
-                        MouseArea {
-                            id: buttonMouse
-                            anchors.fill: parent
-                            hoverEnabled: true
-                            onClicked: root.jump(modelData)
-                        }
-                    }
-                }
-            }
-
-            // the buttons: the round prompts of Settings (the only hint bar
-            // while the picker is open; the screen behind hides its own)
+            // the buttons: the round prompts of Settings, few of them (the only
+            // hint bar while the picker is open; the screen behind hides its own)
             RoundPromptBar {
                 id: helpLine
                 anchors.bottom: parent.bottom
                 width: parent.width
-                text: (root.onDrives
-                    ? qsTr("A Open · B Close · LB Last folder · Y Quick jumps")
-                    : qsTr("A Open · B Up · X Close · LB Last folder · RB Drives · Y Quick jumps"))
-                    + (root.pickFolders ? (root.allowNewFolder ? qsTr(" · ▾ Use this folder / Create new") : qsTr(" · ▾ Use this folder")) : "") + api.tr
+                items: {
+                    var out = [ { "keys": ["A"], "text": qsTr("open") + api.tr } ];
+                    if (root.pickFolders && !root.onDrives)
+                        out.push({ "keys": ["X"], "text": qsTr("use this folder") + api.tr });
+                    out.push({ "keys": ["Y"], "text": qsTr("quick jumps") + api.tr });
+                    out.push({ "keys": ["B"], "text": (root.onDrives ? qsTr("close") : qsTr("up a folder")) + api.tr });
+                    return out;
+                }
             }
         }
     }
@@ -619,11 +684,15 @@ FocusScope {
         id: fileDelegate
 
         Rectangle {
+            id: row
             readonly property bool highlighted: ListView.isCurrentItem || mouseArea.containsMouse
             readonly property string fileName: name
+            readonly property bool isUp: name === ".."
             readonly property bool isPicture: !isDir && /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(name)
 
-            color: highlighted ? "#566" : "transparent"
+            // folders and files told apart: a folder has its icon and a ›,
+            // a file that can be picked is bold, one that can't is grey
+            color: highlighted ? "#566" : (isUp ? "#2b2b2b" : "transparent")
             width: ListView.view.width
             height: label.height
 
@@ -646,44 +715,57 @@ FocusScope {
                 }
             }
 
-
             Image {
                 id: icon
-                source: isDir ? "qrc:/frontend/assets/dir-icon.png" : "";
+                visible: isDir
+                source: isDir ? "qrc:/frontend/assets/dir-icon.png" : ""
+                opacity: row.isUp ? 0.6 : 1
 
                 fillMode: Image.PreserveAspectFit
-                height: parent.height * 0.75
+                height: parent.height * 0.6
                 width: height
 
                 anchors.left: parent.left
                 anchors.leftMargin: parent.height * 0.5
-                anchors.top: parent.top
-                anchors.topMargin: parent.height * 0.08
+                anchors.verticalCenter: parent.verticalCenter
             }
 
             Text {
                 id: label
-                text: name
+                text: row.isUp ? qsTr("Up a folder (%1)").arg(root.parentName) + api.tr : name
                 verticalAlignment: Text.AlignVCenter
                 lineHeight: 2.5
 
-                color: (isDir || pickable) ? "#eee" : "#888"
+                color: row.isUp ? "#bbb" : (isDir || pickable) ? "#eee" : "#777"
                 font.bold: !isDir && pickable
+                font.italic: row.isUp
                 font.family: globalFonts.sans
                 font.pixelSize: vpx(18)
 
-                anchors.left: icon.right
-                anchors.right: parent.right
+                anchors.left: parent.left
+                anchors.leftMargin: parent.height * 0.5 + parent.height * 0.6
+                anchors.right: chevron.left
                 leftPadding: parent.height * 0.25
-                rightPadding: parent.height * 0.5
+                rightPadding: parent.height * 0.25
                 elide: Text.ElideRight
+            }
+            Text {
+                id: chevron
+                anchors.right: parent.right
+                anchors.rightMargin: parent.height * 0.4
+                anchors.verticalCenter: parent.verticalCenter
+                text: isDir && !row.isUp ? "›" : ""
+                color: "#999"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(24)
             }
 
             MouseArea {
                 id: mouseArea
                 anchors.fill: parent
                 hoverEnabled: true
-                onClicked: pickItem()
+                onPressed: row.ListView.view.currentIndex = index
+                onClicked: row.pickItem()
                 cursorShape: Qt.PointingHandCursor
             }
         }

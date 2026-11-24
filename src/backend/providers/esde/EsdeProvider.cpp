@@ -1624,11 +1624,58 @@ void merge_own_into(model::Game& into, const model::Game& own)
         into.extraMapMut().insert(it.key(), it.value());
 }
 
+/// Pegasus X: your file's launch command, for the copy in the Pegasus X
+/// folder: as Pegasus reads a command whose program is a relative path
+/// (eg. `./run.sh {file.path}`) against the file's own folder, that path is
+/// made absolute (the copy lives somewhere else); anything else as it is
+QString own_launch_for_copy(const QString& command, const QString& basedir)
+{
+    const QString trimmed = command.trimmed();
+    const QStringList args = ::utils::tokenize_command(trimmed);
+    if (args.isEmpty() || basedir.isEmpty())
+        return command;
+    const QString& program = args.first();
+    const bool has_slash = program.contains(QLatin1Char('/')) || program.contains(QLatin1Char('\\'));
+    if (!has_slash || QFileInfo(program).isAbsolute() || program.startsWith(QLatin1Char('{'))
+        || !trimmed.startsWith(program))  // (quoted: left as it is)
+        return command;
+    QString abs = ::clean_abs_path(QFileInfo(basedir, program));
+    if (abs.contains(QLatin1Char(' ')))
+        abs = QLatin1Char('"') % abs % QLatin1Char('"');
+    return abs % trimmed.mid(program.size());
+}
+
+/// ...and its working folder: a relative one made absolute against the
+/// file's folder, as Pegasus reads it ({file.dir} and absolute ones as they are)
+QString own_workdir_for_copy(const QString& workdir, const QString& basedir)
+{
+    const QString trimmed = workdir.trimmed();
+    if (trimmed.isEmpty() || basedir.isEmpty() || trimmed.startsWith(QLatin1Char('{')) || QFileInfo(trimmed).isAbsolute())
+        return trimmed;
+    return ::clean_abs_path(QFileInfo(basedir, trimmed));
+}
+
+/// Pegasus X: the files of the games in a ROM folder's own metadata files
+/// (metadata.pegasus.txt, metadata.txt and *.metadata[.pegasus].txt in the
+/// folder itself, not Pegasus X's old import file), read into `sctx`
+void read_own_metafiles(const QString& folder, providers::SearchContext& sctx, const QString& log_tag)
+{
+    const providers::pegasus::Metadata own_reader(log_tag);
+    for (const QFileInfo& finfo : QDir(folder).entryInfoList(QDir::Files | QDir::Readable, QDir::Name)) {
+        const QString fname = finfo.fileName();
+        if (fname == IMPORT_FILE_NAME)
+            continue;
+        if (fname == QLatin1String("metadata.pegasus.txt") || fname == QLatin1String("metadata.txt")
+            || fname.endsWith(QLatin1String(".metadata.pegasus.txt")) || fname.endsWith(QLatin1String(".metadata.txt")))
+            own_reader.apply_metafile(::clean_abs_path(finfo), sctx);
+    }
+}
+
 /// One game's entry in a metadata file. If the user's own metadata already
 /// has the game (`own`), its title is kept and only what it lacks is written,
 /// so the user's details win whichever file Pegasus reads first.
 QString game_entry(const model::Game& game, const QStringList& files, const QDir& base_dir,
-                   const model::Game* own, const QString& launch)
+                   const model::Game* own, const QString& launch, const QString& workdir = QString())
 {
     QString out;
     QTextStream stream(&out);
@@ -1674,6 +1721,8 @@ QString game_entry(const model::Game& game, const QStringList& files, const QDir
     // a game's own emulator: after the description, before the rating
     if (!launch.isEmpty())
         stream << "launch: " << launch << '\n';
+    if (!workdir.isEmpty())
+        stream << "workdir: " << workdir << '\n';
     if (game.rating() > 0.f && !(own && own->rating() > 0.f))
         stream << "rating: " << qRound(game.rating() * 100.f) << "%\n";
 
@@ -1914,17 +1963,7 @@ void read_folder_games(const ImportSetup& setup, const EsdeSystem& sys, const QS
     metahelper.find_metadata_for(sysentry, tmp_sctx);
 
     // the games already in the folder's own metadata files
-    {
-        const providers::pegasus::Metadata own_reader(log_tag);
-        for (const QFileInfo& finfo : QDir(folder).entryInfoList(QDir::Files | QDir::Readable, QDir::Name)) {
-            const QString fname = finfo.fileName();
-            if (fname == IMPORT_FILE_NAME)
-                continue;
-            if (fname == QLatin1String("metadata.pegasus.txt") || fname == QLatin1String("metadata.txt")
-                || fname.endsWith(QLatin1String(".metadata.pegasus.txt")) || fname.endsWith(QLatin1String(".metadata.txt")))
-                own_reader.apply_metafile(::clean_abs_path(finfo), out.own_sctx);
-        }
-    }
+    read_own_metafiles(folder, out.own_sctx, log_tag);
     size_t found_assets = 0;
     // art named after the game's title too (what scrapers do for games
     // without a file name of their own)
@@ -2081,6 +2120,17 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
                 QString unused;
                 old_launches = previous_launches(old_path, unused);
             }
+            // the system's own launch command (its collection's), to tell
+            // whether a game of yours needs one of its own in the copy
+            QString system_launch;
+            if (coll_index >= 0) {
+                const MetaBlock& coll_block = target.blocks[static_cast<size_t>(coll_index)];
+                const MetaEntry* e = coll_block.entry(QStringLiteral("launch"));
+                if (!e)
+                    e = coll_block.entry(QStringLiteral("command"));
+                if (e)
+                    system_launch = e->values.join(QLatin1Char(' '));
+            }
             const QDir base_dir(folder);
             int written_games = 0;
             int kept_games = 0;
@@ -2109,12 +2159,21 @@ EsdeImportResult import_systems(const ImportSetup& setup, const QStringList& tod
                 const model::Game* own = nullptr;
                 for (const QString& file : entry.second)
                     own = own ? own : own_sctx.game_by_filepath(file);
+                QString workdir;
                 if (own) {
                     merge_own_into(*game, *own);
-                    if (launch.isEmpty() && !own->launchCmd().isEmpty() && own->launchCmd() != own_launch)
-                        launch = own->launchCmd();
+                    // Pegasus X: your launch: (the game's own, or your
+                    // collection's when the system's is another one) and
+                    // workdir: lines go into the copy, read as Pegasus reads
+                    // them from your file (a relative path against its folder)
+                    const bool from_old_import = !launch.isEmpty();
+                    if (!from_old_import && !own->launchCmd().isEmpty()
+                        && (own->launchCmd() != own_launch || own_launch.trimmed() != system_launch.trimmed()))
+                        launch = own_launch_for_copy(own->launchCmd(), own->launchCmdBasedir());
+                    if (!from_old_import)
+                        workdir = own_workdir_for_copy(own->launchWorkdir(), own->launchCmdBasedir());
                 }
-                new_entries.append(game_entry(*game, entry.second, base_dir, nullptr, launch));
+                new_entries.append(game_entry(*game, entry.second, base_dir, nullptr, launch, workdir));
                 written_games++;
             }
             if (!new_entries.isEmpty()) {
@@ -2612,6 +2671,71 @@ EsdeImportResult reimport_system(const QString& system_file)
         if (!one.error.isEmpty())
             result.error = one.error;
     }
+    return result;
+}
+
+EsdeImportResult restore_own_metadata(const QString& system_file, const QString& folder, int* restored)
+{
+    EsdeImportResult result;
+    if (restored)
+        *restored = 0;
+    QStringList folders;
+    QString esde_dir;
+    read_system_header(system_file, folders, esde_dir);
+    const bool nocase = providers::gamedir::storage_ignores_case();
+    const QString me = providers::gamedir::folder_identity(folder, nocase);
+    QString listed;
+    for (const QString& f : folders) {
+        if (providers::gamedir::folder_identity(f, nocase) == me)
+            listed = f;
+    }
+    if (listed.isEmpty()) {
+        result.error = QStringLiteral("That folder isn't one of this system's.");
+        return result;
+    }
+    if (!QFileInfo(listed).isDir()) {
+        result.error = QStringLiteral("That folder isn't there.");
+        return result;
+    }
+    // the games your own files in it list
+    QStringList own_files;
+    {
+        providers::SearchContext own_sctx { QStringList {} };
+        read_own_metafiles(listed, own_sctx, QStringLiteral("Restore"));
+        // (every file they list; a game gets its files only when the library is finished)
+        for (const auto& entry : own_sctx.current_filepath_to_entry_map())
+            own_files.append(entry.first);
+        own_sctx.discard_all();
+    }
+    own_files.removeDuplicates();
+    if (own_files.isEmpty()) {
+        result.error = QStringLiteral("No game in a metadata file of your own in that folder.");
+        return result;
+    }
+    // their entries out of the copy (a copy of it in backup/ first)...
+    const int removed = providers::gamedir::remove_games_with_files(system_file, own_files, QStringLiteral("restore"));
+    if (removed < 0) {
+        result.error = QStringLiteral("Could not write %1").arg(system_file);
+        return result;
+    }
+    if (restored)
+        *restored = removed;
+    // ...and that folder read again: they come back as an import makes
+    // them (your file first, the gamelist and media folders for the gaps);
+    // the other games stay as they are
+    const ImportSetup setup = (!esde_dir.isEmpty() && QFileInfo(esde_dir).isDir()) ? load_import_setup(esde_dir) : rom_folder_setup();
+    const QString system = system_of_imported_folder(setup, listed);
+    if (system.isEmpty()) {
+        result.error = QStringLiteral("Pegasus X doesn't know which system this folder is.");
+        return result;
+    }
+    const QString origin = esde_dir.isEmpty() ? QStringLiteral("# Made by Pegasus X from the ROM folder %1.\n").arg(folders.first())
+                                              : QStringLiteral("# Made by Pegasus X from ES-DE (%1).\n").arg(setup.esde_dir);
+    HashMap<QString, QStringList> only;
+    only[system] = QStringList { listed };
+    result = import_systems(setup, QStringList { system }, only, {}, origin, {});
+    Log::info(QStringLiteral("Restore"), LOGMSG("`%1`: %2 games restored from the metadata files in `%3`")
+        .arg(system_file).arg(removed).arg(listed));
     return result;
 }
 

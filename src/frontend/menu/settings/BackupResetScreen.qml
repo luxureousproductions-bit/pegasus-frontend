@@ -485,6 +485,8 @@ FocusScope {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
+        // (the folder picker has its own: one bar at a time)
+        visible: !filePicker.visible
         items: [
             { "keys": ["A"], "text": qsTr("choose") + api.tr },
             { "keys": ["LB", "RB"], "text": qsTr("top / bottom") + api.tr },

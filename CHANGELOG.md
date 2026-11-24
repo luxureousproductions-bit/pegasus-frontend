@@ -5,6 +5,71 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Legacy cleanup, own metadata files at import, file browser rework
+
+- **GameDirEditor.qml deleted** (and its line in `frontend.qrc`): nothing
+  opened it since 80571ecb / 77fc6f60, and no test opens it by name
+  (`--pegasusx-open` is used for other screens only). There were no
+  translation files with its strings. `GameDirEditorEntry.qml` and
+  `GameDirEditorButton.qml` stay (Advanced > Accessible Android directories
+  uses both), and so does `FilePicker.qml`.
+- **A ROM folder's own metadata file** (metadata.pegasus.txt, metadata.txt,
+  *.metadata[.pegasus].txt), checked: a ROM folder added through Game
+  directory or setup isn't a game directory (game_dirs.txt lists only
+  `gamedirectory`); its own file is read once, when the folder is imported,
+  into `gamedirectory/<system>/metadata.pegasus.txt`, and that copy is the
+  one used and edited from then on (kept as it is, as decided). What was
+  missing at import, now carried into the copy:
+  - each game's `workdir:` (was dropped; a relative one is made a full path
+    against the file's folder, as Pegasus reads it from there);
+  - each game's `launch:` when it was your collection's and the system's
+    collection has another one (a game used the system's then); a launch
+    whose program is a relative path (`./run.sh ...`) is made a full path.
+  Titles, fields, x- fields and assets carry over as before. Not supported
+  (as before): your file's collection rules (`extensions:`, `files:`,
+  `regex:`, `ignore-files:`), games whose files the system's extensions
+  don't match, a game file's own `launch:`.
+- **Restore from a ROM folder's own file** (new, manual): Settings > Game
+  directory > a system > Folders > a folder > "Restore its games from its
+  own metadata file...", only for a folder that has one, asked first. The
+  copy's entries for the games your file lists are taken out (the system
+  file backed up in `backup/<system>/` first, as "restore") and the folder
+  read again, so they come back as the import makes them; other games stay
+  as they are.
+- **File browser** (`FilePicker.qml`: Game directory, setup, Backup &
+  reset, Library art, ES-DE import, the Pegasus X folder): the folder's name
+  and its whole path at the top; "Up a folder (<parent>)" as the first row;
+  folders with their icon and a ›, files that can be picked bold, others
+  grey; "Use this folder" (and "Create new folder...") over the list, always
+  in view, X picks it; the row lights at once and the list scrolls to it
+  smoothly; a scroll mark on long folders; going up lands on the folder you
+  left. Buttons: A open, B up a folder (out on the drives), X use this
+  folder, Y quick jumps (Drives and Last folder are there), LB / RB 10 rows,
+  LT / RT top / bottom. One hint bar, the round one, with few prompts.
+  Touch: tap a row, the up row, the buttons; drag to scroll; tap outside to
+  close. What it returns (pick, pickFile, pickFolder, cancel) and how paths
+  are kept are the same.
+- **One hint bar:** Backup & reset hides its own while the browser is open
+  (it showed two), and so does setup while a step's screen is open.
+- **Tests:** test env: a ROM folder with its own metadata.pegasus.txt
+  (titles, developer / publisher / genre / summary, an x- field, box art, a
+  relative launch and workdir, an absolute one) added as Game directory adds
+  one; the copy checked line by line and read back the way Pegasus reads the
+  game directory (title, developer, players, release, art, x- field, each
+  game's launch and workdir); an edit undone by Restore, other games kept, a
+  backup made, a wrong folder refused; then taken out again. The browser:
+  shots on the drives, in a folder, at the bottom (Game directory) and in
+  Backup & reset; Add a folder now goes Y > Suggested > X.
+- **Files:** `src/frontend/menu/settings/GameDirEditor.qml` (deleted),
+  `src/frontend/frontend.qrc`, `src/backend/providers/esde/EsdeProvider.cpp/.h`,
+  `src/backend/providers/GameDirectory.cpp/.h`,
+  `src/backend/model/internal/settings/Settings.cpp/.h`,
+  `src/frontend/menu/settings/GameDirectory.qml`,
+  `src/frontend/menu/settings/gamedireditor/FilePicker.qml`,
+  `src/frontend/menu/settings/BackupResetScreen.qml`,
+  `src/frontend/menu/settings/FirstRunWizard.qml`, `tests/testenv/run.sh`.
+- **Commit:** "Legacy cleanup, own metadata files at import, file browser rework".
+
 ### Two "Data folder" labels renamed
 
 - **What:** "Data folder" named two different folders. Setup step 1 (the

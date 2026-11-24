@@ -66,7 +66,6 @@
         <file>menu/mainmenu/PrimaryMenuItem.qml</file>
         <file>menu/mainmenu/RollableMenuItem.qml</file>
         <file>menu/mainmenu/SecondaryMenuItem.qml</file>
-        <file>menu/settings/GameDirEditor.qml</file>
         <file>menu/settings/GameDirectory.qml</file>
         <file>menu/settings/EsdeImport.qml</file>
         <file>menu/settings/MetadataEditor.qml</file>

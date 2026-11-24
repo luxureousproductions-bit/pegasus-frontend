@@ -377,6 +377,8 @@ FocusScope {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
+        // (a step's screen, eg. Game directory and its folder picker, has its own)
+        visible: !subscreen.visible
         text: (root.step > 1 ? qsTr("A choose · B previous step") : qsTr("A choose · B skip setup")) + api.tr
               + qsTr(" · Each step can be done later in Settings") + api.tr
     }

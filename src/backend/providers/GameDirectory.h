@@ -92,6 +92,12 @@ int folder_game_count(const QString& system_file, const QString& folder);
 /// alone. Returns how many games went (-1: the file can't be read).
 int remove_system_folder(const QString& system_file, const QString& folder, bool remove_games);
 
+/// Pegasus X: the games that have one of these files (any of them) out of a
+/// system file, after a copy in backup/<system>/ named for `reason`. Other
+/// games, the collection and the header lines are left as they are. Returns
+/// how many games went (-1: the file can't be read or written).
+int remove_games_with_files(const QString& system_file, const QStringList& files, const QString& reason);
+
 /// Was the library made the old way (imports, overrides, ROM folders as
 /// game directories) and the game directory not made yet?
 bool migration_needed();

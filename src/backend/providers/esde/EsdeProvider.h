@@ -112,6 +112,12 @@ EsdeImportResult import_folder_as(const QString& folder, const QString& system);
 EsdeImportResult rom_folder_import_only(const QString& folder, const QStringList& systems);
 /// Reads the folders a system was imported from again (merging)
 EsdeImportResult reimport_system(const QString& system_file);
+/// Pegasus X: one of a system's ROM folders, its games restored from the
+/// metadata files of your own in it: the copy's entries for the games those
+/// files list are taken out (the system file backed up first, "restore")
+/// and the folder read again, so they come back as the import made them.
+/// Other games are left alone. `restored`: how many entries were replaced.
+EsdeImportResult restore_own_metadata(const QString& system_file, const QString& folder, int* restored);
 /// Pegasus X: one game as its ROM folder has it now (the folder's own
 /// metadata file and media folders, ES-DE's gamelist and media), for
 /// Library's "Restore the original art" and "Import ES-DE's details"

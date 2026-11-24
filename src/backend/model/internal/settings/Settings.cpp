@@ -42,6 +42,8 @@
 #include "LaunchBoxDb.h"
 #include "RetroAchievements.h"
 #include "providers/GameDirectory.h"
+#include "providers/SearchContext.h"
+#include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "Scraper.h"
 #include "ThemeStore.h"
 #include "Updater.h"
@@ -674,7 +676,7 @@ QObject* Settings::themeStore()
 
 
 #if defined(PEGASUSX_TESTENV) && defined(WITH_COMPAT_ESDE)
-namespace { void run_folder_tests(Settings& s); }
+namespace { void run_folder_tests(Settings& s); void run_ownmeta_tests(Settings& s); }
 #endif
 
 void Settings::postInit()
@@ -745,6 +747,8 @@ void Settings::postInit()
         }
         // Settings > Game directory > a system > Folders (PEGASUSX_TEST_FOLDERS)
         run_folder_tests(*this);
+        // a ROM folder's own metadata file (PEGASUSX_TEST_OWNMETA)
+        run_ownmeta_tests(*this);
     }
 #endif
 
@@ -1635,6 +1639,23 @@ int Settings::removeRomFolder(const QString& folder, bool remove_games)
     return removed;
 }
 
+namespace {
+// Pegasus X: a metadata file of your own in a folder (not Pegasus X's old
+// import file there)
+bool has_own_metafile(const QString& folder)
+{
+    for (const QFileInfo& finfo : QDir(folder).entryInfoList(QDir::Files | QDir::Readable)) {
+        const QString name = finfo.fileName();
+        if (name == QLatin1String("esde-import.metadata.pegasus.txt"))
+            continue;
+        if (name == QLatin1String("metadata.pegasus.txt") || name == QLatin1String("metadata.txt")
+                || name.endsWith(QLatin1String(".metadata.pegasus.txt")) || name.endsWith(QLatin1String(".metadata.txt")))
+            return true;
+    }
+    return false;
+}
+} // namespace
+
 QVariantList Settings::systemFolders(const QString& key) const
 {
     QVariantList out;
@@ -1659,6 +1680,7 @@ QVariantList Settings::systemFolders(const QString& key) const
             { QStringLiteral("present"), QFileInfo(folder).isDir() },
             { QStringLiteral("games"), providers::gamedir::folder_game_count(file, folder) },
             { QStringLiteral("watched"), watched.contains(providers::gamedir::folder_identity(folder, providers::gamedir::storage_ignores_case())) },
+            { QStringLiteral("ownMetadata"), has_own_metafile(folder) },
         });
     }
     return out;
@@ -1881,6 +1903,142 @@ void run_folder_tests(Settings& s)
     say(read(gba_file) == gba_before, QStringLiteral("the GBA system is as it was"));
     Log::info(LOGMSG("Test: Folders: done"));
 }
+
+// the test environment: a ROM folder with a metadata file of its own
+// (PEGASUSX_TEST_OWNMETA=<the folder>, a SNES folder), added as Settings >
+// Game directory > a system > Folders adds one: what its file says is in the
+// copy in the game directory, Pegasus reads it from there as from your file
+// (titles, fields, art, each game's launch and workdir), and Restore makes
+// its games again from your file. Each result a "Test: Own metadata:
+// OK:/FAILED:" line
+void run_ownmeta_tests(Settings& s)
+{
+    const QString folder = qEnvironmentVariable("PEGASUSX_TEST_OWNMETA");
+    if (folder.isEmpty())
+        return;
+    const QString key = QStringLiteral("snes");
+    const QString file = providers::gamedir::system_file(key);
+    const auto read = [](const QString& path) {
+        QFile f(path);
+        return f.open(QIODevice::ReadOnly | QIODevice::Text) ? QString::fromUtf8(f.readAll()) : QString();
+    };
+    const auto say = [](bool ok, const QString& what) {
+        Log::info(LOGMSG("Test: Own metadata: %1 %2").arg(ok ? QStringLiteral("OK:") : QStringLiteral("FAILED:"), what));
+    };
+    // the body lines of `before`, in the same order in `after`
+    const auto kept_in_order = [](const QString& before, const QString& after) {
+        const QStringList b = before.split(QLatin1Char('\n'));
+        const QStringList a = after.split(QLatin1Char('\n'));
+        int at = 0;
+        bool body = false;
+        for (const QString& line : b) {
+            body = body || line.startsWith(QLatin1String("collection:"));
+            if (!body || line.trimmed().isEmpty())
+                continue;
+            while (at < a.size() && a.at(at) != line)
+                at++;
+            if (at >= a.size())
+                return false;
+            at++;
+        }
+        return true;
+    };
+    const QString alpha = folder + QStringLiteral("/Alpha Quest (USA).sfc");
+    const QString beta = folder + QStringLiteral("/Beta Racer (USA).sfc");
+
+    // from a clean start
+    if (s.removeSystemFolder(key, folder, true) > 0)
+        Log::info(LOGMSG("Test: Own metadata: (left from before, taken out first)"));
+    const QString before = read(file);
+    say(!before.isEmpty(), QStringLiteral("the SNES system is there"));
+
+    // 1. the folder added, as Game directory adds one
+    {
+        QStringList todo;
+        QString system;
+        const QString why = prepare_folder_add(s.gameDirectorySystems(), key, folder, todo, system);
+        say(why.isEmpty(), QStringLiteral("the folder can be added `%1`").arg(why));
+        const auto result = add_folders(todo, system);
+        say(result.error.isEmpty() && result.games > 0, QStringLiteral("added: error `%1`").arg(result.error));
+    }
+    QString now = read(file);
+    say(now.contains(QStringLiteral("game: Alpha Quest Deluxe")) && now.contains(QStringLiteral("game: Beta Racer")),
+        QStringLiteral("the games, with the titles from your file"));
+    say(now.contains(QStringLiteral("developer: Test Dev")) && now.contains(QStringLiteral("publisher: Test Pub"))
+        && now.contains(QStringLiteral("genre: RPG")) && now.contains(QStringLiteral("summary: A short one."))
+        && now.contains(QStringLiteral("x-test-field: kept")),
+        QStringLiteral("its fields (developer, publisher, genre, summary, an x- field)"));
+    say(now.contains(QStringLiteral("assets.box_front: ") + folder + QStringLiteral("/art/alpha-box.png")),
+        QStringLiteral("its box art, as a full path"));
+    say(now.contains(QStringLiteral("launch: ") + folder + QStringLiteral("/run-alpha.sh \"{file.path}\"")),
+        QStringLiteral("a game's relative launch command, made a full path"));
+    say(now.contains(QStringLiteral("workdir: ") + folder + QStringLiteral("/tools")),
+        QStringLiteral("a game's relative workdir, made a full path"));
+    say(now.contains(QStringLiteral("launch: /opt/emu/beta {file.path}")) && now.contains(QStringLiteral("workdir: /tmp/beta")),
+        QStringLiteral("a game's own launch and workdir, as they are"));
+    say(kept_in_order(before, now), QStringLiteral("the system's other games are as they were"));
+
+    // 2. the copy, read as Pegasus reads the game directory
+    {
+        providers::SearchContext sctx { QStringList {} };
+        const providers::pegasus::Metadata reader(QStringLiteral("Test"));
+        reader.apply_metafile(file, sctx);
+        const model::Game* const a = sctx.game_by_filepath(alpha);
+        const model::Game* const b = sctx.game_by_filepath(beta);
+        say(a && a->title() == QLatin1String("Alpha Quest Deluxe") && a->developerListConst() == QStringList { QStringLiteral("Test Dev") }
+            && a->playerCount() == 2 && a->releaseDate() == QDate(1994, 5, 1),
+            QStringLiteral("read: title, developer, players, release"));
+        bool art = false;
+        if (a) {
+            for (const QString& f : a->assets().get(AssetType::BOX_FRONT))
+                art = art || f.endsWith(QLatin1String("/art/alpha-box.png"));
+        }
+        say(art, QStringLiteral("read: box art"));
+        say(a && a->extraMap().value(QStringLiteral("test-field")).toStringList() == QStringList { QStringLiteral("kept") },
+            QStringLiteral("read: x-test-field"));
+        say(a && a->launchCmd() == folder + QStringLiteral("/run-alpha.sh \"{file.path}\"")
+            && a->launchWorkdir() == folder + QStringLiteral("/tools"),
+            QStringLiteral("read: Alpha's launch `%1`, workdir `%2`").arg(a ? a->launchCmd() : QString(), a ? a->launchWorkdir() : QString()));
+        say(b && b->launchCmd() == QLatin1String("/opt/emu/beta {file.path}") && b->launchWorkdir() == QLatin1String("/tmp/beta"),
+            QStringLiteral("read: Beta's launch `%1`, workdir `%2`").arg(b ? b->launchCmd() : QString(), b ? b->launchWorkdir() : QString()));
+        sctx.discard_all();
+    }
+
+    // 3. Restore: an edit to the copy undone from your file, other games kept
+    {
+        QString edited = now;
+        edited.replace(QStringLiteral("developer: Test Dev"), QStringLiteral("developer: Edited"));
+        QFile out(file);
+        if (out.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+            out.write(edited.toUtf8());
+    }
+    say(read(file).contains(QStringLiteral("developer: Edited")), QStringLiteral("the copy edited"));
+    int restored = 0;
+    const auto result = providers::esde::restore_own_metadata(file, folder, &restored);
+    now = read(file);
+    say(result.error.isEmpty() && restored == 2, QStringLiteral("restored %1 games, error `%2`").arg(restored).arg(result.error));
+    say(now.contains(QStringLiteral("developer: Test Dev")) && !now.contains(QStringLiteral("developer: Edited")),
+        QStringLiteral("the edit is replaced by your file's developer"));
+    say(now.count(QStringLiteral("game: Alpha Quest Deluxe")) == 1 && now.count(QStringLiteral("game: Beta Racer")) == 1,
+        QStringLiteral("each game once"));
+    say(now.contains(QStringLiteral("launch: ") + folder + QStringLiteral("/run-alpha.sh")) && now.contains(QStringLiteral("workdir: /tmp/beta")),
+        QStringLiteral("launch and workdir again"));
+    say(kept_in_order(before, now), QStringLiteral("the system's other games are still as they were"));
+    say(!QDir(providers::gamedir::backup_dir(key)).entryList({ QStringLiteral("metadata.pegasus.txt.restore.*") }, QDir::Files).isEmpty(),
+        QStringLiteral("a copy of the file in backup/snes/ first"));
+    {
+        int none = 0;
+        const auto refused = providers::esde::restore_own_metadata(file, folder + QStringLiteral("/nope"), &none);
+        say(!refused.error.isEmpty() && none == 0 && read(file) == now,
+            QStringLiteral("a folder that isn't the system's: refused `%1`, nothing written").arg(refused.error));
+    }
+
+    // out again, for the steps after
+    s.removeSystemFolder(key, folder, true);
+    now = read(file);
+    say(!now.contains(QStringLiteral("Alpha Quest")) && kept_in_order(before, now), QStringLiteral("taken out again"));
+    Log::info(LOGMSG("Test: Own metadata: done"));
+}
 } // namespace
 #endif
 
@@ -1900,6 +2058,24 @@ QString Settings::addSystemFolder(const QString& key, const QString& folder)
 #else
     Q_UNUSED(key); Q_UNUSED(folder);
     return tr("Not in this build");
+#endif
+}
+
+void Settings::restoreOwnMetadata(const QString& key, const QString& folder)
+{
+#ifdef WITH_COMPAT_ESDE
+    const QString file = providers::gamedir::system_file(key);
+    QtConcurrent::run([this, file, folder]{
+        int restored = 0;
+        const auto result = providers::esde::restore_own_metadata(file, folder, &restored);
+        QMetaObject::invokeMethod(this, [this, result, restored]{
+            QVariantMap map = import_result_map(result);
+            map.insert(QStringLiteral("restored"), restored);
+            emit romFolderImportFinished(map);
+        }, Qt::QueuedConnection);
+    });
+#else
+    Q_UNUSED(key); Q_UNUSED(folder);
 #endif
 }
 

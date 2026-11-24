@@ -219,7 +219,8 @@ public:
     /// Returns how many games left
     Q_INVOKABLE int removeRomFolder(const QString& folder, bool remove_games);
     /// Pegasus X: a system's ROM folders: [{ folder, storage ("internal", "sd",
-    /// ""), present, games (in the game directory from it), watched }]
+    /// ""), present, games (in the game directory from it), watched,
+    /// ownMetadata (a metadata file of your own in it) }]
     Q_INVOKABLE QVariantList systemFolders(const QString& key) const;
     /// one more ROM folder for a system (its games, details, art and emulators
     /// stay; the new folder's games are added). A short reason when it can't be
@@ -230,6 +231,11 @@ public:
     /// system): no longer watched, no line left; with `remove_games` its games
     /// go too (set aside in backup/). Returns how many games left (-1: error)
     Q_INVOKABLE int removeSystemFolder(const QString& key, const QString& folder, bool remove_games);
+    /// Pegasus X: one of a system's ROM folders, its games restored from the
+    /// metadata files of your own in it (their entries in the system file
+    /// replaced as the import makes them; the file backed up first). In the
+    /// background: romFolderImportFinished, with "restored" (entries replaced)
+    Q_INVOKABLE void restoreOwnMetadata(const QString& key, const QString& folder);
 
     // Pegasus X: emulators
     Q_INVOKABLE QVariantList emulatorCollections() const;

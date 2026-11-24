@@ -47,6 +47,7 @@ FocusScope {
     // Pegasus X: a system's ROM folders (its Folders page), and adding one to it
     property var folderSystem: null  // the system ({ key, name, ... })
     property var folders: []         // Settings.systemFolders
+    property bool restoring: false   // a restore from a folder's own metadata file running
     property string folderKey: ""    // picking a folder to add to this system
     property int pickedCount: Object.keys(picked).length
 
@@ -167,12 +168,16 @@ FocusScope {
         target: Internal.settings
         function onRomFolderImportFinished(result) {
             root.working = false;
+            var restoring = root.restoring;
+            root.restoring = false;
             if (result.error) {
                 root.message = result.error;
                 return;
             }
             root.changed = true;
-            root.message = qsTr("Done: %1 systems, %2 games in the game directory.").arg(result.systems).arg(result.games) + api.tr;
+            root.message = restoring
+                ? qsTr("%1 games restored from the folder's metadata file: the library is read again when you leave.").arg(result.restored || 0) + api.tr
+                : qsTr("Done: %1 systems, %2 games in the game directory.").arg(result.systems).arg(result.games) + api.tr;
             root.keepPosition(function() {
                 root.refresh();
                 if (root.page === "found")
@@ -225,19 +230,42 @@ FocusScope {
     // one folder out: that folder only, this system only
     function folderMenu(f) {
         var sys = folderSystem;
-        chooser.openFor(qsTr("%1 · %2").arg(sys.name).arg(f.folder) + api.tr, [
+        var acts = [
             { "act": "forget", "text": qsTr("Stop watching it, keep its %1 games").arg(f.games) + api.tr },
             { "act": "remove", "text": qsTr("Remove it and its %1 games (set aside in backup/)").arg(f.games) + api.tr },
-            { "act": "stay", "text": qsTr("Keep it") + api.tr },
-        ], function(act) {
+        ];
+        // Pegasus X: the folder's own metadata file, read again on request
+        if (f.ownMetadata && f.present)
+            acts.push({ "act": "restore", "text": qsTr("Restore its games from its own metadata file...") + api.tr });
+        acts.push({ "act": "stay", "text": qsTr("Keep it") + api.tr });
+        chooser.openFor(qsTr("%1 · %2").arg(sys.name).arg(f.folder) + api.tr, acts, function(act) {
             if (act === "stay")
                 return;
+            if (act === "restore") {
+                Qt.callLater(function() { root.confirmRestore(sys, f); });
+                return;
+            }
             var n = Internal.settings.removeSystemFolder(sys.key, f.folder, act === "remove");
             root.changed = root.changed || (act === "remove" && n > 0);
             root.message = n < 0 ? qsTr("Couldn't write %1's file.").arg(sys.name) + api.tr
                          : act === "remove" ? qsTr("%1 games set aside: the library is read again when you leave.").arg(n) + api.tr
                          : qsTr("No longer watched: its games stay.") + api.tr;
             root.keepPosition(root.refresh);
+        });
+    }
+    // Pegasus X: the games the folder's own metadata file lists, back as the
+    // import made them from it (asked first: it replaces their entries)
+    function confirmRestore(sys, f) {
+        chooser.openFor(qsTr("Restore the games listed in the metadata file in %1? Their entries in %2 are made again from that file, replacing what was changed since (edits, scraped details, emulators picked for them). Other games stay as they are. A copy of the file goes to backup/%3/ first.").arg(f.folder).arg(sys.name).arg(sys.key) + api.tr, [
+            { "act": "restore", "text": qsTr("Restore") + api.tr },
+            { "act": "stay", "text": qsTr("Keep them as they are") + api.tr },
+        ], function(act) {
+            if (act !== "restore")
+                return;
+            root.working = true;
+            root.restoring = true;
+            root.message = qsTr("Restoring from %1...").arg(f.folder) + api.tr;
+            Internal.settings.restoreOwnMetadata(sys.key, f.folder);
         });
     }
     function remove(entry) {
