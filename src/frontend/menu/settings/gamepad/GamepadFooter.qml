@@ -47,7 +47,6 @@ Item {
                 property bool stock: false
                 source: "qrc:/frontend/assets/gamepad/" + (stock ? "stock/" : "x360/") + "b.png"
                 onStatusChanged: if (status === Image.Error && !stock) stock = true
-                mipmap: true
 
                 anchors.fill: parent
                 anchors.margins: parent.height * 0.1

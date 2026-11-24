@@ -5,6 +5,24 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Gamepad layout: the footer loads again (fix to the button art)
+
+- **What:** Settings > Advanced > Gamepad layout lost its footer (B back,
+  and with it the screen's layout below the list). Root cause: the button
+  art build added `mipmap: true` to the footer's B picture, and
+  `GamepadFooter.qml` imports QtQuick 2.0, where Image has no `mipmap`
+  (it came in 2.3), so QML refused the file ("Type GamepadFooter
+  unavailable"). Removed there, and from `GamepadField.qml` too (it
+  imports 2.15, so it worked, but it isn't needed: the pictures are drawn
+  smooth anyway).
+- **Not changed:** the pictures (still the theme's, the stock ones as the
+  fallback), the screen, the mapping.
+- **Tests:** test env: Gamepad layout shot; the log is checked for
+  "unavailable" / "not available" lines.
+- **Files:** `src/frontend/menu/settings/gamepad/GamepadFooter.qml`,
+  `src/frontend/menu/settings/gamepad/GamepadField.qml`.
+- **Commit:** "Gamepad layout: the footer loads again (fix to the button art)".
+
 ### Settings > Advanced: the rows show (fix to the regroup)
 
 - **What:** Settings > Advanced opened empty, so its rows (and Missing
