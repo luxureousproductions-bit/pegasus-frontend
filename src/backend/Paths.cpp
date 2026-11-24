@@ -18,6 +18,7 @@
 #include "Paths.h"
 
 #include "AppSettings.h"
+#include "SafeFile.h"
 
 #ifdef Q_OS_ANDROID
 #include "platform/AndroidHelpers.h"
@@ -211,11 +212,8 @@ bool setPegasusxRootSetting(const QString& dir)
     const QString path = privateConfigDir() + QLatin1Char('/') + ROOT_FILE;
     if (dir.isEmpty())
         return !QFileInfo::exists(path) || QFile::remove(path);
-    QFile file(path);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text | QIODevice::Truncate))
-        return false;
-    file.write(QDir::cleanPath(dir).toUtf8() + '\n');
-    return true;
+    // Pegasus X: the safe way (SafeFile.h): a cut save keeps the folder setting there was
+    return safefile::write(path, QDir::cleanPath(dir).toUtf8() + '\n', true);
 }
 
 QString writableCacheDir()

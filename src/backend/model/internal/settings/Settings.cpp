@@ -19,6 +19,7 @@
 
 #include "AppSettings.h"
 #include "BackupReset.h"
+#include "SafeFile.h"
 #include "Log.h"
 #include "Paths.h"
 #include "PegasusAssets.h"
@@ -93,15 +94,18 @@ void rewrite_gamedircfg(const std::function<void(QTextStream&)>& callback)
 {
     const QString config_file_path = paths::writableConfigDir() + QStringLiteral("/game_dirs.txt");
 
-    QFile config_file(config_file_path);
-    if (!config_file.open(QFile::WriteOnly | QFile::Text)) {
+    // Pegasus X: saved the safe way (SafeFile.h): a cut save keeps the old list
+    QByteArray bytes;
+    {
+        QTextStream stream(&bytes, QIODevice::WriteOnly);
+        stream.setCodec("UTF-8");
+        callback(stream);
+        stream.flush();
+    }
+    if (!safefile::write(config_file_path, bytes, true)) {
         Log::warning(LOGMSG("Failed to save game directory settings to `%1`").arg(config_file_path));
         return;
     }
-
-    QTextStream stream(&config_file);
-    stream.setCodec("UTF-8");
-    callback(stream);
     Log::info(LOGMSG("Game directory list saved"));
 }
 
@@ -226,9 +230,7 @@ void Settings::setWizardStep(int step)
         return;
     }
     QDir().mkpath(paths::privateConfigDir());
-    QFile file(path);
-    if (file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        file.write(QByteArray::number(step) + '\n');
+    safefile::write(path, QByteArray::number(step) + '\n');
 }
 
 namespace {
@@ -1234,12 +1236,11 @@ void Settings::updateEmulatorList()
             QDir().mkpath(esde_lists_dir());
             for (const auto& entry : { qMakePair(QStringLiteral("es_systems.xml"), systems),
                                        qMakePair(QStringLiteral("es_find_rules.xml"), rules) }) {
-                QFile file(esde_lists_dir() + QLatin1Char('/') + entry.first);
-                if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                // (the safe way, SafeFile.h: a cut save keeps the list there was)
+                if (!safefile::write(esde_lists_dir() + QLatin1Char('/') + entry.first, entry.second)) {
                     emit emulatorListUpdated(false, tr("Couldn't save the list."));
                     return;
                 }
-                file.write(entry.second);
             }
             Log::info(LOGMSG("Emulator list updated from ES-DE (%1 systems)").arg(systems.count("<system>")));
 #ifdef WITH_COMPAT_ESDE

@@ -21,6 +21,7 @@
 #include "Log.h"
 #include "MetaFile.h"
 #include "Paths.h"
+#include "SafeFile.h"
 #include "providers/Provider.h"
 #include "utils/PathTools.h"
 #include "utils/StringHelpers.h"
@@ -283,18 +284,21 @@ SaveContext::SaveContext()
 
 void SaveContext::save() const
 {
-    QFile config_file(config_path);
-    if (!config_file.open(QFile::WriteOnly | QFile::Text)) {
+    // Pegasus X: saved the safe way (SafeFile.h): a cut save keeps the old file
+    QByteArray bytes;
+    {
+        QTextStream stream(&bytes, QIODevice::WriteOnly);
+        stream.setCodec("UTF-8");
+
+        print_general(stream);
+        print_providers(stream);
+        print_keys(stream);
+        stream.flush();
+    }
+    if (!safefile::write(config_path, bytes, true)) {
         Log::warning(LOGMSG("Failed to save program settings to `%1`").arg(config_path));
         return;
     }
-
-    QTextStream stream(&config_file);
-    stream.setCodec("UTF-8");
-
-    print_general(stream);
-    print_providers(stream);
-    print_keys(stream);
 
     Log::info(LOGMSG("Program settings saved"));
 }

@@ -30,6 +30,8 @@ add_library(pegasus-backend
     Updater.h
     BackupReset.cpp
     BackupReset.h
+    SafeFile.cpp
+    SafeFile.h
     Scraper.cpp
     Scraper.h
     LaunchBoxDb.cpp

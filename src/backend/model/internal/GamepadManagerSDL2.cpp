@@ -19,6 +19,7 @@
 
 #include "Log.h"
 #include "Paths.h"
+#include "SafeFile.h"
 #include "utils/StringHelpers.h"
 
 #include <QDataStream>
@@ -298,18 +299,20 @@ void write_mappings(const std::vector<std::string>& mappings)
 {
     const QString db_path = paths::writableConfigDir() + QLatin1String(USERCFG_FILE);
 
-    QFile db_file(db_path);
-    if (!db_file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+    // Pegasus X: saved the safe way (SafeFile.h): a cut save keeps the old layouts
+    QByteArray bytes;
+    {
+        QTextStream db_stream(&bytes, QIODevice::WriteOnly);
+        db_stream.setCodec("UTF-8");
+
+        for (const std::string& mapping : mappings)
+            db_stream << mapping.data() << '\n';
+        db_stream.flush();
+    }
+    if (!safefile::write(db_path, bytes, true)) {
         Log::error(LOGMSG("SDL: could not open `%1` for writing, gamepad config cannot be saved.")
             .arg(db_path));
-        return;
     }
-
-    QTextStream db_stream(&db_file);
-    db_stream.setCodec("UTF-8");
-
-    for (const std::string& mapping : mappings)
-        db_stream << mapping.data() << '\n';
 }
 } // namespace
 

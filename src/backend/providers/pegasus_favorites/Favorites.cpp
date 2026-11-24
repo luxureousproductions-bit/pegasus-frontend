@@ -20,6 +20,7 @@
 #include "AppSettings.h"
 #include "Log.h"
 #include "Paths.h"
+#include "SafeFile.h"
 #include "model/gaming/Game.h"
 #include "model/gaming/GameFile.h"
 #include "providers/SearchContext.h"
@@ -124,18 +125,21 @@ void Favorites::start_processing()
         emit startedWriting();
 
         while (true) {
-            QFile db_file(m_db_path);
-            if (!db_file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            // Pegasus X: saved the safe way (SafeFile.h): a cut save keeps the old list
+            QByteArray bytes;
+            {
+                QTextStream db_stream(&bytes, QIODevice::WriteOnly);
+                db_stream.setCodec("UTF-8");
+
+                for (const QString& fav : qAsConst(m_active_task))
+                    db_stream << fav << Qt::endl;
+                db_stream.flush();
+            }
+            if (!safefile::write(m_db_path, bytes, true)) {
                 Log::error(display_name(), LOGMSG("Could not open `%1` for writing, favorites are not saved")
                     .arg(m_db_path));
                 break;
             }
-
-            QTextStream db_stream(&db_file);
-            db_stream.setCodec("UTF-8");
-
-            for (const QString& fav : qAsConst(m_active_task))
-                db_stream << fav << Qt::endl;
 
             QMutexLocker lock(&m_task_guard);
             m_active_task.clear();

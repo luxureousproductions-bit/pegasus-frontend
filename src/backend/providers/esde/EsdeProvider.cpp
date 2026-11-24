@@ -18,6 +18,7 @@
 #include "EsdeProvider.h"
 
 #include "Log.h"
+#include "SafeFile.h"
 #include "model/gaming/Assets.h"
 #include "model/gaming/Collection.h"
 #include "model/gaming/Game.h"
@@ -3658,10 +3659,9 @@ QString save_custom_emulator(const QString& collection_name, const QString& shor
             { QStringLiteral("command"), command },
         });
     }
-    QFile file(custom_emulators_path());
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate))
-        return QStringLiteral("Could not write `%1`").arg(file.fileName());
-    file.write(QJsonDocument(list).toJson());
+    // (the safe way, SafeFile.h: a cut save keeps the old file)
+    if (!safefile::write(custom_emulators_path(), QJsonDocument(list).toJson()))
+        return QStringLiteral("Could not write `%1`").arg(custom_emulators_path());
     return {};
 }
 

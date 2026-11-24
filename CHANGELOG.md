@@ -3,6 +3,58 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-24
+
+### Damaged-file recovery, build 1: safe saves for nine files
+
+- **What:** nine files were saved by writing straight into them (the old
+  text emptied first), so a dead battery, a crash or a full storage during
+  the save could leave one half-written or empty (an empty `game_dirs.txt`
+  is an empty library). They're saved the safe way now, by one shared
+  helper (`SafeFile`): `settings.txt` (`SettingsFile.cpp`),
+  `game_dirs.txt` (`Settings.cpp`), `favorites.txt` (`Favorites.cpp`), the
+  custom emulators file `pegasusx-emulators.json` (`EsdeProvider.cpp`), the
+  downloaded ES-DE lists `esde-lists/es_systems.xml` and
+  `es_find_rules.xml` (`Settings.cpp`), the setup step file
+  `pegasusx-wizard` (`Settings.cpp`), the play session file (`Backend.cpp`),
+  and two more found the same way: `pegasusx-root.txt`, which Pegasus X
+  folder is used (`Paths.cpp`), and `sdl_controllers.txt`, the gamepad
+  layouts (`GamepadManagerSDL2.cpp`).
+- **How:** as the other Pegasus X files are saved (QSaveFile): the whole new
+  text into a temporary file beside it, flushed to the storage, then renamed
+  over the old one in one step. Qt's own "direct write" fallback is off.
+- **Fallback** (a storage refusing that temporary file or that rename):
+  a. the whole new text into `<name>.pxsave` beside it, flushed to the
+  storage, its size checked; b. the old file renamed to `<name>.pxold`;
+  c. `<name>.pxsave` renamed to the file's name; d. `<name>.pxold` deleted.
+  (a) failing stops there; (b) failing deletes `.pxsave`; (c) failing puts
+  `.pxold` back. The old file is never written into. A power cut: during
+  (a), the old file is whole (a part of the new beside it); after (a), the
+  old file whole, the new one whole beside it; between (b) and (c), for that
+  instant, the file isn't there but both whole copies are beside it (to be
+  put back by the startup check of a later build); after (c), the new file
+  whole (the old copy beside it).
+- **A save that can't be done** keeps the old file and logs a warning (as
+  the old code's messages, and "Save:" lines); no message on screen.
+- **Not changed:** the files' contents and formats, when they're saved,
+  every other file (`pegasusx.ini` is saved by Qt's QSettings, already
+  this way; caches, markers, downloads and one-time moves aren't changed).
+- **Tests:** `test_SafeFile` on a throwaway folder: a save; a new file;
+  text mode; a save cut before the swap (the old file whole); the rename
+  refused (the fallback saves); the fallback cut at each step (old whole,
+  new whole, or between its renames both whole copies beside it; never part
+  of a file, never empty); a save after a cut one; a folder that refuses new
+  files (the old file kept, not written into).
+- **Files:** `src/backend/SafeFile.h/.cpp` (new), `src/backend/backend.pro`,
+  `src/backend/CMakeLists.txt`, `src/backend/parsers/SettingsFile.cpp`,
+  `src/backend/model/internal/settings/Settings.cpp`,
+  `src/backend/providers/pegasus_favorites/Favorites.cpp`,
+  `src/backend/providers/esde/EsdeProvider.cpp`, `src/backend/Backend.cpp`,
+  `src/backend/Paths.cpp`, `src/backend/model/internal/GamepadManagerSDL2.cpp`,
+  `tests/backend/safefile/*` (new), `tests/backend/backend.pro`,
+  `tests/CMakeLists.txt`.
+- **Commit:** "Damaged-file recovery, build 1: safe saves for nine files".
+
 ## 2026-11-23
 
 ### Prompts: every prompt on the bar's middle line

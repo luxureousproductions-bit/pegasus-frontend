@@ -19,6 +19,7 @@
 
 #include "AppSettings.h"
 #include "AudioSpectrum.h"
+#include "SafeFile.h"
 #include "Log.h"
 #include "FrontendLayer.h"
 #include "ProcessLauncher.h"
@@ -424,15 +425,13 @@ void Backend::sessionStart()
     m_session.path = file->path();
     m_session.package = file->parentGame() ? package_of(file->parentGame()->launchCmd()) : QString();
     QDir().mkpath(QFileInfo(session_file()).absolutePath());
-    QFile f(session_file());
-    if (f.open(QIODevice::WriteOnly)) {
-        f.write(QJsonDocument(QJsonObject {
-            { QStringLiteral("path"), m_session.path },
-            { QStringLiteral("package"), m_session.package },
-            { QStringLiteral("start"), static_cast<double>(m_session.start_ms) },
-            { QStringLiteral("statsPath"), file->hasUri() ? file->uri() : ::clean_abs_path(file->fileinfo()) },
-        }).toJson(QJsonDocument::Compact));
-    }
+    // (the safe way, SafeFile.h: a cut save keeps the old file)
+    safefile::write(session_file(), QJsonDocument(QJsonObject {
+        { QStringLiteral("path"), m_session.path },
+        { QStringLiteral("package"), m_session.package },
+        { QStringLiteral("start"), static_cast<double>(m_session.start_ms) },
+        { QStringLiteral("statsPath"), file->hasUri() ? file->uri() : ::clean_abs_path(file->fileinfo()) },
+    }).toJson(QJsonDocument::Compact));
     Log::info(LOGMSG("Play session: `%1` (%2) started").arg(m_session.path, m_session.package.isEmpty() ? QStringLiteral("?") : m_session.package));
     // the game's app never took over (a launch that failed quietly): the
     // session ends, so the controls come back
