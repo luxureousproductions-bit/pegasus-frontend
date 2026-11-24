@@ -5,6 +5,15 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Test env: Add a ROM folder goes through the new browser
+
+- **What:** the test step for Game directory > Add a ROM folder pressed LB
+  for the last folder and Down to "Use this folder", as the old browser had
+  them; the reworked browser (previous entry) has them in the quick jumps
+  and on X. The step now goes Y > Suggested > X. Test only.
+- **Files:** `tests/testenv/run.sh`.
+- **Commit:** "Test env: Add a ROM folder goes through the new browser".
+
 ### Legacy cleanup, own metadata files at import, file browser rework
 
 - **GameDirEditor.qml deleted** (and its line in `frontend.qrc`): nothing
