@@ -461,28 +461,16 @@ FocusScope {
                 }
             }
 
-            // the buttons, as Pegasus' help line
-            Rectangle {
+            // the buttons: the round prompts of Settings (the only hint bar
+            // while the picker is open; the screen behind hides its own)
+            RoundPromptBar {
                 id: helpLine
                 anchors.bottom: parent.bottom
                 width: parent.width
-                height: helpText.height
-                color: "#222"
-                Text {
-                    id: helpText
-                    width: parent.width
-                    text: (root.onDrives
-                        ? qsTr("A  Open     B  Close     LB  Last folder     Y  Quick jumps")
-                        : qsTr("A  Open     B  Up     X  Close     LB  Last folder     RB  Drives     Y  Quick jumps"))
-                        + (root.pickFolders ? (root.allowNewFolder ? qsTr("     ▾  Use this folder / Create new") : qsTr("     ▾  Use this folder")) : "") + api.tr
-                    color: "#bbb"
-                    font.family: globalFonts.sans
-                    font.pixelSize: vpx(15)
-                    lineHeight: 2.2
-                    verticalAlignment: Text.AlignVCenter
-                    horizontalAlignment: Text.AlignHCenter
-                    elide: Text.ElideRight
-                }
+                text: (root.onDrives
+                    ? qsTr("A Open · B Close · LB Last folder · Y Quick jumps")
+                    : qsTr("A Open · B Up · X Close · LB Last folder · RB Drives · Y Quick jumps"))
+                    + (root.pickFolders ? (root.allowNewFolder ? qsTr(" · ▾ Use this folder / Create new") : qsTr(" · ▾ Use this folder")) : "") + api.tr
             }
         }
     }

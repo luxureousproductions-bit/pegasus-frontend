@@ -936,11 +936,14 @@ FocusScope {
         }
     }
 
-    PromptBar {
+    RoundPromptBar {
         id: messageBar
+        // (◂ ▸ only where a page has rows they change: choices, switches, numbers)
         text: root.message !== "" ? root.message
             : root.page === "main" ? qsTr("A select · ◂ ▸ change · Start run the scraper · B back") + api.tr
-            : root.page === "systems" ? qsTr("A pick a system · B back") + api.tr
+            : root.page === "systems" ? qsTr("A pick a system · LB / RB top / bottom · B back") + api.tr
+            : root.page === "android" ? qsTr("A select · LB / RB top / bottom · B back") + api.tr
+            : root.page === "log" || root.page === "running" ? qsTr("B back") + api.tr
             : qsTr("A select · ◂ ▸ change · B back") + api.tr
         anchors.bottom: parent.bottom
         anchors.left: parent.left

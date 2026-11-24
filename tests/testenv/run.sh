@@ -238,6 +238,10 @@ shot 05-accounts
 keys Down Down Down Return
 sleep 1
 shot 05-accounts-help
+# Extra systems for Android (its prompts: no ◂ ▸ there)
+keys Escape q Down Down Return
+sleep 1
+shot 05-accounts-android
 stop 05-scraper-accounts
 
 # -- 5. Theme downloader ------------------------------------------------------------------

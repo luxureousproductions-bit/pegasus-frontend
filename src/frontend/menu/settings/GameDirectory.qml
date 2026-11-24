@@ -643,12 +643,14 @@ FocusScope {
         return parts.length >= 2 ? parts[parts.length - 2] + "/" + parts[parts.length - 1] : p;
     }
 
-    PromptBar {
+    RoundPromptBar {
         id: messageBar
+        // (not under the folder picker: it has its own)
+        visible: !filePicker.visible
         text: root.message !== "" ? root.message
-            : root.page === "main" ? qsTr("A rescan / remove · Y remove · B back") + api.tr
+            : root.page === "main" ? qsTr("A rescan / remove · Y remove · LB / RB top / bottom · B back") + api.tr
             : root.page === "folders" ? qsTr("A remove a folder / add one · B back") + api.tr
-            : root.page === "add" ? qsTr("A tick · B back") + api.tr
+            : root.page === "add" ? qsTr("A tick · LB / RB top / bottom · B back") + api.tr
             : qsTr("A tick a system or pick the folder · Import is at the bottom · B back") + api.tr
         anchors.bottom: parent.bottom
         anchors.left: parent.left

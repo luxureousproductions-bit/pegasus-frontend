@@ -2605,16 +2605,18 @@ FocusScope {
         }
     }
 
-    PromptBar {
+    RoundPromptBar {
         id: messageBar
+        // (not under the file picker: it has its own)
+        visible: !filePicker.visible
         text: root.message !== "" ? root.message
             : root.page === "collections" ? qsTr("A open · B back · Edits are saved in Pegasus metadata files, so every theme shows them") + api.tr
             : root.page === "hidden" ? qsTr("A show it again · B back") + api.tr
-            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · Start search a system · B back") + api.tr
+            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · Start search a system · LB / RB top / bottom · B back") + api.tr
             : root.page === "lbsystems" ? (root.lbSaving ? qsTr("B stop") + api.tr : qsTr("A search this system · B back") + api.tr)
             : root.page === "lbresults" ? qsTr("A use this match · B back") + api.tr
             : root.page === "ramatches" ? qsTr("A pick the game on RetroAchievements · B back") + api.tr
-            : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · B back") + api.tr
+            : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · LB / RB top / bottom · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr
         anchors.bottom: parent.bottom
         anchors.left: parent.left
@@ -3572,7 +3574,7 @@ FocusScope {
             onLeaveUp: raResults.focus = true
         }
 
-        PromptBar {
+        RoundPromptBar {
             id: raPrompts
             visible: !raKeyboard.activeFocus
             anchors.bottom: parent.bottom

@@ -328,7 +328,7 @@ FocusScope {
         }
     }
 
-    PromptBar {
+    RoundPromptBar {
         id: hints
         anchors.bottom: parent.bottom
         anchors.left: parent.left

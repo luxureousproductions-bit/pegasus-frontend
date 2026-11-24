@@ -5,6 +5,47 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Round button prompts on Game directory, Library and Scraper screens
+
+- **What:** the button prompts of Settings > Game directory (and its folder
+  picker), Library (every page, and its RetroAchievements match dialog,
+  Needs your check, a game's file picker) and every Scraper screen (the
+  Scraper, Account settings, Extra systems for Android, the scraper's match
+  choice) are drawn as in Android apps to import: A, B, X, Y round with the
+  letter in Xbox colours, LB / RB as bumpers, LT / RT as triggers, Start /
+  Select as small pills, and the d-pad drawn (◂ ▸, ▴ ▾, ▾ were characters a
+  font may not have, shown as boxes). `RoundPromptBar` now also takes the
+  old bar's words ("A edit · X undo · B back"), so each screen keeps its
+  text; a message of a screen's still shows as plain text, as before.
+- **The folder picker showed two hint lines** (its own, and the screen's
+  behind it, eg. "A tick · B back"): the screen's bar is hidden while the
+  picker is open (Game directory, Library), and the picker's own line is the
+  round bar, same keys as before (A Open, B Up / Close, X Close, LB Last
+  folder, RB Drives, Y Quick jumps, ▾ Use this folder).
+- **Labels checked against each screen's keys:** Scraper's Extra systems for
+  Android, Log and the running page said "◂ ▸ change", which changes
+  nothing there: now "A select · LB / RB top / bottom · B back" and "B
+  back". "LB / RB top / bottom" added on the long lists (Game directory's
+  systems and Add systems, Library's collection and Needs your check,
+  Scraper's systems and Extra systems for Android); the keys worked there
+  already.
+- **Also in setup:** setup's step 1 (Pegasus X folder), step 2 (Add
+  systems: the Game directory screen) and step 3 (Import gamelist) use the
+  same folder picker, and step 2 the same Game directory screen, so they
+  show the round prompts too. The setup screen's own bar isn't changed.
+- **Not changed:** any key, layout or behavior; the old `PromptBar` (theme
+  downloader, RetroAchievements, setup); the Android apps picker; Backup &
+  reset (already round).
+- **Tests:** the test environment's screenshots of these screens (one more:
+  Extra systems for Android).
+- **Files:** `src/frontend/menu/settings/common/RoundPromptBar.qml`,
+  `src/frontend/menu/settings/gamedireditor/FilePicker.qml`,
+  `src/frontend/menu/settings/GameDirectory.qml`,
+  `src/frontend/menu/settings/MetadataEditor.qml`,
+  `src/frontend/menu/settings/ScraperScreen.qml`,
+  `src/frontend/menu/settings/ScraperChoice.qml`, `tests/testenv/run.sh`.
+- **Commit:** "Round button prompts on Game directory, Library and Scraper screens".
+
 ### Fix: Backup & reset's highlight jumped when the art size or progress came in
 
 - **What:** on the Back up page, the scraped art's size (measured in the
