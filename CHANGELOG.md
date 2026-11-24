@@ -5,6 +5,16 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Prompts: the A, B, X, Y pictures at the size of the drawn buttons
+
+- **What:** the gamepad layout menu's pictures have a clear margin round the
+  button (about a fifth of the picture), so in 2258 they showed smaller
+  than the drawn buttons (about 19 px instead of 24) and the letters were
+  hard to read. They're given 30 px now: the button itself is 24 px again.
+- **Not changed:** words, keys, the bar's place and height, anything else.
+- **Files:** `src/frontend/menu/settings/common/RoundPromptBar.qml`.
+- **Commit:** "Prompts: the A, B, X, Y pictures at the size of the drawn buttons".
+
 ### Prompts: the gamepad layout menu's A, B, X, Y pictures; theme downloader too
 
 - **What:** the round prompt bars show A, B, X and Y with the stock

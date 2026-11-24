@@ -143,8 +143,10 @@ Rectangle {
                         readonly property bool pill: modelData === "Start" || modelData === "Select"
                         readonly property bool dpad: String(modelData).indexOf("DPAD_") === 0
                         readonly property bool drawnFace: face && faceIcon.status !== Image.Ready
-                        width: face || dpad ? vpx(24) : pill ? pillLabel.implicitWidth + vpx(16) : vpx(36)
-                        height: vpx(24)
+                        // (the pictures have a margin round the button: 30 px makes it
+                        // the size of the drawn one, 24 px)
+                        width: face && !drawnFace ? vpx(30) : face || dpad ? vpx(24) : pill ? pillLabel.implicitWidth + vpx(16) : vpx(36)
+                        height: face && !drawnFace ? vpx(30) : vpx(24)
                         anchors.verticalCenter: parent.verticalCenter
                         // A, B, X, Y: the gamepad layout menu's picture...
                         Image {
@@ -152,8 +154,8 @@ Rectangle {
                             visible: parent.face && status === Image.Ready
                             anchors.fill: parent
                             source: parent.face ? bar.gamepadIcons + String(modelData).toLowerCase() + ".png" : ""
-                            sourceSize.width: vpx(48)
-                            sourceSize.height: vpx(48)
+                            sourceSize.width: vpx(60)
+                            sourceSize.height: vpx(60)
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                             mipmap: true
