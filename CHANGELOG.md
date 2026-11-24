@@ -5,6 +5,28 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Prompts: the gamepad layout menu's A, B, X, Y pictures; theme downloader too
+
+- **What:** the round prompt bars show A, B, X and Y with the stock
+  pictures of Settings > Change gamepad layout: the files that menu loads
+  (`gamepad/GamepadField.qml`: `qrc:/frontend/assets/gamepad/x360/<name>.png`;
+  one set, no other layout's pictures exist), `a.png`, `b.png`, `x.png`,
+  `y.png`. If a picture can't be loaded, the drawn round button with its
+  letter is shown, as before. LB / RB (pills), LT / RT (triggers), Start /
+  Select and the drawn d-pad are as they were; the stock LB / RB pictures
+  aren't used.
+- **Where:** every round prompt bar: Android apps to import (its own copy of
+  the bar is now the shared `RoundPromptBar`, same buttons and words),
+  Backup & reset, Game directory and its folder picker, Library, every
+  Scraper screen, and now the theme downloader (it had the square keys; its
+  words, `◂ ▸ pictures` and `LB / RB filter` included, are as they were).
+- **Not changed:** any word, key, layout or behavior; setup's own bar and
+  RetroAchievements (still the square keys).
+- **Files:** `src/frontend/menu/settings/common/RoundPromptBar.qml`,
+  `src/frontend/menu/settings/AndroidAppPicker.qml`,
+  `src/frontend/menu/settings/ThemeDownloader.qml`.
+- **Commit:** "Prompts: the gamepad layout menu's A, B, X, Y pictures; theme downloader too".
+
 ### Round button prompts on Game directory, Library and Scraper screens
 
 - **What:** the button prompts of Settings > Game directory (and its folder

@@ -18,7 +18,9 @@ import QtQuick 2.6
 
 
 // Pegasus X: button prompts drawn Xbox-style, as in Android apps to import:
-// A, B, X, Y round with the letter, LB / RB bumpers, LT / RT triggers,
+// A, B, X, Y are the stock pictures of Settings > Change gamepad layout
+// (assets/gamepad/x360/a.png...; a round button with the letter drawn here
+// if a picture can't be loaded), LB / RB bumpers, LT / RT triggers,
 // Start / Select small pills, the d-pad drawn (no arrow characters: a font
 // without them shows boxes). The same bar as PromptBar (place, height,
 // colours). Give it either
@@ -37,6 +39,8 @@ Rectangle {
     property string text: ""
 
     readonly property var faceColors: ({ "A": "#6fcf4f", "B": "#ee5a5a", "X": "#5aa9ee", "Y": "#f2d24d" })
+    // where Change gamepad layout (gamepad/GamepadField.qml) takes its button pictures
+    readonly property string gamepadIcons: "qrc:/frontend/assets/gamepad/x360/"
     // the names PromptBar's words use, longest first, and the keys drawn for them
     readonly property var named: [
         ["LB / RB", ["LB", "RB"]], ["LT / RT", ["LT", "RT"]],
@@ -138,12 +142,25 @@ Rectangle {
                         readonly property bool trigger: modelData === "LT" || modelData === "RT"
                         readonly property bool pill: modelData === "Start" || modelData === "Select"
                         readonly property bool dpad: String(modelData).indexOf("DPAD_") === 0
+                        readonly property bool drawnFace: face && faceIcon.status !== Image.Ready
                         width: face || dpad ? vpx(24) : pill ? pillLabel.implicitWidth + vpx(16) : vpx(36)
                         height: vpx(24)
                         anchors.verticalCenter: parent.verticalCenter
-                        // A, B, X, Y: a round button
+                        // A, B, X, Y: the gamepad layout menu's picture...
+                        Image {
+                            id: faceIcon
+                            visible: parent.face && status === Image.Ready
+                            anchors.fill: parent
+                            source: parent.face ? bar.gamepadIcons + String(modelData).toLowerCase() + ".png" : ""
+                            sourceSize.width: vpx(48)
+                            sourceSize.height: vpx(48)
+                            fillMode: Image.PreserveAspectFit
+                            smooth: true
+                            mipmap: true
+                        }
+                        // ...or, without it, a round button with the letter
                         Rectangle {
-                            visible: parent.face
+                            visible: parent.drawnFace
                             anchors.fill: parent
                             radius: width / 2
                             color: bar.faceColors[modelData] || "#4a5054"
@@ -187,7 +204,7 @@ Rectangle {
                         }
                         Text {
                             id: pillLabel
-                            visible: !parent.dpad
+                            visible: !parent.dpad && (!parent.face || parent.drawnFace)
                             anchors.centerIn: parent
                             text: modelData
                             color: parent.face ? "#161616" : "#e8ecee"
