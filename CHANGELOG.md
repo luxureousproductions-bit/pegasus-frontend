@@ -5,6 +5,36 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Android apps to import: none picked on a new install; round button prompts
+
+- **New installs start with no app picked.** When Pegasus X starts with
+  first-time setup still to do (no Pegasus X folder asked yet, or setup in
+  progress) and no picks are saved, an empty pick is saved before the first
+  scan: every app is unticked, in setup's step 2 ("none yet") and in the
+  picker, and no app is imported until you tick it. The library then has no
+  Android collection; Library > Options keeps "Android apps to import"
+  ("none").
+- **Not changed:** a library from an older build (no setup to do, no picks
+  saved) still keeps the apps it has as picked, with their sections, at its
+  first start with the picker (build 2250's rule). Picks already saved are
+  never replaced.
+- **The picker's button prompts:** the same bar in the same place, with the
+  buttons drawn Xbox-style: A, B, X round with the letter inside, LB / RB as
+  bumpers and LT / RT as triggers with their label. Only the picker's bar;
+  Settings' shared PromptBar (square keys, every other screen) is as it was.
+  The keys are as they were: LB top, RB bottom, LT / RT 10 rows (as Genres),
+  A tick, X section, B back.
+- **Tests:** test environment: the first start (setup to do) saves no app
+  picked; setup from step 2 with apps, the picker opened and closed: still
+  none; Library's Options with no Android collection (screenshot); the 2250
+  checks (an older library keeps its apps) unchanged.
+- **Files:** `src/backend/providers/LibraryRules.h/.cpp`,
+  `src/backend/model/internal/settings/Settings.h/.cpp`,
+  `src/frontend/menu/settings/AndroidAppPicker.qml`,
+  `src/frontend/menu/settings/MetadataEditor.qml`,
+  `src/frontend/menu/settings/FirstRunWizard.qml`, `tests/testenv/run.sh`.
+- **Commit:** "Android apps to import: none picked on a new install; round button prompts".
+
 ### Android apps to import (a picker); a hidden app keeps its section
 
 - **Android apps to import:** a new screen listing every installed app that

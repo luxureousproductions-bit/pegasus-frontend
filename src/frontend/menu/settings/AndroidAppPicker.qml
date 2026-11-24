@@ -408,12 +408,100 @@ FocusScope {
         }
     }
 
-    PromptBar {
+    // the button prompts: the same bar as Settings' PromptBar (place, height,
+    // colours), with Xbox-style buttons drawn: A, B, X, Y round, LB / RB as
+    // bumpers, LT / RT as triggers (the keys as the list above reads them:
+    // LB top, RB bottom, LT / RT 10 rows up / down)
+    Rectangle {
         id: prompts
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        text: qsTr("A tick / untick · X change section · LB/RB top/bottom · LT/RT 10 rows · B back") + api.tr
+        height: vpx(17) * 1.2 + vpx(26)
+        color: "#1a1d1f"
+
+        readonly property var faceColors: ({ "A": "#6fcf4f", "B": "#ee5a5a", "X": "#5aa9ee", "Y": "#f2d24d" })
+        readonly property var items: [
+            { "keys": ["A"], "text": qsTr("tick / untick") + api.tr },
+            { "keys": ["X"], "text": qsTr("change section") + api.tr },
+            { "keys": ["LB", "RB"], "text": qsTr("top / bottom") + api.tr },
+            { "keys": ["LT", "RT"], "text": qsTr("10 rows") + api.tr },
+            { "keys": ["B"], "text": qsTr("back") + api.tr },
+        ]
+
+        Rectangle {
+            anchors.top: parent.top
+            width: parent.width
+            height: vpx(1)
+            color: "#3a3f42"
+        }
+
+        Row {
+            anchors.centerIn: parent
+            spacing: vpx(28)
+            Repeater {
+                model: prompts.items
+                delegate: Row {
+                    spacing: vpx(8)
+                    Repeater {
+                        model: modelData.keys
+                        delegate: Item {
+                            readonly property bool face: prompts.faceColors[modelData] !== undefined
+                            readonly property bool trigger: modelData === "LT" || modelData === "RT"
+                            width: face ? vpx(24) : vpx(36)
+                            height: vpx(24)
+                            anchors.verticalCenter: parent.verticalCenter
+                            // A, B, X, Y: a round button
+                            Rectangle {
+                                visible: parent.face
+                                anchors.fill: parent
+                                radius: width / 2
+                                color: prompts.faceColors[modelData] || "#4a5054"
+                            }
+                            // LB / RB: a bumper (rounded all round, wide)
+                            Rectangle {
+                                visible: !parent.face && !parent.trigger
+                                anchors.fill: parent
+                                anchors.topMargin: vpx(3)
+                                anchors.bottomMargin: vpx(3)
+                                radius: height / 2
+                                color: "#4a5054"
+                            }
+                            // LT / RT: a trigger (round top, flat bottom)
+                            Rectangle {
+                                visible: parent.trigger
+                                anchors.fill: parent
+                                radius: width * 0.4
+                                color: "#4a5054"
+                            }
+                            Rectangle {
+                                visible: parent.trigger
+                                anchors.left: parent.left
+                                anchors.right: parent.right
+                                anchors.bottom: parent.bottom
+                                height: parent.height / 2
+                                color: "#4a5054"
+                            }
+                            Text {
+                                anchors.centerIn: parent
+                                text: modelData
+                                color: parent.face ? "#161616" : "#e8ecee"
+                                font.family: globalFonts.sans
+                                font.pixelSize: parent.face ? vpx(15) : vpx(13)
+                                font.bold: true
+                            }
+                        }
+                    }
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.text
+                        color: "#ddd"
+                        font.family: globalFonts.sans
+                        font.pixelSize: vpx(17)
+                    }
+                }
+            }
+        }
     }
 
     FocusScope {

@@ -273,6 +273,8 @@ public:
     Q_INVOKABLE QVariantList androidAppChoices() const;
     /// ...the packages picked (empty before any is: every app imported)
     Q_INVOKABLE QStringList androidAppSelection() const;
+    /// ...whether any pick is saved (a new install: yes, none picked)
+    Q_INVOKABLE bool androidAppSelectionKnown() const;
     /// ...keeps the picked apps and their sections (package -> Game /
     /// Application / Emulator); read again with the library (reloadLibrary)
     Q_INVOKABLE void setAndroidAppChoices(const QStringList& packages, const QVariantMap& kinds);

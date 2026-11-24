@@ -554,6 +554,14 @@ void Settings::postInit()
     providers::esde::move_edits_to_overrides();
 #endif
     change_mouse_support(AppSettings::general.mouse_support);
+#if defined(Q_OS_ANDROID) || defined(PEGASUSX_TESTENV)
+    // Pegasus X: a new install (first-time setup still to do, before the
+    // first scan): Android apps to import starts with no app picked. A
+    // library from an older build has no setup to do: its apps are kept as
+    // picked when the library is read (LibraryRules, merge_android)
+    if (rootSetupNeeded() || wizardStep() > 0)
+        providers::library::start_app_selection_empty();
+#endif
     // builds 2230-2238 could leave genres hidden from Library > Genres
     // (pegasusx.ini, genres/hidden): nothing reads it any more; it goes
     {
@@ -2011,6 +2019,13 @@ QVariantList Settings::androidAppChoices() const
 QStringList Settings::androidAppSelection() const
 {
     return providers::library::app_selection();
+}
+
+bool Settings::androidAppSelectionKnown() const
+{
+    bool known = false;
+    providers::library::app_selection(&known);
+    return known;
 }
 
 void Settings::setAndroidAppChoices(const QStringList& packages, const QVariantMap& kinds)

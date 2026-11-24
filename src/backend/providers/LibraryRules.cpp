@@ -665,6 +665,16 @@ QStringList app_selection(bool* known)
     return out;
 }
 
+void start_app_selection_empty()
+{
+    bool known = false;
+    app_selection(&known);
+    if (known)
+        return;
+    if (save_app_selection({}, {}))
+        Log::info(LOG_TAG, LOGMSG("Android apps to import: a new install, no app picked yet"));
+}
+
 bool save_app_selection(const QStringList& packages, const QVariantMap& kinds)
 {
     QStringList sorted = packages;

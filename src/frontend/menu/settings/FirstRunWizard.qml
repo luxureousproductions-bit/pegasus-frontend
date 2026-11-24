@@ -129,11 +129,12 @@ FocusScope {
             case 2:
                 var have = Internal.settings.gameDirectorySystems().length;
                 var two = [ { "act": "dirs", "text": qsTr("Add systems...") + api.tr, "value": have === 0 ? qsTr("nothing added yet") + api.tr : "" } ];
-                // Android apps to import (every app until you pick)
+                // Android apps to import (a new install: none until you pick)
                 if (Qt.platform.os === "android" || Internal.settings.androidAppChoices().length > 0) {
                     var picked = Internal.settings.androidAppSelection().length;
                     two.push({ "act": "apps", "text": qsTr("Android apps to import...") + api.tr,
-                               "value": (picked === 0 ? qsTr("every app") : picked === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(picked)) + api.tr });
+                               "value": (picked === 0 ? (Internal.settings.androidAppSelectionKnown() ? qsTr("none yet") : qsTr("every app"))
+                                         : picked === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(picked)) + api.tr });
                 }
                 two.push({ "act": "next", "text": qsTr("Next") + api.tr, "value": "" });
                 return two;

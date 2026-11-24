@@ -83,6 +83,9 @@ std::vector<AppChoice> app_choices();
 /// The apps picked (packages), or none yet: `known` false (every app is
 /// imported, as before the picker)
 QStringList app_selection(bool* known = nullptr);
+/// A new install: no app picked (written only when nothing is saved yet, so
+/// a library from an older build still keeps its apps, see merge_android)
+void start_app_selection_empty();
 /// Keeps the picked apps; `kinds` (package -> Game / Application / Emulator):
 /// their sections, kept as moves (see set_kind)
 bool save_app_selection(const QStringList& packages, const QVariantMap& kinds);

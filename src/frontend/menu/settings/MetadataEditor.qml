@@ -616,7 +616,9 @@ FocusScope {
     readonly property bool appPickerAvailable: Qt.platform.os === "android" || Internal.settings.androidAppChoices().length > 0
     function appImportValue() {
         var n = Internal.settings.androidAppSelection().length;
-        return (n === 0 ? qsTr("every app") : n === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(n)) + api.tr;
+        if (n === 0)
+            return (Internal.settings.androidAppSelectionKnown() ? qsTr("none") : qsTr("every app")) + api.tr;
+        return (n === 1 ? qsTr("1 app") : qsTr("%1 apps").arg(n)) + api.tr;
     }
 
     function isCollectionHidden(name) {
