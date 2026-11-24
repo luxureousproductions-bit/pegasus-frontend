@@ -5,6 +5,19 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Fix: Backup & reset's highlight jumped when the art size or progress came in
+
+- **What:** on the Back up page, the scraped art's size (measured in the
+  background), the tick and the progress were part of the rows, so the
+  rows were made again when they changed, and the highlight went back to
+  the top: a key pressed just then landed on the wrong row (the test
+  environment's run ticked "Include scraped art" instead of pressing "Back
+  up now", so no backup was made). They're live values of their rows now;
+  the rows only change on what you do.
+- **Not changed:** anything else.
+- **Files:** `src/frontend/menu/settings/BackupResetScreen.qml`.
+- **Commit:** "Fix: Backup & reset's highlight jumped when the art size or progress came in".
+
 ### Test fix: test_BackupReset's damaged-file case
 
 - **What:** the test cut its own backup file short and then compared the

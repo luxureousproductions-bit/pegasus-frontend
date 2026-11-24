@@ -137,10 +137,12 @@ FocusScope {
         if (page === "backup") {
             out.push({ "kind": "info", "text": qsTr("A backup holds Pegasus X's settings, game folders list, game directory metadata, edits, hidden games, Android app picks and sections, emulators, favorites, play time and theme options. Never a password, key or token.") + api.tr, "value": "", "wrap": true });
             out.push({ "kind": "folder", "text": qsTr("Save to") + api.tr, "value": folder });
-            out.push({ "kind": "art", "text": qsTr("Include scraped art") + api.tr,
-                       "value": (art ? "☑" : "☐") + "  " + qsTr("about %1").arg(mb(artMb)) + api.tr });
+            // (the tick, the size and the progress are live values of the row:
+            // they change without the rows being made again, which would move
+            // the highlight)
+            out.push({ "kind": "art", "text": qsTr("Include scraped art") + api.tr, "value": "", "live": "art" });
             if (busy && busyWhat === "backup") {
-                out.push({ "kind": "info", "text": qsTr("Backing up...") + api.tr, "value": percent + "%" });
+                out.push({ "kind": "info", "text": qsTr("Backing up...") + api.tr, "value": "", "live": "percent" });
                 out.push({ "kind": "stop", "text": qsTr("Stop") + api.tr, "value": "" });
             }
             else {
@@ -165,7 +167,7 @@ FocusScope {
             out.push({ "kind": "info", "text": qsTr("Scraped art") + api.tr, "value": (ri.art ? qsTr("included") : qsTr("not included")) + api.tr });
             out.push({ "kind": "info", "text": qsTr("Files") + api.tr, "value": ri.files + " · " + mb(ri.mb) });
             if (busy && busyWhat === "restore") {
-                out.push({ "kind": "info", "text": qsTr("Restoring...") + api.tr, "value": percent + "%" });
+                out.push({ "kind": "info", "text": qsTr("Restoring...") + api.tr, "value": "", "live": "percent" });
                 return out;
             }
             out.push({ "kind": "dorestore", "text": qsTr("Restore this backup...") + api.tr, "value": "" });
@@ -216,7 +218,6 @@ FocusScope {
                 break;
             case "art":
                 art = !art;
-                selectKind("art");
                 break;
             case "go":
                 message = "";
@@ -451,7 +452,9 @@ FocusScope {
             }
             Text {
                 visible: !parent.wraps && !parent.isSection
-                text: modelData.value || ""
+                text: modelData.live === "art" ? (root.art ? "☑" : "☐") + "  " + qsTr("about %1").arg(root.mb(root.artMb)) + api.tr
+                    : modelData.live === "percent" ? root.percent + "%"
+                    : (modelData.value || "")
                 color: modelData.done ? "#8c8" : modelData.warn ? "#e8b06a" : "#c0c0c0"
                 font.family: globalFonts.sans
                 font.pixelSize: parent.isInfo ? vpx(17) : vpx(19)
