@@ -485,6 +485,19 @@ Window {
     Connections {
         target: Internal.settings
         function onReloadAllRequested() { splashScreen.toTheme = true; }
+        // Pegasus X: Backup & reset: setup opens now (Run setup again), or once
+        // the library is read again (Start over)
+        function onSetupRequested(reload) {
+            if (mainMenu.item)
+                mainMenu.item.closeAll();
+            if (reload) {
+                splashScreen.setupAfterLoad = true;
+                splashScreen.toTheme = true;
+                Internal.settings.reloadLibrary();
+                return;
+            }
+            splashScreen.openSetup();
+        }
         // a theme picked in the theme downloader: the menu closes, it loads
         function onCloseMenuRequested() {
             if (mainMenu.item)
@@ -533,6 +546,12 @@ Window {
 
         property bool restoreMenu: false
         property bool toTheme: false
+        property bool setupAfterLoad: false   // Start over: setup once the library is read again
+        function openSetup() {
+            firstRunSetup.source = "";
+            firstRunSetup.setSource("menu/settings/FirstRunWizard.qml");
+            firstRunSetup.focus = true;
+        }
 
         // Pegasus X: --pegasusx-open=<screen> (testing): that menu screen,
         // once the library is read
@@ -701,6 +720,10 @@ Window {
                     mainMenu.forceActiveFocus();
                 restoreMenu = false;
                 toTheme = false;
+                if (setupAfterLoad) {
+                    setupAfterLoad = false;
+                    openSetup();
+                }
                 Internal.scanner.reset();
             }
         }

@@ -51,6 +51,7 @@
         <file>menu/settings/ScraperSection.qml</file>
         <file>menu/settings/GenresScreen.qml</file>
         <file>menu/settings/AndroidAppPicker.qml</file>
+        <file>menu/settings/BackupResetScreen.qml</file>
         <file>menu/settings/GenreKey.js</file>
         <file>menu/settings/RetroAchievementsScreen.qml</file>
         <file>menu/settings/ScraperChoice.qml</file>
@@ -68,6 +69,7 @@
         <file>menu/settings/common/MultivalueOption.qml</file>
         <file>menu/settings/common/ScreenHeader.qml</file>
         <file>menu/settings/common/PromptBar.qml</file>
+        <file>menu/settings/common/RoundPromptBar.qml</file>
         <file>menu/settings/common/SectionTitle.qml</file>
         <file>menu/settings/common/SimpleButton.qml</file>
         <file>menu/settings/common/Switch.qml</file>

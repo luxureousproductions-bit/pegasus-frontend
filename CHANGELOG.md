@@ -5,6 +5,90 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Settings > Backup & reset: back up, restore, run setup again, start over
+
+- **Where:** Settings, Pegasus X section, under "Pegasus X folder...":
+  "Backup & reset...". The same list, controls (A, B, LB/RB top/bottom,
+  LT/RT 10 rows, touch) and the round Xbox-style prompts of Android apps to
+  import (now a shared `RoundPromptBar`; the picker itself isn't changed).
+- **Back up:** one file, `PegasusX-backup-<date>-<time>-build<n>.tar`
+  (a tar: no 4 GB or 65,535-file limit, unlike a plain zip), saved in
+  Download by default or a folder you pick. It holds, from the Pegasus X
+  folder: `pegasusx.ini` (passwords, keys and tokens taken out: any key
+  named *password*, *token*, *secret*, *apikey*, `key` or `*_key`, so
+  `scraper/ssPassword`, `retroachievements/key`, `github/token`; usernames
+  stay), `settings.txt`, `game_dirs.txt`, `sdl_controllers.txt`,
+  `favorites.txt`, `stats.db`, `pegasusx-hidden.json`,
+  `pegasusx-android-kinds.json`, `pegasusx-android-apps.json`,
+  `pegasusx-emulators.json`, `pegasusx-rom-folders.txt`,
+  `pegasusx-themes/links.json`, and the folders `gamedirectory/`,
+  `metadata/` (but not `metadata/library-index.json`, made again),
+  `metafiles/`, `imported/`, `theme_settings/`; `downloaded_media/` only
+  with "Include scraped art" (off; its size shown). Never: caches, logs,
+  `backup/`, `launchbox/`, the theme store cache, `themes/`, the GitHub
+  token file, links (not followed). A manifest (date, build, art) comes
+  first, a list of every file's size and CRC-32 last. Progress and Stop;
+  written as `.part` and renamed when done, so a stopped or failed backup
+  leaves no file.
+- **Restore:** pick the file; its date, build, art and size are shown;
+  "Restore this backup..." asks first (Cancel focused). The whole file is
+  checked before anything changes (each header, that every file is one a
+  backup may hold, no `..` or absolute path, sizes, every CRC-32): a bad
+  file changes nothing. Then the data as it is is saved to
+  `backup/before-restore-<date>.tar` (no art), the backup's files replace
+  the current ones (art in the backup is added), and the device's logins
+  are kept; a login the device doesn't have is named ("Sign in again:
+  ScreenScraper, RetroAchievements"). Settings are read again, and the
+  library on closing the result.
+- **Run setup again:** setup from step 1 in the same session; nothing is
+  deleted. Step 1 says "Keep using this folder" when a Pegasus X folder is
+  set, and picking the folder in use again just carries on (before, it
+  waited forever: the same folder never finished).
+- **Start over:** a page with Cancel focused, "Back up first...", and
+  "Delete Pegasus X's data..." (its size), every item deleted with its size,
+  and what's kept; then two confirms (Cancel focused in both). It deletes
+  only these names: in the Pegasus X folder `pegasusx.ini`, `settings.txt`,
+  `game_dirs.txt`, `sdl_controllers.txt`, `favorites.txt`, `stats.db`,
+  `pegasusx-hidden.json`, `pegasusx-android-kinds.json`,
+  `pegasusx-android-apps.json`, `pegasusx-emulators.json`,
+  `pegasusx-rom-folders.txt`, `pegasusx-themes/`, `gamedirectory/`,
+  `metadata/`, `metafiles/`, `imported/`, `theme_settings/`,
+  `downloaded_media/`, `backup/`, `launchbox/`, `esde-lists/`; in app
+  storage `pegasusx-wizard`, `pegasusx-root-asked`, `pegasusx-private.ini`
+  (GitHub token); in the cache `gameindex-v1.json`, `netcache/`,
+  `scraper-pictures/`, `import-conflicts.txt`, `update/`, `androidapps/`,
+  `steam/`. Each must be directly in its folder (links resolved); a link is
+  deleted, never what it points to; a folder that's a storage root, the
+  home folder or `/` is refused. Kept: `themes/`, which Pegasus X folder is
+  used (`pegasusx-root.txt`), `lastrun.log`, everything else. Then, in the
+  same session, the library is read again and setup opens at step 1, like a
+  new install (no Android app picked).
+- **Not changed:** the Android apps picker, the scraper, imports, themes,
+  every other screen; changing to another Pegasus X folder still closes
+  Pegasus X (a folder is fixed at start).
+- **Tests:** `test_BackupReset` (throwaway folders: a theme and a ROM folder
+  inside the Pegasus X folder, ROMs with ES-DE files and a file outside,
+  links pointing out): no secret in a backup, what's left out, art,
+  a stopped backup leaves no file, backup -> restore round trip with the
+  device's logins kept, sign in again, damaged / cut / not-a-backup /
+  foreign-path files change nothing, Start over deletes only its list,
+  refuses a storage root, `safe_target`. Test environment: Back up from the
+  screen (no planted secret in the file), Run setup again (no file
+  changed), Start over through both confirms (ROMs, ES-DE, the theme and an
+  outside file unchanged).
+- **Files:** `src/backend/BackupReset.h/.cpp` (new),
+  `src/backend/model/internal/settings/Settings.h/.cpp`,
+  `src/backend/backend.pro`, `src/backend/CMakeLists.txt`,
+  `src/frontend/menu/settings/BackupResetScreen.qml` (new),
+  `src/frontend/menu/settings/common/RoundPromptBar.qml` (new),
+  `src/frontend/menu/settings/SettingsMain.qml`,
+  `src/frontend/menu/settings/SettingsScreen.qml`,
+  `src/frontend/menu/settings/FirstRunWizard.qml`,
+  `src/frontend/menu/settings/RootFolderSetup.qml`, `src/frontend/main.qml`,
+  `src/frontend/frontend.qrc`, `tests/backend/backup/*` (new),
+  `tests/backend/backend.pro`, `tests/CMakeLists.txt`, `tests/testenv/run.sh`.
+- **Commit:** "Settings > Backup & reset: back up, restore, run setup again, start over".
+
 ### Test environment: the new-install and older-library cases of Android apps to import
 
 - **What:** the test environment never runs first-time setup, so to Pegasus

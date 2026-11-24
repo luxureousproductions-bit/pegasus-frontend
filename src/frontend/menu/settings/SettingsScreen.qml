@@ -64,6 +64,7 @@ FocusScope {
         onOpenThemeDownloader: root.openScreen("ThemeDownloader.qml")
         onOpenUpdater: root.openModal("UpdateDialog.qml")
         onOpenRootFolder: root.openModal("RootFolderSetup.qml")
+        onOpenBackupReset: root.openScreen("BackupResetScreen.qml")
         onOpenMetadataEditor: root.openScreen("MetadataEditor.qml")
         onOpenScraper: root.openScreen("ScraperSection.qml")
         onOpenRetroAchievements: root.openScreen("RetroAchievementsScreen.qml")

@@ -33,6 +33,7 @@ FocusScope {
     signal openThemeDownloader
     signal openUpdater
     signal openRootFolder
+    signal openBackupReset
     signal openMetadataEditor
     signal openScraper
     signal openRetroAchievements
@@ -107,6 +108,13 @@ FocusScope {
             desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openRootFolder
+            section: "pegasusx"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Backup & reset...")
+            desc: QT_TR_NOOP("Back up Pegasus X's settings, library and metadata to one file (no passwords), restore it, run setup again, or start over.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openBackupReset
             section: "pegasusx"
         },
         SettingsEntry {

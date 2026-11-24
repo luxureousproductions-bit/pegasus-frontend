@@ -488,6 +488,67 @@ keys Down Down Down Down Down Down Down Down Down Down
 shot 14-library-android-down
 stop 14-apps-library
 
+# -- 15. Settings > Backup & reset (all in the fixture's throwaway folders) ---------------------------
+# planted secrets (a backup must leave them out), a theme in the Pegasus X folder, a file outside;
+# the Pegasus X folder is copied first and put back after Start over (the summary reads it)
+cp -a "$CFG" "$T/cfg-saved"
+python3 - "$CFG/pegasusx.ini" <<'PY'
+import sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read() if __import__("os").path.exists(path) else ""
+text += "\n[scraper]\nssUser=testuser\nssPassword=PLANTEDPASS\n\n[retroachievements]\nuser=rauser\nkey=PLANTEDKEY\n\n[github]\ntoken=PLANTEDTOKEN\n"
+open(path, "w", encoding="utf-8").write(text)
+PY
+mkdir -p "$CFG/themes/FakeXBSX" "$CFG/downloaded_media/snes/covers"
+echo "Item {}" > "$CFG/themes/FakeXBSX/theme.qml"
+head -c 4096 /dev/urandom > "$CFG/downloaded_media/snes/covers/Fake.png"
+echo "outside" > "$T/outside.txt"
+find "$T/MyGames" "$T/storage/ES-DE" "$T/storage/ROMs" "$CFG/themes" "$T/outside.txt" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/kept-before.txt"
+# Back up (default folder: Download on the device's storage), without the art
+start 15-backup "menu/settings/BackupResetScreen.qml" 5
+shot 15-backup-main
+keys Return
+sleep 2
+shot 15-backup-page
+keys Down Down Return
+wait_log "Backup & reset: backup" 60 "$R/logs/15-backup.stdout"
+sleep 1
+shot 15-backup-done
+# Run setup again: setup opens, nothing changes
+find "$CFG" -type f -not -name "lastrun.log" -not -name "pegasusx-wizard" -exec md5sum {} + 2>/dev/null | sort > "$R/files/before-setup-again.txt"
+keys Escape Down Down Return
+sleep 3
+shot 15-setup-again
+find "$CFG" -type f -not -name "lastrun.log" -not -name "pegasusx-wizard" -exec md5sum {} + 2>/dev/null | sort > "$R/files/after-setup-again.txt"
+stop 15-backup
+ls "$T/storage/Download" > "$R/files/backups.txt" 2>/dev/null
+BK="$(ls "$T/storage/Download"/PegasusX-backup-*.tar 2>/dev/null | head -n 1)"
+[ -n "$BK" ] && tar -tf "$BK" > "$R/files/backup-contents.txt" 2>&1
+[ -n "$BK" ] && cp "$BK" "$R/files/backup.tar"
+# Start over: the Start over page, both confirms (Cancel focused: Right picks the other button)
+rm -f "$CFG/pegasusx-wizard"
+start 15-start-over "menu/settings/BackupResetScreen.qml" 5
+keys Down Down Down Return
+sleep 2
+shot 15-wipe-page
+keys Down Down Return
+sleep 1
+shot 15-wipe-confirm-1
+keys Right Return
+sleep 1
+shot 15-wipe-confirm-2
+keys Right Return
+wait_log "Backup & reset: start over done" 60 "$R/logs/15-start-over.stdout"
+sleep 8
+shot 15-after-start-over
+stop 15-start-over
+find "$CFG" -type f -not -name "lastrun.log" | sed "s|$CFG/||" | sort > "$R/files/after-start-over-files.txt"
+find "$T/MyGames" "$T/storage/ES-DE" "$T/storage/ROMs" "$CFG/themes" "$T/outside.txt" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/kept-after.txt"
+ls "$T/storage/Download" > "$R/files/backups-after-start-over.txt" 2>/dev/null
+# the Pegasus X folder as it was (for the summary below)
+rm -rf "$CFG"
+mv "$T/cfg-saved" "$CFG"
+
 # -- summary --------------------------------------------------------------------------------------
 # the game directory as it is at the end (written along the way)
 find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
@@ -674,6 +735,43 @@ for title, inside in (("Drift Racer", True), ("Notes", False), ("Retro Emu", Fal
 PY
     echo "    (Library > Android, the hidden Retro Emu under Emulators: screenshots 14-library-android*;"
     echo "     a new install: 14-new-picker, 14-new-library-options; the round prompts: 14-picker*)"
+    echo
+    echo "## Backup & reset (throwaway fixture folders)"
+    strip_ansi "$R/logs/15-backup.stdout" "$R/logs/15-start-over.stdout" | grep -h "Backup & reset\|Backup: \|Start over: " | sed 's/^/    /' | head -n 60
+    if [ -s "$R/files/backup.tar" ]; then
+        echo "    OK: a backup file was saved in Download: $(cat "$R/files/backups.txt" | tr '\n' ' ')"
+        if grep -a -q -E "PLANTEDPASS|PLANTEDKEY|PLANTEDTOKEN|ssPassword" "$R/files/backup.tar"; then
+            echo "    FAILED: a planted password, key or token is in the backup"
+        else
+            echo "    OK: no planted password, key or token in the backup (ssUser kept: $(grep -a -c 'ssUser=testuser' "$R/files/backup.tar"))"
+        fi
+        for out in "downloaded_media" "themes/FakeXBSX" "lastrun.log" "launchbox/" "/backup/"; do
+            if grep -q "$out" "$R/files/backup-contents.txt"; then echo "    FAILED: the backup has $out"; else echo "    OK: no $out in the backup"; fi
+        done
+        echo "    backup contents (tar -tf):"
+        sed 's/^/        /' "$R/files/backup-contents.txt" | head -n 40
+    else
+        echo "    FAILED: no backup file in Download"
+    fi
+    if diff -q "$R/files/before-setup-again.txt" "$R/files/after-setup-again.txt" >/dev/null 2>&1; then
+        echo "    OK: Run setup again changed no file (setup progress marker aside)"
+    else
+        echo "    FAILED: Run setup again changed files:"
+        diff "$R/files/before-setup-again.txt" "$R/files/after-setup-again.txt" | head -n 10 | sed 's/^/        /'
+    fi
+    if diff -q "$R/files/kept-before.txt" "$R/files/kept-after.txt" >/dev/null 2>&1 && [ -s "$R/files/kept-after.txt" ]; then
+        echo "    OK: Start over kept the ROM folders, ES-DE, the theme and the file outside ($(wc -l < "$R/files/kept-after.txt") files, same checksums)"
+    else
+        echo "    FAILED: Start over changed kept files:"
+        diff "$R/files/kept-before.txt" "$R/files/kept-after.txt" | head -n 10 | sed 's/^/        /'
+    fi
+    for gone in "pegasusx.ini" "settings.txt" "game_dirs.txt" "gamedirectory/" "downloaded_media/" "metadata/" "pegasusx-hidden.json"; do
+        if grep -q "^$gone" "$R/files/after-start-over-files.txt"; then echo "    note: $gone is there after Start over (written again since?)"; else echo "    OK: $gone deleted by Start over"; fi
+    done
+    echo "    files in the Pegasus X folder after Start over (and the session after it):"
+    sed 's/^/        /' "$R/files/after-start-over-files.txt" | head -n 30
+    if [ -s "$R/files/backups-after-start-over.txt" ]; then echo "    OK: the backup in Download is still there"; else echo "    FAILED: the backup in Download is gone"; fi
+    echo "    (screenshots: 15-backup-*, 15-setup-again, 15-wipe-*, 15-after-start-over)"
     echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40

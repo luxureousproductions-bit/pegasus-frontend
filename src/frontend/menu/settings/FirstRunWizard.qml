@@ -123,7 +123,10 @@ FocusScope {
         var t = tick;
         switch (step) {
             case 1: return [
-                { "act": "keep", "text": qsTr("Keep it inside the app") + api.tr, "value": qsTr("recommended to start") + api.tr },
+                // (setup run again, or after Start over: the folder in use is kept)
+                Internal.settings.rootChosen
+                    ? { "act": "keep", "text": qsTr("Keep using this folder") + api.tr, "value": Internal.settings.rootDir }
+                    : { "act": "keep", "text": qsTr("Keep it inside the app") + api.tr, "value": qsTr("recommended to start") + api.tr },
                 { "act": "pick", "text": qsTr("Pick a folder...") + api.tr, "value": "" },
             ];
             case 2:

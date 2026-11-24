@@ -27,6 +27,7 @@
 #include <QHash>
 #include <QObject>
 #include <QPointer>
+#include <atomic>
 #include <vector>
 
 
@@ -120,6 +121,26 @@ public:
     /// how much is in the folder used now (files, MB), for the setup
     Q_INVOKABLE QVariantMap rootDirContents() const;
     Q_INVOKABLE void quitApp();
+
+    // Pegasus X: Settings > Backup & reset (BackupReset.h)
+    /// { folder: where a backup goes by default (Download), data: the Pegasus X folder,
+    ///   file: a new backup's name, busy }
+    Q_INVOKABLE QVariantMap backupStatus() const;
+    /// the scraped art's size: backupArtSize
+    Q_INVOKABLE void requestBackupArtSize();
+    /// a backup into `folder`: backupProgress, backupFinished
+    Q_INVOKABLE void startBackup(const QString& folder, bool art);
+    Q_INVOKABLE void cancelBackup();
+    /// a backup file's { error, date, build, art, files, mb }
+    Q_INVOKABLE QVariantMap backupFileInfo(const QString& path) const;
+    /// restore from `path`: backupProgress, restoreFinished
+    Q_INVOKABLE void startRestore(const QString& path);
+    /// Start over: { remove: [{ path, what, mb }], keep: [texts], mb }
+    Q_INVOKABLE QVariantMap startOverPlan() const;
+    /// deletes it all, then setup opens: startOverFinished, setupRequested
+    Q_INVOKABLE void startOver();
+    /// setup again from step 1, nothing deleted: setupRequested
+    Q_INVOKABLE void runSetupAgain();
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
     /// the screen asked for with --pegasusx-open (testing), or empty
     Q_INVOKABLE QString startupScreen() const;
@@ -495,6 +516,14 @@ signals:
     void pegasusxSettingsChanged();
     /// setRootDir finished: `error` is empty when the folder is set
     void rootDirChanged(QString error);
+    // Pegasus X: Backup & reset
+    void backupArtSize(double mb);
+    void backupProgress(int percent);
+    void backupFinished(QString path, QString error);
+    void restoreFinished(QVariantMap result);
+    void startOverFinished(QString error);
+    /// first-time setup to open now (after the library is read again: `reload`)
+    void setupRequested(bool reload);
     /// Pegasus X: the theme in use was updated in the theme downloader: built again
     void currentThemeUpdated();
     /// Pegasus X: the menu closes, back to the theme (eg. "Use it now")
@@ -548,6 +577,8 @@ private:
     bool m_esde_import_running = false;
     bool m_rom_refresh_started = false;
     QNetworkAccessManager* m_netman = nullptr;
+    std::atomic<bool> m_backup_cancel { false };
+    bool m_backup_busy = false;
     scraper::Scraper* m_scraper = nullptr;
     mutable scraper::LaunchBoxDb* m_launchbox = nullptr;
     scraper::LaunchBoxDb& launchBox() const;

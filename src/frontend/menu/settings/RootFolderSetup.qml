@@ -137,6 +137,14 @@ FocusScope {
         visible: focus
         onCancel: dialog.focus = true
         onPickFolder: {
+            // the folder already in use (eg. setup again after Start over):
+            // nothing to move or restart, setup carries on
+            var trim = function(p) { return String(p).replace(/\/+$/, ""); };
+            if (Internal.settings.rootChosen && trim(dir_path) === trim(Internal.settings.rootDir)) {
+                console.log("Pegasus X folder: the one in use picked again, kept");
+                root.leave();
+                return;
+            }
             root.chosen = dir_path;
             root.error = "";
             root.step = "picked";

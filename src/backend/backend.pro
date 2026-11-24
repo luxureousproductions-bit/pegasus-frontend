@@ -24,6 +24,7 @@ SOURCES += \
     Miximage.cpp \
     ThemeStore.cpp \
     Updater.cpp \
+    BackupReset.cpp \
     Scraper.cpp \
     LaunchBoxDb.cpp \
     RetroAchievements.cpp \
@@ -43,6 +44,7 @@ HEADERS += \
     Miximage.h \
     ThemeStore.h \
     Updater.h \
+    BackupReset.h \
     Scraper.h \
     LaunchBoxDb.h \
     RetroAchievements.h \

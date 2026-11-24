@@ -28,6 +28,8 @@ add_library(pegasus-backend
     ThemeStore.h
     Updater.cpp
     Updater.h
+    BackupReset.cpp
+    BackupReset.h
     Scraper.cpp
     Scraper.h
     LaunchBoxDb.cpp

@@ -18,6 +18,7 @@
 #include "Settings.h"
 
 #include "AppSettings.h"
+#include "BackupReset.h"
 #include "Log.h"
 #include "Paths.h"
 #include "PegasusAssets.h"
@@ -482,6 +483,146 @@ QString Settings::setRootDir(const QString& dir_in, bool move_data)
 void Settings::quitApp()
 {
     QCoreApplication::quit();
+}
+
+// -- Pegasus X: Backup & reset ------------------------------------------------------
+
+QVariantMap Settings::backupStatus() const
+{
+    return QVariantMap {
+        { QStringLiteral("folder"), backup::default_folder() },
+        { QStringLiteral("data"), paths::writableConfigDir() },
+        { QStringLiteral("file"), backup::file_name(PEGASUSX_BUILD) },
+        { QStringLiteral("busy"), m_backup_busy },
+    };
+}
+
+void Settings::requestBackupArtSize()
+{
+    const backup::Places places = backup::Places::current();
+    QtConcurrent::run([this, places]{
+        const double mb = static_cast<double>(backup::art_bytes(places)) / 1048576.0;
+        QMetaObject::invokeMethod(this, [this, mb]{ emit backupArtSize(mb); }, Qt::QueuedConnection);
+    });
+}
+
+void Settings::startBackup(const QString& folder, bool art)
+{
+    if (m_backup_busy)
+        return;
+    m_backup_busy = true;
+    m_backup_cancel = false;
+    const backup::Places places = backup::Places::current();
+    const QString path = QDir::cleanPath(folder) + QLatin1Char('/') + backup::file_name(PEGASUSX_BUILD);
+    QtConcurrent::run([this, places, path, art]{
+        backup::Progress progress;
+        progress.cancel = &m_backup_cancel;
+        progress.percent = [this](int percent) {
+            QMetaObject::invokeMethod(this, [this, percent]{ emit backupProgress(percent); }, Qt::QueuedConnection);
+        };
+        const QString error = backup::make(places, path, art, PEGASUSX_BUILD, progress);
+        QMetaObject::invokeMethod(this, [this, path, error]{
+            m_backup_busy = false;
+            emit backupFinished(path, error);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void Settings::cancelBackup()
+{
+    m_backup_cancel = true;
+}
+
+QVariantMap Settings::backupFileInfo(const QString& path) const
+{
+    const backup::Info info = backup::read_info(path);
+    return QVariantMap {
+        { QStringLiteral("error"), info.error },
+        { QStringLiteral("date"), info.date },
+        { QStringLiteral("build"), info.build },
+        { QStringLiteral("art"), info.art },
+        { QStringLiteral("files"), info.files },
+        { QStringLiteral("mb"), static_cast<double>(info.bytes) / 1048576.0 },
+    };
+}
+
+void Settings::startRestore(const QString& path)
+{
+    if (m_backup_busy)
+        return;
+    m_backup_busy = true;
+    m_backup_cancel = false;
+    const backup::Places places = backup::Places::current();
+    QtConcurrent::run([this, places, path]{
+        backup::Progress progress;
+        progress.cancel = &m_backup_cancel;
+        progress.percent = [this](int percent) {
+            QMetaObject::invokeMethod(this, [this, percent]{ emit backupProgress(percent); }, Qt::QueuedConnection);
+        };
+        const backup::RestoreResult result = backup::restore(places, path, PEGASUSX_BUILD, progress);
+        QMetaObject::invokeMethod(this, [this, result]{
+            m_backup_busy = false;
+            if (!result.saved_first.isEmpty()) {
+                // the restored settings.txt (theme, language, controls) read in
+                AppSettings::load_config();
+                emit pegasusxSettingsChanged();
+                emit libraryRulesChanged();
+            }
+            emit restoreFinished(QVariantMap {
+                { QStringLiteral("error"), result.error },
+                { QStringLiteral("savedFirst"), result.saved_first },
+                { QStringLiteral("signIn"), result.sign_in },
+                { QStringLiteral("changed"), !result.saved_first.isEmpty() },
+            });
+        }, Qt::QueuedConnection);
+    });
+}
+
+QVariantMap Settings::startOverPlan() const
+{
+    const backup::WipePlan plan = backup::wipe_plan(backup::Places::current());
+    QVariantList remove;
+    qint64 total = 0;
+    for (const backup::WipeItem& item : plan.remove) {
+        remove.append(QVariantMap {
+            { QStringLiteral("path"), item.path },
+            { QStringLiteral("what"), item.what },
+            { QStringLiteral("mb"), static_cast<double>(item.bytes) / 1048576.0 },
+        });
+        total += item.bytes;
+    }
+    return QVariantMap {
+        { QStringLiteral("remove"), remove },
+        { QStringLiteral("keep"), plan.keep },
+        { QStringLiteral("mb"), static_cast<double>(total) / 1048576.0 },
+    };
+}
+
+void Settings::startOver()
+{
+    if (m_backup_busy)
+        return;
+    m_backup_busy = true;
+    const backup::Places places = backup::Places::current();
+    QtConcurrent::run([this, places]{
+        const QString error = backup::wipe(places);
+        QMetaObject::invokeMethod(this, [this, error]{
+            m_backup_busy = false;
+            // a new install from here: setup from step 1, no Android app picked
+            setWizardStep(1);
+            providers::library::start_app_selection_empty();
+            emit pegasusxSettingsChanged();
+            emit libraryRulesChanged();
+            emit startOverFinished(error);
+            emit setupRequested(true);
+        }, Qt::QueuedConnection);
+    });
+}
+
+void Settings::runSetupAgain()
+{
+    setWizardStep(1);
+    emit setupRequested(false);
 }
 
 bool Settings::checkUpdatesOnStart() const
