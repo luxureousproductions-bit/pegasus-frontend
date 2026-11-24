@@ -373,10 +373,10 @@ FocusScope {
                 currentIndex = i;
         }
         Keys.onPressed: {
-            if (api.keys.isPrevPage(event)) { event.accepted = true; jumpTo(false); return; }
-            if (api.keys.isNextPage(event)) { event.accepted = true; jumpTo(true); return; }
-            if (api.keys.isPageUp(event)) { event.accepted = true; jumpBy(-10); return; }
-            if (api.keys.isPageDown(event)) { event.accepted = true; jumpBy(10); return; }
+            if (api.keys.isPrevPage(event)) { event.accepted = true; jumpBy(-10); return; }
+            if (api.keys.isNextPage(event)) { event.accepted = true; jumpBy(10); return; }
+            if (api.keys.isPageUp(event)) { event.accepted = true; jumpTo(false); return; }
+            if (api.keys.isPageDown(event)) { event.accepted = true; jumpTo(true); return; }
             if (api.keys.isAccept(event) && !event.isAutoRepeat && selectable(currentIndex)) {
                 event.accepted = true;
                 root.activate(root.rows[currentIndex]);
@@ -489,8 +489,8 @@ FocusScope {
         visible: !filePicker.visible
         items: [
             { "keys": ["A"], "text": qsTr("choose") + api.tr },
-            { "keys": ["LB", "RB"], "text": qsTr("top / bottom") + api.tr },
-            { "keys": ["LT", "RT"], "text": qsTr("10 rows") + api.tr },
+            { "keys": ["LB", "RB"], "text": qsTr("10 rows") + api.tr },
+            { "keys": ["LT", "RT"], "text": qsTr("top / bottom") + api.tr },
             { "keys": ["B"], "text": (root.busy ? qsTr("Stop first") : qsTr("back")) + api.tr },
         ]
     }

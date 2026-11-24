@@ -2266,7 +2266,7 @@ FocusScope {
         function selectable(i) {
             return i >= 0 && i < rows.length && rows[i].kind !== "section" && rows[i].kind !== "info";
         }
-        // quick moves in a long list: LB top, RB bottom, LT/RT 10 rows
+        // quick moves in a long list: LB / RB 10 rows (stopping at the ends), LT top, RT bottom
         function jumpTo(end) {
             var i = end ? count - 1 : 0;
             while (i >= 0 && i < count && !selectable(i))
@@ -2289,10 +2289,10 @@ FocusScope {
             currentIndex = last;
         }
         function pageKeys(event) {
-            if (api.keys.isPrevPage(event)) jumpTo(false);
-            else if (api.keys.isNextPage(event)) jumpTo(true);
-            else if (api.keys.isPageUp(event)) jumpBy(-10);
-            else if (api.keys.isPageDown(event)) jumpBy(10);
+            if (api.keys.isPrevPage(event)) jumpBy(-10);
+            else if (api.keys.isNextPage(event)) jumpBy(10);
+            else if (api.keys.isPageUp(event)) jumpTo(false);
+            else if (api.keys.isPageDown(event)) jumpTo(true);
             else return false;
             event.accepted = true;
             return true;
@@ -2612,11 +2612,11 @@ FocusScope {
         text: root.message !== "" ? root.message
             : root.page === "collections" ? qsTr("A open · B back · Edits are saved in Pegasus metadata files, so every theme shows them") + api.tr
             : root.page === "hidden" ? qsTr("A show it again · B back") + api.tr
-            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · Start search a system · LB / RB top / bottom · B back") + api.tr
+            : root.page === "review" ? qsTr("A use this match · Y see other matches · X never scrape this game · Start search a system · LT / RT top / bottom · B back") + api.tr
             : root.page === "lbsystems" ? (root.lbSaving ? qsTr("B stop") + api.tr : qsTr("A search this system · B back") + api.tr)
             : root.page === "lbresults" ? qsTr("A use this match · B back") + api.tr
             : root.page === "ramatches" ? qsTr("A pick the game on RetroAchievements · B back") + api.tr
-            : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · LB / RB top / bottom · B back") + api.tr
+            : root.page === "collection" ? qsTr("A edit · Y hide / show a game · X undo a change · LT / RT top / bottom · B back") + api.tr
             : qsTr("A edit · X undo a change or remove a picture · B back") + api.tr
         anchors.bottom: parent.bottom
         anchors.left: parent.left

@@ -287,10 +287,10 @@ FocusScope {
                 currentIndex = i;
         }
         Keys.onPressed: {
-            if (api.keys.isPrevPage(event)) { event.accepted = true; jumpTo(false); return; }
-            if (api.keys.isNextPage(event)) { event.accepted = true; jumpTo(true); return; }
-            if (api.keys.isPageUp(event)) { event.accepted = true; jumpBy(-10); return; }
-            if (api.keys.isPageDown(event)) { event.accepted = true; jumpBy(10); return; }
+            if (api.keys.isPrevPage(event)) { event.accepted = true; jumpBy(-10); return; }
+            if (api.keys.isNextPage(event)) { event.accepted = true; jumpBy(10); return; }
+            if (api.keys.isPageUp(event)) { event.accepted = true; jumpTo(false); return; }
+            if (api.keys.isPageDown(event)) { event.accepted = true; jumpTo(true); return; }
             if (event.isAutoRepeat || !selectable(currentIndex))
                 return;
             if (api.keys.isAccept(event)) {
@@ -410,7 +410,7 @@ FocusScope {
 
     // the button prompts: Settings' round prompts (A, B, X: the gamepad layout
     // menu's pictures; LB / RB bumpers, LT / RT triggers), the keys as the list
-    // above reads them: LB top, RB bottom, LT / RT 10 rows up / down
+    // above reads them: LB / RB 10 rows up / down, LT top, RT bottom
     RoundPromptBar {
         id: prompts
         anchors.bottom: parent.bottom
@@ -419,8 +419,8 @@ FocusScope {
         items: [
             { "keys": ["A"], "text": qsTr("tick / untick") + api.tr },
             { "keys": ["X"], "text": qsTr("change section") + api.tr },
-            { "keys": ["LB", "RB"], "text": qsTr("top / bottom") + api.tr },
-            { "keys": ["LT", "RT"], "text": qsTr("10 rows") + api.tr },
+            { "keys": ["LB", "RB"], "text": qsTr("10 rows") + api.tr },
+            { "keys": ["LT", "RT"], "text": qsTr("top / bottom") + api.tr },
             { "keys": ["B"], "text": qsTr("back") + api.tr },
         ]
     }

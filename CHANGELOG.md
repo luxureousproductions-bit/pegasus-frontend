@@ -5,6 +5,28 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Lists: LB / RB 10 rows, LT / RT top / bottom (the XBSX standard)
+
+- **What:** Pegasus X's long lists had the bumpers and triggers the other
+  way round from the XBSX-Experience theme. Now LB / RB move 10 rows up /
+  down (stopping at the ends) and LT / RT go to the top / bottom, in
+  Library, Game directory, Scraper, RetroAchievements, Genres, Android apps
+  to import and Backup & reset (the file browser already does, previous
+  entries). The hints say so: "LT / RT top / bottom" where they said
+  "LB / RB top / bottom", and the two prompt bars that show both have them
+  swapped.
+- **Its own commit**, to be rolled back alone with `git revert`.
+- **Not changed:** the Theme downloader (LB / RB change its tabs there, no
+  list jump), the on-screen keyboard (LB / RB move the cursor, LT / RT
+  change page), the button mapping itself.
+- **Tests:** test env: the steps that went to the top with LB or the bottom
+  with RB now use LT / RT.
+- **Files:** `src/frontend/menu/settings/MetadataEditor.qml`,
+  `GameDirectory.qml`, `ScraperScreen.qml`, `RetroAchievementsScreen.qml`,
+  `GenresScreen.qml`, `AndroidAppPicker.qml`, `BackupResetScreen.qml`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Lists: LB / RB 10 rows, LT / RT top / bottom".
+
 ### Test env: Add a ROM folder goes through the new browser
 
 - **What:** the test step for Game directory > Add a ROM folder pressed LB

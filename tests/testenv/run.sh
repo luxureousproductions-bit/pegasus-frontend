@@ -219,7 +219,7 @@ shot 03-genre-games-back
 keys Escape Down Return
 shot 03-genre-spellings
 # Search genres...: "shoot" narrows the list as it's typed; then cleared
-keys Escape q Return
+keys Escape Page_Up Return
 sleep 1
 xdotool type --clearmodifiers --delay 150 "shoot"
 sleep 1
@@ -303,7 +303,7 @@ keys Down Down Down Return
 sleep 1
 shot 05-accounts-help
 # Extra systems for Android (its prompts: no ◂ ▸ there)
-keys Escape q Down Down Return
+keys Escape Page_Up Down Down Return
 sleep 1
 shot 05-accounts-android
 stop 05-scraper-accounts
@@ -352,8 +352,8 @@ SD="$T/sdcard"
 sed -i "/^\[browse\]/,/^\[/ s|^last=.*|last=$SD/ROMs|" "$CFG/pegasusx.ini"
 start 08b-folders "menu/settings/GameDirectory.qml" 5 "PEGASUSX_TEST_SD=$SD"
 # the systems are A to Z (GameCube, My SNES picks, Nintendo 64, Nintendo Game Boy Advance,
-# Nintendo SNES): LB to the top, down to SNES, A: its menu, A: Folders
-keys q Down Down Down Down Down Down Down Return
+# Nintendo SNES): LT to the top, down to SNES, A: its menu, A: Folders
+keys Page_Up Down Down Down Down Down Down Down Return
 shot 08b-system-menu
 keys Return
 sleep 1
@@ -545,7 +545,7 @@ shot 14-new-picker
 stop 14-apps-new
 cp "$CFG/pegasusx-android-apps.json" "$R/files/apps-new-install.json" 2>/dev/null
 start 14-apps-new-library "menu/settings/MetadataEditor.qml" 6 "PEGASUSX_TEST_APPS=$APPS"
-keys e
+keys Page_Down
 shot 14-new-library-options
 stop 14-apps-new-library
 # a library from an older build: setup done (as on a device after setup), no picks saved
@@ -563,7 +563,7 @@ shot 14-picker
 keys Down Down Down Return i
 keys Down Down Return
 shot 14-picker-changed
-keys q Return
+keys Page_Up Return
 sleep 1
 xdotool type --clearmodifiers --delay 150 "dri"
 sleep 1

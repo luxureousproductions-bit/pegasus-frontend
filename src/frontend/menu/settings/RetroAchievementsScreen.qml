@@ -265,10 +265,10 @@ FocusScope {
             currentIndex = last;
         }
         function pageKeys(event) {
-            if (api.keys.isPrevPage(event)) jumpTo(false);
-            else if (api.keys.isNextPage(event)) jumpTo(true);
-            else if (api.keys.isPageUp(event)) jumpBy(-10);
-            else if (api.keys.isPageDown(event)) jumpBy(10);
+            if (api.keys.isPrevPage(event)) jumpBy(-10);
+            else if (api.keys.isNextPage(event)) jumpBy(10);
+            else if (api.keys.isPageUp(event)) jumpTo(false);
+            else if (api.keys.isPageDown(event)) jumpTo(true);
             else return false;
             event.accepted = true;
             return true;

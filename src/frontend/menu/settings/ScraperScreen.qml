@@ -655,7 +655,7 @@ FocusScope {
             return i >= 0 && i < count && root.rows[i].kind !== "section" && root.rows[i].kind !== "info"
                 && root.rows[i].kind !== "preview";
         }
-        // quick moves in a long list: LB top, RB bottom, LT/RT 10 rows
+        // quick moves in a long list: LB / RB 10 rows (stopping at the ends), LT top, RT bottom
         function jumpTo(end) {
             var i = end ? count - 1 : 0;
             while (i >= 0 && i < count && !selectable(i))
@@ -678,10 +678,10 @@ FocusScope {
             currentIndex = last;
         }
         function pageKeys(event) {
-            if (api.keys.isPrevPage(event)) jumpTo(false);
-            else if (api.keys.isNextPage(event)) jumpTo(true);
-            else if (api.keys.isPageUp(event)) jumpBy(-10);
-            else if (api.keys.isPageDown(event)) jumpBy(10);
+            if (api.keys.isPrevPage(event)) jumpBy(-10);
+            else if (api.keys.isNextPage(event)) jumpBy(10);
+            else if (api.keys.isPageUp(event)) jumpTo(false);
+            else if (api.keys.isPageDown(event)) jumpTo(true);
             else return false;
             event.accepted = true;
             return true;
@@ -941,8 +941,8 @@ FocusScope {
         // (◂ ▸ only where a page has rows they change: choices, switches, numbers)
         text: root.message !== "" ? root.message
             : root.page === "main" ? qsTr("A select · ◂ ▸ change · Start run the scraper · B back") + api.tr
-            : root.page === "systems" ? qsTr("A pick a system · LB / RB top / bottom · B back") + api.tr
-            : root.page === "android" ? qsTr("A select · LB / RB top / bottom · B back") + api.tr
+            : root.page === "systems" ? qsTr("A pick a system · LT / RT top / bottom · B back") + api.tr
+            : root.page === "android" ? qsTr("A select · LT / RT top / bottom · B back") + api.tr
             : root.page === "log" || root.page === "running" ? qsTr("B back") + api.tr
             : qsTr("A select · ◂ ▸ change · B back") + api.tr
         anchors.bottom: parent.bottom

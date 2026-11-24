@@ -454,7 +454,7 @@ FocusScope {
         function selectable(i) {
             return i >= 0 && i < count && root.rows[i].kind !== "info";
         }
-        // quick moves in a long list: LB top, RB bottom, LT/RT 10 rows
+        // quick moves in a long list: LB / RB 10 rows (stopping at the ends), LT top, RT bottom
         function jumpTo(end) {
             var i = end ? count - 1 : 0;
             while (i >= 0 && i < count && !selectable(i))
@@ -493,10 +493,10 @@ FocusScope {
                 currentIndex = i;
         }
         Keys.onPressed: {
-            if (api.keys.isPrevPage(event)) { event.accepted = true; jumpTo(false); return; }
-            if (api.keys.isNextPage(event)) { event.accepted = true; jumpTo(true); return; }
-            if (api.keys.isPageUp(event)) { event.accepted = true; jumpBy(-10); return; }
-            if (api.keys.isPageDown(event)) { event.accepted = true; jumpBy(10); return; }
+            if (api.keys.isPrevPage(event)) { event.accepted = true; jumpBy(-10); return; }
+            if (api.keys.isNextPage(event)) { event.accepted = true; jumpBy(10); return; }
+            if (api.keys.isPageUp(event)) { event.accepted = true; jumpTo(false); return; }
+            if (api.keys.isPageDown(event)) { event.accepted = true; jumpTo(true); return; }
             if (api.keys.isAccept(event) && !event.isAutoRepeat && selectable(currentIndex)) {
                 event.accepted = true;
                 root.activate(root.rows[currentIndex]);

@@ -465,7 +465,7 @@ FocusScope {
         function selectable(i) {
             return i >= 0 && i < rows.length && rows[i].kind !== "section" && rows[i].kind !== "info";
         }
-        // quick moves in a long list: LB top, RB bottom, LT/RT 10 rows
+        // quick moves in a long list: LB / RB 10 rows (stopping at the ends), LT top, RT bottom
         function jumpTo(end) {
             var i = end ? count - 1 : 0;
             while (i >= 0 && i < count && !selectable(i))
@@ -488,10 +488,10 @@ FocusScope {
             currentIndex = last;
         }
         function pageKeys(event) {
-            if (api.keys.isPrevPage(event)) jumpTo(false);
-            else if (api.keys.isNextPage(event)) jumpTo(true);
-            else if (api.keys.isPageUp(event)) jumpBy(-10);
-            else if (api.keys.isPageDown(event)) jumpBy(10);
+            if (api.keys.isPrevPage(event)) jumpBy(-10);
+            else if (api.keys.isNextPage(event)) jumpBy(10);
+            else if (api.keys.isPageUp(event)) jumpTo(false);
+            else if (api.keys.isPageDown(event)) jumpTo(true);
             else return false;
             event.accepted = true;
             return true;
@@ -676,9 +676,9 @@ FocusScope {
         // (not under the folder picker: it has its own)
         visible: !filePicker.visible
         text: root.message !== "" ? root.message
-            : root.page === "main" ? qsTr("A rescan / remove · Y remove · LB / RB top / bottom · B back") + api.tr
+            : root.page === "main" ? qsTr("A rescan / remove · Y remove · LT / RT top / bottom · B back") + api.tr
             : root.page === "folders" ? qsTr("A remove a folder / add one · B back") + api.tr
-            : root.page === "add" ? qsTr("A tick · LB / RB top / bottom · B back") + api.tr
+            : root.page === "add" ? qsTr("A tick · LT / RT top / bottom · B back") + api.tr
             : qsTr("A tick a system or pick the folder · Import is at the bottom · B back") + api.tr
         anchors.bottom: parent.bottom
         anchors.left: parent.left
