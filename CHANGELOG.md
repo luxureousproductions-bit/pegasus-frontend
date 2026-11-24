@@ -5,6 +5,24 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Settings > Advanced: the rows show (fix to the regroup)
+
+- **What:** Settings > Advanced opened empty, so its rows (and Missing
+  games) couldn't be used. Root cause: `SettingsEntry` has a *required*
+  `section`, and the Advanced rows had none, so QML refused to make the
+  list ("Required property section was not initialized" in the log). Each
+  row now has `section: "advanced"` (one section, no title drawn).
+- **Also:** `SimpleButton` read `parent.width` while the list was letting
+  go of a row scrolled out of view (parent null for that moment): four
+  "Cannot read property 'width' of null" warnings when scrolling the main
+  list. It's 0 then.
+- **Not changed:** what the rows do, their order, any setting.
+- **Tests:** test env: Advanced, Missing games (each saved pair, and picked
+  both ways, `settings.txt` read back), Gamepad layout, the updater switch.
+- **Files:** `src/frontend/menu/settings/SettingsAdvanced.qml`,
+  `src/frontend/menu/settings/common/SimpleButton.qml`.
+- **Commit:** "Settings > Advanced: the rows show (fix to the regroup)".
+
 ### Settings regroup, XBSX button art, new controller picture, themed keyboard
 
 - **What, Settings:** the main list goes from 22 rows to 12 plus an

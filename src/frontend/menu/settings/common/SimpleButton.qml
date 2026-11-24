@@ -31,7 +31,8 @@ FocusScope {
     signal activate()
 
 
-    width: parent.width
+    // (no parent for a moment while the list lets go of a row scrolled away)
+    width: parent ? parent.width : 0
     height: description.text ? labelContainer.height + fontSize * 1.25 : fontSize * 2.5
     opacity: enabled ? 1.0 : 0.25
 

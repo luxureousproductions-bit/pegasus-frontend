@@ -88,11 +88,13 @@ FocusScope {
             label: QT_TR_NOOP("Pegasus X folder...")
             desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
             type: SettingsEntry.Type.Button
+            section: "advanced"
             buttonAction: root.openRootFolder
         },
         SettingsEntry {
             label: QT_TR_NOOP("Accessible Android directories...")
             type: SettingsEntry.Type.Button
+            section: "advanced"
             buttonAction: root.openAndroidSafSettings
             enabled: Qt.platform.os === "android"
         },
@@ -100,34 +102,40 @@ FocusScope {
             label: QT_TR_NOOP("Scan for games on launch")
             desc: QT_TR_NOOP("Read every game folder each time Pegasus X starts. Off: the saved game list is used, and read again by itself when a game folder or metadata file changes (starts faster).")
             type: SettingsEntry.Type.Bool
+            section: "advanced"
             boolValue: Internal.settings.scanOnLaunch
             boolSetter: (val) => Internal.settings.scanOnLaunch = val
         },
         SettingsEntry {
             label: QT_TR_NOOP("Missing games")
             type: SettingsEntry.Type.Select
+            section: "advanced"
             selectBox: missingBox
             selectValue: missingModel.get(root.missingIndex).name
         },
         SettingsEntry {
             label: QT_TR_NOOP("Data sources...")
             type: SettingsEntry.Type.Button
+            section: "advanced"
             buttonAction: root.openProviderSettings
         },
         SettingsEntry {
             label: QT_TR_NOOP("Reload all games")
             type: SettingsEntry.Type.Button
+            section: "advanced"
             buttonAction: function() { Internal.settings.reloadAllGames(); }
         },
         SettingsEntry {
             label: QT_TR_NOOP("Gamepad layout...")
             type: SettingsEntry.Type.Button
+            section: "advanced"
             buttonAction: root.openGamepadSettings
         },
         SettingsEntry {
             label: QT_TR_NOOP("Mouse support")
             desc: QT_TR_NOOP("By default the cursor is visible if there are any pointer devices connected.")
             type: SettingsEntry.Type.Bool
+            section: "advanced"
             boolValue: Internal.settings.mouseSupport
             boolSetter: (val) => Internal.settings.mouseSupport = val
         },
@@ -135,6 +143,7 @@ FocusScope {
             label: QT_TR_NOOP("Fullscreen mode")
             desc: QT_TR_NOOP("On some platforms this setting may have no effect.")
             type: SettingsEntry.Type.Bool
+            section: "advanced"
             boolValue: Internal.settings.fullscreen
             boolSetter: (val) => Internal.settings.fullscreen = val
         }
