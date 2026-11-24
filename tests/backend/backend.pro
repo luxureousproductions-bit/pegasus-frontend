@@ -4,6 +4,7 @@ SUBDIRS += \
     api \
     backup \
     safefile \
+    scraper \
     configfile \
     launchboxdb \
     model \

@@ -5,6 +5,55 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Scraper speed, part 1: shorter waits, downloads at once, smaller files, timings
+
+- **Shorter waits** (`Scraper::get`): every request waited up to 120 s with
+  no data, and a stalled one was tried again after that, so one stuck
+  request could cost 2 to 8 minutes. Now a lookup (ScreenScraper, Hasheous,
+  libretro's lists) gives up after 15 s with no data and is tried once more
+  after 2 s; a 429 still waits Retry delay and is tried Retries times, as
+  before. A picture, video or manual (and a match's picture in Choose)
+  gives up after 20 s with no data, isn't tried again, is logged ("no data
+  for 20 s, skipped") and the next file goes on. The wait is for no data at
+  all (Qt's transfer timeout starts again with each piece that arrives): a
+  slow download that keeps coming is never cut. The stop after 3 requests in
+  a row with no answer is as it was.
+- **Downloads at once:** a game's files were fetched one at a time. Now up
+  to 4 at once from images.launchbox-app.com and thumbnails.libretro.com,
+  and from ScreenScraper as many as your account's `ssuser.maxthreads`
+  (read from each jeuInfos answer; 1 without it), any other server one at a
+  time. They're stored in the order they were asked for, whatever order
+  they arrive in, so the slots come out as before (the 2D box before the 3D
+  one); the checks (a picture, a PDF, a video), the resizing off the main
+  thread and storeMedia are as they were. The miximage is made after the
+  last one, and Stop ends the ones on their way at once and saves what came.
+- **Smaller files from ScreenScraper:** its picture links ask for the size
+  Image size keeps (`maxwidth` / `maxheight`: 2560x1440, 1920x1080,
+  1280x720, 640x480; nothing for Original), logos at most 1000x600; not
+  videos or manuals. The final resize is still made here (process_image).
+  The two items are added to the link as it came, so nothing else in it is
+  written differently.
+- **Timings in the Scraper log:** the checksum ("Checksum made (12.0 MB,
+  0.3 s)"), each lookup (ScreenScraper, with how many downloads at once;
+  Hasheous; LaunchBox), each download with its size ("Downloaded covers
+  (175 KB, 0.4 s)"), all the downloads ("Downloads done: 7 of 7 in 1.9 s (at
+  most 4 at once)"), the miximage, the save and the game ("Game done in
+  12.3 s"). Links in the log still lose their query (no password or key).
+- **Not changed:** the Scraper settings and their defaults, the settings
+  screens, how matches are made, file names, folders, the metadata format,
+  the theme.
+- **Tests:** `test_Scraper` (new), against a server on the same machine: a
+  lookup with no answer (given up at 15 s, once more after 2 s, done at
+  about 32 s); a picture with no answer (skipped at about 20 s, asked once);
+  a picture that arrives slowly over 28 s (all of it, not cut); nine
+  pictures four at once (all saved, the same slots, files and order as one
+  at a time, never more than four on their way, arriving out of order);
+  Stop with four on their way (ends within a second, nothing new started).
+- **Files:** `src/backend/Scraper.cpp`, `src/backend/Scraper.h`,
+  `tests/backend/scraper/*` (new), `tests/backend/backend.pro`,
+  `tests/CMakeLists.txt`.
+- **Commit:** "Scraper speed, part 1: shorter waits, downloads at once, smaller files, timings".
+
 ### Test env builds again (fix to the own metadata test)
 
 - **What:** the test environment's build stopped at Settings.cpp: its new

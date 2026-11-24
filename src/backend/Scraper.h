@@ -20,6 +20,7 @@
 #include "LaunchBoxDb.h"
 
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QJsonArray>
 #include <QObject>
 #include <QStringList>
@@ -35,6 +36,7 @@
 class QJsonObject;
 class QNetworkAccessManager;
 class QNetworkReply;
+class test_Scraper;
 
 
 // Pegasus X: the scraper (Settings > Library > Scraper). Game details and
@@ -82,6 +84,7 @@ struct Media {
 
 class Scraper : public QObject {
     Q_OBJECT
+    friend class ::test_Scraper;  // the waits and the downloads, against a local server
 
 public:
     explicit Scraper(QObject* parent = nullptr);
@@ -216,6 +219,28 @@ private:
     QVariantMap m_changes;
     std::vector<Media> m_media;
     QStringList m_got;
+    QElapsedTimer m_game_timer;   ///< since the game started (the log's "Game done in")
+
+    // the game's downloads, several at once (downloadNext): stored in the
+    // order they were asked for, whatever order they arrive in
+    struct Download {
+        Media media;
+        int state = 0;   ///< 0 waiting, 1 on its way (or being resized), 2 ready, 3 failed, 4 stored
+        QByteArray body;
+        QString ext;
+    };
+    std::vector<Download> m_downloads;
+    size_t m_dl_stored = 0;       ///< the first one not stored yet
+    bool m_dl_begun = false;
+    int m_dl_gen = 0;             ///< which game's downloads an answer belongs to
+    int m_dl_most = 0;            ///< the most on their way at once (this game)
+    QElapsedTimer m_dl_timer;
+    int m_ss_threads = 1;         ///< ScreenScraper's ssuser.maxthreads (1 without it)
+    QHash<QString, int> m_host_limits;  ///< downloads at once per server (the others: 1)
+    int downloadLimit(const QUrl& url) const;
+    void startDownload(size_t index);
+    void downloadsDone();
+    std::function<void()> m_downloads_done_hook;  ///< (tests: called instead of the miximage and saving)
 
     void next();
     void finishGame(const QString& result, bool ok);
@@ -229,9 +254,16 @@ private:
     void storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext);
     void save();
 
-    // a GET with retries (429, 5xx and dropped connections)
+    // a GET with retries. A lookup (ScreenScraper, Hasheous, libretro's
+    // lists) gives up after 15 s with no data and is tried once more after
+    // 2 s (a 429: as many times as `tries_left`, after Retry delay); a
+    // download (pictures, videos, manuals) gives up after 20 s with no data
+    // and isn't tried again. A transfer that keeps receiving is never cut.
+    enum class Fetch { Lookup, Download };
+    enum : int { LOOKUP_IDLE_MS = 15000, DOWNLOAD_IDLE_MS = 20000, RETRY_WAIT_MS = 2000 };
     void get(const QUrl& url, const QByteArray& auth, int tries_left,
-             std::function<void(int status, const QByteArray& body)> done);
+             std::function<void(int status, const QByteArray& body)> done,
+             Fetch fetch = Fetch::Lookup, int again_left = -1);
 };
 
 } // namespace scraper

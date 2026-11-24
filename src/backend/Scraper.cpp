@@ -575,6 +575,19 @@ QString safe_url(const QUrl& url)
     return url.toString(QUrl::RemoveQuery | QUrl::RemoveUserInfo);
 }
 
+// a step's time for the log: "0.4 s"
+QString secs(qint64 ms)
+{
+    return QString::number(static_cast<double>(ms) / 1000.0, 'f', 1) + QStringLiteral(" s");
+}
+
+// a size for the log: "175 KB", "1.2 MB"
+QString size_text(qint64 bytes)
+{
+    return bytes >= 1024 * 1024 ? QString::number(static_cast<double>(bytes) / (1024.0 * 1024.0), 'f', 1) + QStringLiteral(" MB")
+                                : QString::number(bytes / 1024) + QStringLiteral(" KB");
+}
+
 QString safe_file_name(QString name)
 {
     static const QRegularExpression rx_bad(QStringLiteral("[\\\\/:*?\"<>|]"));
@@ -588,7 +601,12 @@ namespace scraper {
 
 Scraper::Scraper(QObject* parent)
     : QObject(parent)
-{}
+{
+    // the free picture servers take a few at once; ScreenScraper as many
+    // as your account's ssuser.maxthreads; any other one at a time
+    m_host_limits.insert(QStringLiteral("images.launchbox-app.com"), 4);
+    m_host_limits.insert(QStringLiteral("thumbnails.libretro.com"), 4);
+}
 
 QString Scraper::system_of(const QString& collection_name, const QString& short_name)
 {
@@ -683,6 +701,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_stop = false;
     m_cancel_hash = false;
     m_transport_streak = 0;
+    m_ss_threads = 1;
     m_libretro_lists.clear();
     m_backed_up.clear();
     m_running = true;
@@ -952,7 +971,7 @@ void Scraper::nextThumb()
             Log::warning(LOG_TAG, LOGMSG("Picture `%1`: %2").arg(safe_url(QUrl(url))).arg(status));
         deliver(error);
         nextThumb();
-    });
+    }, Fetch::Download);  // (a picture: 20 s with no data, not tried again)
 }
 
 void Scraper::choose(int index)
@@ -1051,6 +1070,12 @@ void Scraper::next()
     m_mix_error.clear();
     m_picture_failures = 0;
     m_picture_error = 0;
+    m_downloads.clear();
+    m_dl_stored = 0;
+    m_dl_begun = false;
+    m_dl_most = 0;
+    m_dl_gen++;
+    m_game_timer.start();
     report();
 
     // the offline generator: only the miximage, from the art the game has
@@ -1113,11 +1138,15 @@ void Scraper::hashThen(std::function<void(const QString&)> then)
     const int run = m_run;
     const size_t index = m_index;
     auto* const watcher = new QFutureWatcher<QString>(this);
-    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, then, run, index]{
+    QElapsedTimer timer;
+    timer.start();
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, then, run, index, timer, path]{
         const QString md5 = watcher->result();
         watcher->deleteLater();
         if (run != m_run || index != m_index)
             return;
+        if (!md5.isEmpty())
+            note(LOGMSG("Checksum made (%1, %2)").arg(size_text(QFileInfo(path).size()), secs(timer.elapsed())));
         then(md5);
     });
     const std::atomic<bool>* cancel = &m_cancel_hash;
@@ -1147,7 +1176,9 @@ void Scraper::identify(std::function<void()> then)
         const int run = m_run;
         const size_t index = m_index;
         const QUrl url(QStringLiteral("https://hasheous.org/api/v1/Lookup/ByHash/md5/") + md5);
-        get(url, {}, 1, [this, then, run, index](int status, const QByteArray& body){
+        QElapsedTimer timer;
+        timer.start();
+        get(url, {}, 1, [this, then, run, index, timer](int status, const QByteArray& body){
             if (run != m_run || index != m_index)
                 return;
             const QJsonDocument doc = QJsonDocument::fromJson(body);
@@ -1157,15 +1188,17 @@ void Scraper::identify(std::function<void()> then)
                 QStringList sources;
                 for (const QJsonValue& v : game.value(QStringLiteral("metadata")).toArray())
                     sources.append(v.toObject().value(QStringLiteral("source")).toString());
-                note(LOGMSG("Hasheous: \"%1\" (sources: %2)")
+                note(LOGMSG("Hasheous: \"%1\" (sources: %2, %3)")
                      .arg(m_hash_name)
-                     .arg(sources.isEmpty() ? QStringLiteral("none") : sources.join(QStringLiteral(", "))));
+                     .arg(sources.isEmpty() ? QStringLiteral("none") : sources.join(QStringLiteral(", ")))
+                     .arg(secs(timer.elapsed())));
                 if (!m_hash_name.isEmpty())
                     setMatch(QStringLiteral("hasheous"), game.value(QStringLiteral("id")).toVariant().toString(), m_hash_name);
             }
             else {
-                note(LOGMSG("Hasheous: answered %1, %2").arg(status)
-                     .arg(status == 404 ? QStringLiteral("checksum not known") : QStringLiteral("no match")));
+                note(LOGMSG("Hasheous: answered %1, %2 (%3)").arg(status)
+                     .arg(status == 404 ? QStringLiteral("checksum not known") : QStringLiteral("no match"))
+                     .arg(secs(timer.elapsed())));
             }
             then();
         });
@@ -1492,28 +1525,57 @@ void Scraper::countTransport(int status)
 }
 
 void Scraper::get(const QUrl& url, const QByteArray& auth, int tries_left,
-                  std::function<void(int, const QByteArray&)> done)
+                  std::function<void(int, const QByteArray&)> done, Fetch fetch, int again_left)
 {
+    const bool lookup = fetch == Fetch::Lookup;
+    // a lookup is tried once more after no answer; a download isn't
+    if (again_left < 0)
+        again_left = lookup ? 1 : 0;
+    const int idle_ms = lookup ? LOOKUP_IDLE_MS : DOWNLOAD_IDLE_MS;
     QNetworkRequest request(url);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
-    request.setTransferTimeout(120000);
+    // given up after this long with no data at all (Qt starts it again each
+    // time data comes in: a slow transfer that keeps coming isn't cut)
+    request.setTransferTimeout(idle_ms);
     request.setRawHeader("User-Agent", USER_AGENT);
     if (!auth.isEmpty())
         request.setRawHeader("Authorization", auth);
     QNetworkReply* const reply = m_net->get(request);
     m_replies.insert(reply);
-    connect(reply, &QNetworkReply::finished, this, [this, reply, url, auth, tries_left, done]{
+    connect(reply, &QNetworkReply::finished, this, [this, reply, url, auth, tries_left, done, fetch, again_left, idle_ms, lookup]{
         m_replies.remove(reply);
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        // no data for idle_ms (Stop aborts the same way: told apart by m_stop)
+        const bool timed_out = status == 0 && reply->error() == QNetworkReply::OperationCanceledError && !m_stop;
         const QByteArray body = reply->readAll();
         reply->deleteLater();
-        const bool retry = (status == 0 || status == 429 || status >= 500) && status != 430;
-        if (!retry || tries_left <= 0 || m_stop)
+        // a 429 (too many requests): as before, after Retry delay, `tries_left` times
+        const bool busy = status == 429;
+        // no answer, no data, a server error: once more after 2 s (lookups)
+        const bool failed = (status == 0 || status >= 500) && status != 430;
+        const bool again_busy = busy && lookup && tries_left > 0 && !m_stop;
+        const bool again_failed = !busy && failed && again_left > 0 && !m_stop;
+        if (timed_out) {
+            note(LOGMSG("%1: no data for %2 s, %3").arg(url.host()).arg(idle_ms / 1000)
+                 .arg(again_failed ? QStringLiteral("trying once more in %1 s").arg(RETRY_WAIT_MS / 1000)
+                      : lookup ? QStringLiteral("given up") : QStringLiteral("skipped: %1").arg(safe_url(url))));
+        }
+        if (!again_busy && !again_failed)
             countTransport(status);
-        if (retry && tries_left > 0 && !m_stop) {
+        if (again_busy) {
             const int delay = qMax(1, m_settings.value(QStringLiteral("retryDelay")).toInt()) * 1000;
-            QTimer::singleShot(delay, this, [this, url, auth, tries_left, done]{
-                get(url, auth, tries_left - 1, done);
+            QTimer::singleShot(delay, this, [this, url, auth, tries_left, done, fetch, again_left]{
+                get(url, auth, tries_left - 1, done, fetch, again_left);
+            });
+            return;
+        }
+        if (again_failed) {
+            QTimer::singleShot(RETRY_WAIT_MS, this, [this, url, auth, tries_left, done, fetch, again_left]{
+                if (m_stop) {
+                    done(0, QByteArray());
+                    return;
+                }
+                get(url, auth, tries_left, done, fetch, again_left - 1);
             });
             return;
         }
@@ -1551,23 +1613,30 @@ void Scraper::screenScraper(const QString& md5)
          .arg(screenscraper_systems().value(job.system))
          .arg(md5.isEmpty() ? QString() : QStringLiteral(", by its MD5")));
 
-    get(url, {}, m_settings.value(QStringLiteral("retries")).toInt(), [this](int status, const QByteArray& body){
+    QElapsedTimer timer;
+    timer.start();
+    get(url, {}, m_settings.value(QStringLiteral("retries")).toInt(), [this, timer](int status, const QByteArray& body){
         if (m_stop) {
             next();
             return;
         }
         {
-            const QJsonObject found = QJsonDocument::fromJson(body).object()
-                .value(QStringLiteral("response")).toObject().value(QStringLiteral("jeu")).toObject();
+            const QJsonObject response = QJsonDocument::fromJson(body).object().value(QStringLiteral("response")).toObject();
+            // how many downloads at once the account may make (1 without it)
+            const QJsonValue threads = response.value(QStringLiteral("ssuser")).toObject().value(QStringLiteral("maxthreads"));
+            const int most = threads.isString() ? threads.toString().toInt() : threads.toInt();
+            m_ss_threads = qMax(1, most);
+            const QJsonObject found = response.value(QStringLiteral("jeu")).toObject();
             QString name;
             for (const QJsonValue& n : found.value(QStringLiteral("noms")).toArray()) {
                 name = n.toObject().value(QStringLiteral("text")).toString();
                 if (!name.isEmpty())
                     break;
             }
-            note(LOGMSG("ScreenScraper: answered %1%2").arg(status)
+            note(LOGMSG("ScreenScraper: answered %1%2 (%3, %4 downloads at once)").arg(status)
                  .arg(!name.isEmpty() ? QStringLiteral(", \"%1\" (id %2)").arg(name, found.value(QStringLiteral("id")).toString())
-                      : status == 200 || status == 404 ? QStringLiteral(", no match") : QString()));
+                      : status == 200 || status == 404 ? QStringLiteral(", no match") : QString())
+                 .arg(secs(timer.elapsed())).arg(m_ss_threads));
         }
         if (status == 430 || status == 431) {
             m_stop_reason = tr("Your ScreenScraper games for today are used up. Try again tomorrow.");
@@ -1677,6 +1746,13 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
         { "video-normalized,video", "getVideos", "assets.video", "videos", "" },
         { "manuel", "getManuals", "x-manual", "manuals", "" },
     };
+    // pictures asked for at the size the Scraper settings keep (the server
+    // sends a smaller file; process_image still makes the final size):
+    // Image size, logos at most 1000 x 600, nothing for Original
+    const QString size = m_settings.value(QStringLiteral("imageMaxSize")).toString();
+    const int max_w = size == QLatin1String("1920") ? 1920 : size == QLatin1String("1280") ? 1280
+                    : size == QLatin1String("640") ? 640 : size == QLatin1String("original") ? 0 : 2560;
+    const int max_h = max_w == 1920 ? 1080 : max_w == 1280 ? 720 : max_w == 640 ? 480 : max_w == 0 ? 0 : 1440;
     const QJsonArray medias = game.value(QStringLiteral("medias")).toArray();
     for (const Kind& kind : kinds) {
         const QString setting = QLatin1String(kind.setting);
@@ -1699,6 +1775,18 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
             media.kind = QLatin1String(kind.box);
             media.url = QUrl(chosen.value(QStringLiteral("url")).toString());
             media.ext = chosen.value(QStringLiteral("format")).toString();
+            const bool picture = media.folder != QLatin1String("videos") && media.folder != QLatin1String("manuals");
+            if (picture && max_w > 0 && media.url.isValid()) {
+                const bool logo = media.folder == QLatin1String("marquees");
+                // added to the query as it came (re-reading it could change how
+                // the account's password in it is written)
+                QString query = media.url.query(QUrl::FullyEncoded);
+                if (!query.isEmpty())
+                    query += QLatin1Char('&');
+                query += QStringLiteral("maxwidth=%1&maxheight=%2")
+                    .arg(logo ? qMin(max_w, 1000) : max_w).arg(logo ? qMin(max_h, 600) : max_h);
+                media.url.setQuery(query);
+            }
             if (media.url.isValid() && slotFree(job, media))
                 m_media.push_back(media);
             break;
@@ -1767,7 +1855,10 @@ void Scraper::lbAuto(bool after_other)
     const int needed = m_settings.value(QStringLiteral("minMatch"), 60).toInt();
     // Pegasus X: the system's own platform first, then its fallbacks
     // (Nintendo Switch for Switch 2; the other saved platforms for Android)
+    QElapsedTimer lb_timer;
+    lb_timer.start();
     const LaunchBoxDb::Match match = m_lb->best(job.system, name, needed);
+    note(LOGMSG("LaunchBox: looked up \"%1\" (%2)").arg(name, secs(lb_timer.elapsed())));
     if (match.game.id <= 0) {
         const std::vector<LaunchBoxDb::Game>& found = match.closest;
         if (match.tie) {
@@ -1920,31 +2011,104 @@ void Scraper::fillMore()
     downloadNext();
 }
 
+// how many downloads at once from the server of `url`
+int Scraper::downloadLimit(const QUrl& url) const
+{
+    const QString host = url.host().toLower();
+    const auto it = m_host_limits.constFind(host);
+    if (it != m_host_limits.constEnd())
+        return qMax(1, it.value());
+    if (host.contains(QLatin1String("screenscraper")))
+        return m_ss_threads;
+    return 1;
+}
+
+// The game's files: several downloaded at once (per server, downloadLimit),
+// each checked and resized as it arrives, and stored in the order they were
+// asked for (the 2D box before the 3D one), whatever order they arrive in.
+// Called again as each one is done; after the last, the miximage and saving.
 void Scraper::downloadNext()
 {
-    if (m_stop) {
-        save();
-        return;
-    }
-    if (m_media.empty()) {
-        // all downloaded: the miximage made from them
-        if (!m_mix_done && wantsMiximage()) {
-            m_mix_done = true;
-            makeMiximage();
-            return;
+    if (!m_dl_begun) {
+        m_dl_begun = true;
+        m_downloads.clear();
+        for (const Media& media : m_media) {
+            Download download;
+            download.media = media;
+            m_downloads.push_back(download);
         }
-        save();
+        m_media.clear();
+        m_dl_stored = 0;
+        m_dl_most = 0;
+        m_dl_timer.start();
+    }
+    const Job& job = m_jobs[m_index];
+    // what has arrived, in order
+    while (m_dl_stored < m_downloads.size()) {
+        Download& download = m_downloads[m_dl_stored];
+        if (download.state == 3) {
+            m_dl_stored++;
+            continue;
+        }
+        if (download.state != 2)
+            break;
+        const Media media = download.media;
+        const QByteArray body = download.body;
+        const QString ext = download.ext;
+        download.body.clear();
+        download.state = 4;
+        m_dl_stored++;
+        storeMedia(media, job, body, ext);
+    }
+    int running = 0;
+    for (const Download& download : m_downloads)
+        running += download.state == 1 ? 1 : 0;
+    if (m_stop) {
+        // Stop (or the art folder can't be written): nothing new starts; once
+        // the ones on their way are back (Stop aborted them), what came is saved
+        if (running == 0)
+            downloadsDone();
         return;
     }
-    const Media media = m_media.front();
-    m_media.erase(m_media.begin());
-    const Job& job = m_jobs[m_index];
-    get(media.url, {}, 1, [this, media, job](int status, const QByteArray& body){
+    // more, as many as each server takes
+    for (size_t i = 0; i < m_downloads.size(); i++) {
+        if (m_downloads[i].state != 0)
+            continue;
+        const QUrl& url = m_downloads[i].media.url;
+        int same_server = 0;
+        for (const Download& other : m_downloads)
+            same_server += other.state == 1 && other.media.url.host() == url.host() ? 1 : 0;
+        if (same_server >= downloadLimit(url))
+            continue;
+        running++;
+        m_dl_most = qMax(m_dl_most, running);
+        startDownload(i);
+    }
+    if (m_dl_stored == m_downloads.size() && running == 0)
+        downloadsDone();
+}
+
+void Scraper::startDownload(size_t index)
+{
+    m_downloads[index].state = 1;
+    const Media media = m_downloads[index].media;
+    const int gen = m_dl_gen;
+    QElapsedTimer timer;
+    timer.start();
+    const auto failed = [this, index, gen]{
+        if (gen != m_dl_gen)
+            return;
+        m_downloads[index].state = 3;
+        downloadNext();
+    };
+    get(media.url, {}, 0, [this, index, gen, media, timer, failed](int status, const QByteArray& body){
+        if (gen != m_dl_gen)
+            return;  // another game's (Stop, then a new start)
         if (status != 200 || body.isEmpty()) {
             m_picture_failures++;
             m_picture_error = status;
-            note(LOGMSG("Download failed (%1): %2").arg(status).arg(safe_url(media.url)));
-            downloadNext();
+            note(LOGMSG("Download failed (%1, %2): %3").arg(status).arg(secs(timer.elapsed())).arg(safe_url(media.url)));
+            failed();
             return;
         }
         QString ext = media.ext.toLower();
@@ -1974,10 +2138,10 @@ void Scraper::downloadNext()
             m_picture_error = -4;
             note(LOGMSG("Not a %1 (%2 bytes, starts \"%3\"): %4").arg(is_video ? QStringLiteral("video") : is_manual ? QStringLiteral("PDF") : QStringLiteral("picture"))
                  .arg(body.size()).arg(QString::fromLatin1(body.left(24).simplified())).arg(safe_url(media.url)));
-            downloadNext();
+            failed();
             return;
         }
-        note(LOGMSG("Downloaded %1 (%2 KB) -> %3").arg(media.folder).arg(body.size() / 1024).arg(safe_url(media.url)));
+        note(LOGMSG("Downloaded %1 (%2, %3) -> %4").arg(media.folder, size_text(body.size()), secs(timer.elapsed()), safe_url(media.url)));
 
         // pictures: the size and trimming of the Scraper settings, worked out
         // off the main thread
@@ -1999,18 +2163,53 @@ void Scraper::downloadNext()
             : fit == QLatin1String("16:9") ? 1 : fit == QLatin1String("stretch") ? 2 : 0;
         if (picture && (max_w > 0 || trim || fanart_mode > 0)) {
             auto* const watcher = new QFutureWatcher<QPair<QByteArray, QString>>(this);
-            connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, media, job]{
+            connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, index, gen]{
                 const QPair<QByteArray, QString> result = watcher->result();
                 watcher->deleteLater();
-                storeMedia(media, job, result.first, result.second);
+                if (gen != m_dl_gen)
+                    return;
+                m_downloads[index].body = result.first;
+                m_downloads[index].ext = result.second;
+                m_downloads[index].state = 2;
+                downloadNext();
             });
             watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim, fanart_mode]{
                 return process_image(body, ext, max_w, max_h, trim, fanart_mode);
             }));
             return;
         }
-        storeMedia(media, job, body, ext);
-    });
+        m_downloads[index].body = body;
+        m_downloads[index].ext = ext;
+        m_downloads[index].state = 2;
+        downloadNext();
+    }, Fetch::Download);
+}
+
+// all the game's files are in (or Stop): the miximage made from them, then saving
+void Scraper::downloadsDone()
+{
+    if (!m_downloads.empty()) {
+        int stored = 0;
+        for (const Download& download : m_downloads)
+            stored += download.state == 4 ? 1 : 0;
+        note(LOGMSG("Downloads done: %1 of %2 in %3 (at most %4 at once)")
+             .arg(stored).arg(m_downloads.size()).arg(secs(m_dl_timer.elapsed())).arg(m_dl_most));
+    }
+    m_dl_gen++;  // (nothing more is expected for these)
+    if (m_downloads_done_hook) {
+        m_downloads_done_hook();
+        return;
+    }
+    if (m_stop) {
+        save();
+        return;
+    }
+    if (!m_mix_done && wantsMiximage()) {
+        m_mix_done = true;
+        makeMiximage();
+        return;
+    }
+    save();
 }
 
 void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& body, const QString& ext)
@@ -2032,7 +2231,6 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
         note(LOGMSG("Couldn't make `%1`").arg(dir));
         m_stop_reason = tr("Couldn't write to the art folder %1 (is the SD card there?)").arg(m_data_dir);
         m_stop = true;
-        downloadNext();
         return;
     }
     // the art folder is no place for the gallery app
@@ -2051,7 +2249,6 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
         m_picture_failures++;
         m_picture_error = -3;  // couldn't write
         note(LOGMSG("Couldn't write `%1`: %2").arg(file_path, file.errorString()));
-        downloadNext();
         return;
     }
 
@@ -2130,7 +2327,6 @@ void Scraper::storeMedia(const Media& media, const Job& job, const QByteArray& b
         if (hidden.size() != before)
             m_changes.insert(QStringLiteral("x-pegasusx-hidden-art"), hidden);
     }
-    downloadNext();
 }
 
 bool Scraper::offline() const
@@ -2184,9 +2380,12 @@ void Scraper::makeMiximage()
     }
     const miximage::Options options = miximage::Options::from(m_settings);
     auto* const watcher = new QFutureWatcher<miximage::Result>(this);
-    connect(watcher, &QFutureWatcher<miximage::Result>::finished, this, [this, watcher]{
+    QElapsedTimer timer;
+    timer.start();
+    connect(watcher, &QFutureWatcher<miximage::Result>::finished, this, [this, watcher, timer]{
         const miximage::Result result = watcher->result();
         watcher->deleteLater();
+        note(LOGMSG("Miximage %1 (%2)").arg(result.data.isEmpty() ? QStringLiteral("not made") : QStringLiteral("made"), secs(timer.elapsed())));
         if (m_stop || result.data.isEmpty()) {
             m_mix_error = result.error;
             if (!result.error.isEmpty())
@@ -2199,7 +2398,8 @@ void Scraper::makeMiximage()
         media.slot = QStringLiteral("assets.steam");
         media.folder = QStringLiteral("miximages");
         media.ext = result.ext;
-        storeMedia(media, m_jobs[m_index], result.data, result.ext);  // then saves
+        storeMedia(media, m_jobs[m_index], result.data, result.ext);
+        save();
     });
     watcher->setFuture(QtConcurrent::run([sources, options]{ return miximage::make(sources, options); }));
 }
@@ -2218,6 +2418,8 @@ void Scraper::save()
         return;
     }
     const QString title = m_changes.value(QStringLiteral("title"), job.title).toString();
+    QElapsedTimer save_timer;
+    save_timer.start();
 #ifdef WITH_COMPAT_ESDE
     // the collection's file backed up once a run, before its first change
     if (m_settings.value(QStringLiteral("overwrite")).toBool()) {
@@ -2232,8 +2434,8 @@ void Scraper::save()
     // metadata editing is Android only for now
     const QString error = tr("saving isn't supported on this platform yet");
 #endif
-    note(LOGMSG("Saving `%1` (%2) into the metadata of `%3`: %4").arg(title, job.path, job.collection)
-         .arg(error.isEmpty() ? QStringLiteral("ok") : error));
+    note(LOGMSG("Saving `%1` (%2) into the metadata of `%3`: %4 (%5)").arg(title, job.path, job.collection)
+         .arg(error.isEmpty() ? QStringLiteral("ok") : error, secs(save_timer.elapsed())));
     if (!error.isEmpty()) {
         m_failed++;
         finishGame(error, false);
@@ -2312,6 +2514,8 @@ void Scraper::finishGame(const QString& given_result, bool ok)
                  : tr("error %1").arg(m_picture_error));
         result = result.isEmpty() ? failed : result + QStringLiteral(" · ") + failed;
     }
+    if (m_index < m_jobs.size() && m_game_timer.isValid())
+        note(LOGMSG("Game done in %1: %2").arg(secs(m_game_timer.elapsed()), result.isEmpty() ? QStringLiteral("-") : result));
     if (m_index < m_jobs.size()) {
         m_last_title = m_jobs[m_index].title;
         m_preview = previewOf(m_jobs[m_index]);
