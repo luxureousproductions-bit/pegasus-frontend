@@ -134,6 +134,8 @@ Rectangle {
         Repeater {
             model: bar.shown
             delegate: Row {
+                // (each prompt on the bar's middle: a picture is taller than a pill)
+                anchors.verticalCenter: parent.verticalCenter
                 spacing: vpx(8)
                 Repeater {
                     model: modelData.keys

@@ -5,6 +5,16 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Prompts: every prompt on the bar's middle line
+
+- **What:** with the A, B, X, Y pictures 30 px tall (2259), a prompt with a
+  picture was taller than one with a pill (LB / RB, LT / RT, Start), and the
+  bar lined the prompts up by their tops: the words after the pills sat
+  about 3 px higher than the others. Each prompt is centred on the bar now.
+- **Not changed:** anything else.
+- **Files:** `src/frontend/menu/settings/common/RoundPromptBar.qml`.
+- **Commit:** "Prompts: every prompt on the bar's middle line".
+
 ### Prompts: the A, B, X, Y pictures at the size of the drawn buttons
 
 - **What:** the gamepad layout menu's pictures have a clear margin round the
