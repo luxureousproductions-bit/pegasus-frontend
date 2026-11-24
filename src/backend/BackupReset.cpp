@@ -239,7 +239,8 @@ bool allowed_rel(const QString& rel)
 
 struct Source {
     QString rel;
-    qint64 size = 0;
+    qint64 size;
+    Source(const QString& r, qint64 s) : rel(r), size(s) {}
 };
 
 std::vector<Source> collect(const QString& data, bool art)
@@ -249,7 +250,7 @@ std::vector<Source> collect(const QString& data, bool art)
     for (const QString& rel : backup::backup_files()) {
         const QFileInfo fi(base.filePath(rel));
         if (fi.isFile() && !fi.isSymLink())
-            out.push_back({ rel, fi.size() });
+            out.emplace_back(rel, fi.size());
     }
     QStringList dirs = backup::backup_dirs();
     if (art)
@@ -264,7 +265,7 @@ std::vector<Source> collect(const QString& data, bool art)
             it.next();
             const QString rel = base.relativeFilePath(it.filePath());
             if (allowed_rel(rel))
-                out.push_back({ rel, it.fileInfo().size() });
+                out.emplace_back(rel, it.fileInfo().size());
         }
     }
     std::sort(out.begin(), out.end(), [](const Source& a, const Source& b) { return a.rel < b.rel; });
@@ -854,7 +855,11 @@ WipePlan wipe_plan(const Places& places)
         if (seen.contains(path) || (!fi.exists() && !fi.isSymLink()))
             continue;
         seen.append(path);
-        plan.remove.push_back({ path, n.what, dir_bytes(path) });
+        WipeItem item;
+        item.path = path;
+        item.what = n.what;
+        item.bytes = dir_bytes(path);
+        plan.remove.push_back(std::move(item));
     }
     plan.keep = QStringList {
         QStringLiteral("Your themes (themes/ in the Pegasus X folder)"),

@@ -5,6 +5,16 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-23
 
+### Fix: Backup & reset's build (C++11)
+
+- **What:** two lists in `BackupReset.cpp` were filled with `{ ... }` items
+  of structs that have default values, which C++11 (this project's
+  standard) can't build from braces: the compile check failed on Linux and
+  Windows. They're made explicitly now.
+- **Not changed:** what anything does.
+- **Files:** `src/backend/BackupReset.cpp`.
+- **Commit:** "Fix: Backup & reset's build (C++11)".
+
 ### Settings > Backup & reset: back up, restore, run setup again, start over
 
 - **Where:** Settings, Pegasus X section, under "Pegasus X folder...":
