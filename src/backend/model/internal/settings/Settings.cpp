@@ -43,6 +43,7 @@
 #include "RetroAchievements.h"
 #include "providers/GameDirectory.h"
 #include "providers/SearchContext.h"
+#include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "Scraper.h"
 #include "ThemeStore.h"

@@ -5,6 +5,16 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Test env builds again (fix to the own metadata test)
+
+- **What:** the test environment's build stopped at Settings.cpp: its new
+  own-metadata test reads a file with Pegasus' reader, whose result (a list
+  of `FileFilter`) needs `PegasusFilter.h`, which wasn't included. That code
+  is only built for the test environment, so the app and the compile check
+  weren't affected. The header is included now.
+- **Files:** `src/backend/model/internal/settings/Settings.cpp`.
+- **Commit:** "Test env builds again (fix to the own metadata test)".
+
 ### Lists: LB / RB 10 rows, LT / RT top / bottom (the XBSX standard)
 
 - **What:** Pegasus X's long lists had the bumpers and triggers the other
