@@ -5,6 +5,23 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Two "Data folder" labels renamed
+
+- **What:** "Data folder" named two different folders. Setup step 1 (the
+  whole Pegasus X folder: settings, themes, game details, scraped art) is
+  now **App Data Folder**; Library > Options' row for where scraped art and
+  art you pick are kept (`Internal.settings.dataDir`) is now **Scraped Art
+  Folder**. Neither name was shown anywhere else (the step list draws step
+  1 from the same name; the row's folder picker has no title of its own).
+- **Not changed:** "Pegasus X folder..." in Settings > Advanced, Library's
+  "Clear backups", any path, setting key, saved value, folder move,
+  import / scrape behaviour, code comments or variable names.
+- **Tests:** test env screenshots (Library > Options); setup's step list
+  isn't reachable there (setup never opens in the test env).
+- **Files:** `src/frontend/menu/settings/FirstRunWizard.qml`,
+  `src/frontend/menu/settings/MetadataEditor.qml`.
+- **Commit:** "Two \"Data folder\" labels renamed".
+
 ### Gamepad layout from Advanced: a full screen again
 
 - **What:** opened from Settings > Advanced, Gamepad layout was drawn on

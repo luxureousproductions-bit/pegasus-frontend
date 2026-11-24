@@ -72,7 +72,7 @@ FocusScope {
     }
 
     readonly property var stepNames: [
-        qsTr("Data folder") + api.tr,
+        qsTr("App Data Folder") + api.tr,
         qsTr("Systems and ROM folders") + api.tr,
         qsTr("Import gamelist") + api.tr,
         qsTr("Complete my library") + api.tr,

@@ -1853,7 +1853,7 @@ FocusScope {
                 if (root.appPickerAvailable)
                     out.push({ "kind": "appimport", "text": qsTr("Android apps to import") + api.tr, "value": root.appImportValue() });
                 out.push({ "kind": "emulist", "text": qsTr("Emulator list") + api.tr, "value": root.emuListInfo });
-                out.push({ "kind": "datadir", "text": qsTr("Data folder") + api.tr,
+                out.push({ "kind": "datadir", "text": qsTr("Scraped Art Folder") + api.tr,
                            "value": root.dataDir, "muted": false });
                 var hk = root.housekeeping || {};
                 var hkWait = hk.goneGames === undefined;  // still being checked in the background
