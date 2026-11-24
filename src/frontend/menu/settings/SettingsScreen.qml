@@ -28,8 +28,12 @@ FocusScope {
     // Pegasus X: how long a screen takes to open (in the log, for the test
     // environment and for finding slow ones)
     property real openedAt: 0
+    // Pegasus X: Gamepad layout is a full screen (it slid in over the main list
+    // before); opened from Advanced it goes on top, so Advanced is hidden under it
+    property bool subCovered: false
     function openScreen(url) {
         openedAt = Date.now();
+        subCovered = false;
         subscreen.source = "";  // a fresh screen every time (see openModal)
         subscreen.source = url;
         subscreen.focus = true;
@@ -107,6 +111,7 @@ FocusScope {
         width: parent.width
         height: parent.height
         anchors.left: main.right
+        visible: !root.subCovered
 
         enabled: focus
         onLoaded: {
@@ -133,7 +138,7 @@ FocusScope {
         function onOpenRootFolder() { root.openedAt = Date.now(); modal.source = ""; modal.source = "RootFolderSetup.qml"; modal.focus = true; }
         function onOpenAndroidSafSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "AndroidSafEditor.qml"; modal.focus = true; }
         function onOpenProviderSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "ProviderEditor.qml"; modal.focus = true; }
-        function onOpenGamepadSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "GamepadEditor.qml"; modal.focus = true; }
+        function onOpenGamepadSettings() { root.openedAt = Date.now(); root.subCovered = true; modal.source = ""; modal.source = "GamepadEditor.qml"; modal.focus = true; }
         // Library: a game's "Scraper options..." opens the Scraper on top
         // (Back returns to the game)
         function onOpenScraper() {
@@ -149,6 +154,7 @@ FocusScope {
         function onClose() {
             if (root.state === "sub" && subscreen.item) {
                 // back to the screen under it
+                root.subCovered = false;
                 subscreen.focus = true;
                 if (subscreen.item.refresh)
                     subscreen.item.refresh();

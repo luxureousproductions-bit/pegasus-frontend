@@ -5,6 +5,22 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Gamepad layout from Advanced: a full screen again
+
+- **What:** opened from Settings > Advanced, Gamepad layout was drawn on
+  top of the Advanced list, both showing (test env shot). Root cause: from
+  the main list it was a screen that slid in over the list; from Advanced
+  it opens on top of Advanced (so B comes back to Advanced), and its screen
+  has no background of its own. Advanced is now hidden while Gamepad
+  layout is open, and shown again when it closes, so it looks as it did.
+  The other three screens Advanced opens (Pegasus X folder, Android
+  directories, Data sources) are dialogs and stay drawn over it, as they
+  were over the main list.
+- **Not changed:** Gamepad layout itself, what B does, the mapping.
+- **Tests:** test env: Gamepad layout shot, and Advanced again after B.
+- **Files:** `src/frontend/menu/settings/SettingsScreen.qml`.
+- **Commit:** "Gamepad layout from Advanced: a full screen again".
+
 ### Gamepad layout: the footer loads again (fix to the button art)
 
 - **What:** Settings > Advanced > Gamepad layout lost its footer (B back,
