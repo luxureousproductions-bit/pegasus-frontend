@@ -19,9 +19,11 @@ import QtQuick 2.6
 
 // Pegasus X: the button prompts at the foot of a screen. `text` is the
 // prompts as words, "A edit · X undo · B back": a part that starts with a
-// button's name gets the button drawn as a key (A green, B red, X blue,
-// Y yellow; shoulders, triggers, Start, Select and the arrows as grey keys)
-// and the words after it as they are. Text with no button in it (a message
+// button's name gets the button's picture (the XBSX-Experience theme's art
+// in assets/gamepad/x360, as RoundPromptBar and Gamepad layout show it; if
+// those can't be loaded, a key drawn as before: A green, B red, X blue,
+// Y yellow, the others grey; the arrows are always grey keys) and the words
+// after it as they are. Text with no button in it (a message
 // of the screen's) is shown plainly, wrapped, as before.
 // One Text with rich text: nothing is created or laid out per prompt.
 Rectangle {
@@ -33,6 +35,14 @@ Rectangle {
     readonly property var keys: ({
         "A": "#6fcf4f", "B": "#ee5a5a", "X": "#5aa9ee", "Y": "#f2d24d"
     })
+    // the keys with a picture, and its file in assets/gamepad/x360
+    readonly property var iconNames: ({ "A": "a", "B": "b", "X": "x", "Y": "y",
+        "LB": "lb", "RB": "rb", "LT": "lt", "RT": "rt", "Start": "start", "Select": "select" })
+    readonly property string gamepadIcons: "qrc:/frontend/assets/gamepad/x360/"
+    // (the pictures can be loaded: else the keys drawn as before)
+    readonly property bool useIcons: iconProbe.status === Image.Ready
+    readonly property int iconSize: Math.round(vpx(30))
+
     readonly property var greyKeys: ["LB", "RB", "LT", "RT", "Start", "Select", "LB / RB", "LT / RT", "◂ ▸", "▴ ▾"]
 
     // text -> rich text, and whether any key was found
@@ -64,6 +74,13 @@ Rectangle {
                 var labels = key.split(" / ");
                 var html = "";
                 for (var k = 0; k < labels.length; k++) {
+                    if (useIcons && iconNames[labels[k]] !== undefined) {
+                        html += "<img src=\"" + gamepadIcons + iconNames[labels[k]] + ".png\" width=\"" + iconSize
+                              + "\" height=\"" + iconSize + "\" style=\"vertical-align: middle\">";
+                        if (k + 1 < labels.length)
+                            html += "&nbsp;";
+                        continue;
+                    }
                     var bg = keys[labels[k]] || "#4a5054";
                     var fg = keys[labels[k]] ? "#161616" : "#e8ecee";
                     html += "<span style=\"background-color:" + bg + ";color:" + fg + ";font-weight:bold\">&nbsp;"
@@ -88,6 +105,12 @@ Rectangle {
     height: implicitHeight
     visible: text !== ""
     color: rendered.keys ? "#1a1d1f" : "transparent"
+
+    Image {
+        id: iconProbe
+        visible: false
+        source: root.gamepadIcons + "a.png"
+    }
 
     Rectangle {
         anchors.top: parent.top

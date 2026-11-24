@@ -71,6 +71,7 @@ FocusScope {
         onOpenAndroidSafSettings: root.openModal("AndroidSafEditor.qml")
         onOpenProviderSettings: root.openModal("ProviderEditor.qml")
         onReloadRequested: Internal.settings.reloadAllGames()
+        onOpenAdvanced: root.openScreen("SettingsAdvanced.qml")
     }
 
 
@@ -127,6 +128,12 @@ FocusScope {
             modal.source = "EsdeImport.qml";
             modal.focus = true;
         }
+        // Pegasus X: Settings > Advanced: its screens open on top of it (B
+        // comes back to it), as they did from the main list
+        function onOpenRootFolder() { root.openedAt = Date.now(); modal.source = ""; modal.source = "RootFolderSetup.qml"; modal.focus = true; }
+        function onOpenAndroidSafSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "AndroidSafEditor.qml"; modal.focus = true; }
+        function onOpenProviderSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "ProviderEditor.qml"; modal.focus = true; }
+        function onOpenGamepadSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "GamepadEditor.qml"; modal.focus = true; }
         // Library: a game's "Scraper options..." opens the Scraper on top
         // (Back returns to the game)
         function onOpenScraper() {
@@ -149,7 +156,8 @@ FocusScope {
                 // screen: it goes, or it stays drawn over the game while the keys
                 // go to the game under it (unloaded after this signal: not from
                 // inside its own close)
-                if (String(modal.source).indexOf("ScraperSection.qml") >= 0)
+                if (String(modal.source).indexOf("ScraperSection.qml") >= 0
+                        || String(subscreen.source).indexOf("SettingsAdvanced.qml") >= 0)  // (and a screen of Advanced's)
                     Qt.callLater(function() { modal.source = ""; });
             }
         }

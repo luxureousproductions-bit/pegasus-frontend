@@ -54,8 +54,13 @@ Item {
             height: parent.height
             width: height
 
+            // the XBSX-Experience theme's button art (x360/); if a picture
+            // can't be loaded, the stock one it replaced (stock/)
             Image {
-                source: root.icon && "qrc:/frontend/assets/gamepad/x360/" + root.icon + ".png"
+                property bool stock: false
+                source: root.icon ? "qrc:/frontend/assets/gamepad/" + (stock ? "stock/" : "x360/") + root.icon + ".png" : ""
+                onStatusChanged: if (status === Image.Error && !stock) stock = true
+                mipmap: true
 
                 anchors.fill: parent
                 anchors.margins: root.imagePadding

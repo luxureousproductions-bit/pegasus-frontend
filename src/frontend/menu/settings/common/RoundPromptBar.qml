@@ -18,10 +18,11 @@ import QtQuick 2.6
 
 
 // Pegasus X: button prompts drawn Xbox-style, as in Android apps to import:
-// A, B, X, Y are the stock pictures of Settings > Change gamepad layout
-// (assets/gamepad/x360/a.png...; a round button with the letter drawn here
-// if a picture can't be loaded), LB / RB bumpers, LT / RT triggers,
-// Start / Select small pills, the d-pad drawn (no arrow characters: a font
+// A B X Y, LB RB, LT RT, Start, Select are the pictures of Settings >
+// Advanced > Gamepad layout (assets/gamepad/x360/*.png, the XBSX-Experience
+// theme's button art); if one can't be loaded it's drawn here instead (a
+// round button with the letter, a bumper or trigger shape, a small pill).
+// The d-pad is drawn (no arrow characters: a font
 // without them shows boxes). The same bar as PromptBar (place, height,
 // colours). Give it either
 //   `items`: [{ keys: ["A"], text: "choose" }, ...], or
@@ -41,6 +42,9 @@ Rectangle {
     readonly property var faceColors: ({ "A": "#6fcf4f", "B": "#ee5a5a", "X": "#5aa9ee", "Y": "#f2d24d" })
     // where Change gamepad layout (gamepad/GamepadField.qml) takes its button pictures
     readonly property string gamepadIcons: "qrc:/frontend/assets/gamepad/x360/"
+    // the keys with a picture there, and its name
+    readonly property var iconNames: ({ "A": "a", "B": "b", "X": "x", "Y": "y",
+        "LB": "lb", "RB": "rb", "LT": "lt", "RT": "rt", "Start": "start", "Select": "select" })
     // the names PromptBar's words use, longest first, and the keys drawn for them
     readonly property var named: [
         ["LB / RB", ["LB", "RB"]], ["LT / RT", ["LT", "RT"]],
@@ -144,25 +148,29 @@ Rectangle {
                         readonly property bool trigger: modelData === "LT" || modelData === "RT"
                         readonly property bool pill: modelData === "Start" || modelData === "Select"
                         readonly property bool dpad: String(modelData).indexOf("DPAD_") === 0
-                        readonly property bool drawnFace: face && faceIcon.status !== Image.Ready
+                        readonly property string iconName: bar.iconNames[modelData] || ""
+                        // (no picture, or it can't be loaded: the button drawn here)
+                        readonly property bool drawn: iconName === "" || keyIcon.status !== Image.Ready
+                        readonly property bool drawnFace: face && drawn
                         // (the pictures have a margin round the button: 30 px makes it
-                        // the size of the drawn one, 24 px)
-                        width: face && !drawnFace ? vpx(30) : face || dpad ? vpx(24) : pill ? pillLabel.implicitWidth + vpx(16) : vpx(36)
-                        height: face && !drawnFace ? vpx(30) : vpx(24)
+                        // the size of the drawn one)
+                        width: !drawn ? vpx(30) : face || dpad ? vpx(24) : pill ? pillLabel.implicitWidth + vpx(16) : vpx(36)
+                        height: !drawn ? vpx(30) : vpx(24)
                         anchors.verticalCenter: parent.verticalCenter
-                        // A, B, X, Y: the gamepad layout menu's picture...
+                        // the button's picture (the XBSX-Experience theme's, in
+                        // assets/gamepad/x360, as Change gamepad layout shows them)...
                         Image {
-                            id: faceIcon
-                            visible: parent.face && status === Image.Ready
+                            id: keyIcon
+                            visible: !parent.drawn
                             anchors.fill: parent
-                            source: parent.face ? bar.gamepadIcons + String(modelData).toLowerCase() + ".png" : ""
+                            source: parent.iconName !== "" ? bar.gamepadIcons + parent.iconName + ".png" : ""
                             sourceSize.width: vpx(60)
                             sourceSize.height: vpx(60)
                             fillMode: Image.PreserveAspectFit
                             smooth: true
                             mipmap: true
                         }
-                        // ...or, without it, a round button with the letter
+                        // ...or, without it, A B X Y: a round button with the letter
                         Rectangle {
                             visible: parent.drawnFace
                             anchors.fill: parent
@@ -171,7 +179,7 @@ Rectangle {
                         }
                         // LB / RB: a bumper; Start / Select: a small pill
                         Rectangle {
-                            visible: !parent.face && !parent.trigger && !parent.dpad
+                            visible: parent.drawn && !parent.face && !parent.trigger && !parent.dpad
                             anchors.fill: parent
                             anchors.topMargin: vpx(3)
                             anchors.bottomMargin: vpx(3)
@@ -180,13 +188,13 @@ Rectangle {
                         }
                         // LT / RT: a trigger (round top, flat bottom)
                         Rectangle {
-                            visible: parent.trigger
+                            visible: parent.drawn && parent.trigger
                             anchors.fill: parent
                             radius: width * 0.4
                             color: "#4a5054"
                         }
                         Rectangle {
-                            visible: parent.trigger
+                            visible: parent.drawn && parent.trigger
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.bottom: parent.bottom
@@ -208,7 +216,7 @@ Rectangle {
                         }
                         Text {
                             id: pillLabel
-                            visible: !parent.dpad && (!parent.face || parent.drawnFace)
+                            visible: !parent.dpad && parent.drawn
                             anchors.centerIn: parent
                             text: modelData
                             color: parent.face ? "#161616" : "#e8ecee"

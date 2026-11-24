@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="340" viewBox="0 0 512 340">
+  <g stroke="#000" stroke-width="2.5" stroke-linejoin="round">
+    <!-- triggers (behind) -->
+    <path fill="#353535" d="M 92 52 C 94 30, 104 12, 128 8 C 150 5, 172 8, 184 14 C 192 18, 194 30, 192 44 Z"/>
+    <path fill="#353535" d="M 420 52 C 418 30, 408 12, 384 8 C 362 5, 340 8, 328 14 C 320 18, 318 30, 320 44 Z"/>
+    <!-- bumpers -->
+    <path fill="#353535" d="M 62 78 C 70 54, 90 40, 118 34 C 150 28, 192 30, 214 38 L 214 50 L 80 80 Z"/>
+    <path fill="#353535" d="M 450 78 C 442 54, 422 40, 394 34 C 362 28, 320 30, 298 38 L 298 50 L 432 80 Z"/>
+    <!-- body -->
+    <path fill="#ececec" d="M 118 50 C 170 40, 216 44, 256 44 C 296 44, 342 40, 394 50
+      C 440 58, 470 84, 484 132 C 500 190, 512 262, 494 302 C 478 336, 424 336, 404 306
+      C 386 278, 366 256, 334 254 L 178 254 C 146 256, 126 278, 108 306
+      C 88 336, 34 336, 18 302 C 0 262, 12 190, 28 132 C 42 84, 72 58, 118 50 Z"/>
+  </g>
+  <g fill="#353535">
+    <!-- left stick (upper left) -->
+    <circle cx="140" cy="120" r="34"/>
+    <!-- d-pad (lower left) -->
+    <rect x="182" y="168" width="26" height="76" rx="6"/>
+    <rect x="157" y="193" width="76" height="26" rx="6"/>
+    <!-- right stick (lower right) -->
+    <circle cx="322" cy="206" r="34"/>
+    <!-- A B X Y (upper right) -->
+    <circle cx="372" cy="86" r="16"/>
+    <circle cx="372" cy="154" r="16"/>
+    <circle cx="338" cy="120" r="16"/>
+    <circle cx="406" cy="120" r="16"/>
+    <!-- View, Guide, Menu -->
+    <circle cx="256" cy="80" r="18"/>
+    <rect x="210" y="113" width="24" height="16" rx="8"/>
+    <rect x="278" y="113" width="24" height="16" rx="8"/>
+  </g>
+</svg>

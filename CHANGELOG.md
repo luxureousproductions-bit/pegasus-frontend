@@ -5,6 +5,75 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Settings regroup, XBSX button art, new controller picture, themed keyboard
+
+- **What, Settings:** the main list goes from 22 rows to 12 plus an
+  Advanced page. Main: **Games** (Game directory, Library, Scraper,
+  RetroAchievements) · **Look** (was General: Theme, Theme downloader,
+  Language) · **Controls** (Change controls) · **Pegasus X** (Check for
+  updates, Backup & reset, Accurate play times) · **Advanced...**.
+  Advanced (`SettingsAdvanced.qml`, the same rows, focus and B / swipe /
+  right-click as the other screens), in order: Pegasus X folder, Accessible
+  Android directories, Scan for games on launch, Missing games, Data
+  sources (was Enable/disable data sources), Reload all games, Gamepad
+  layout (was Change gamepad layout), Mouse support (was Enable mouse
+  support), Fullscreen mode (shown everywhere, as before).
+- **Missing games** is one choice over the two settings there were, nothing
+  new saved: Hide = `verifyFiles` on + `showMissingGames` off; Show = on +
+  on; Don't check (faster) = `verifyFiles` off, `showMissingGames` left as
+  it is. It shows what's saved now (`verifyFiles` off reads as Don't check
+  whatever the other one says).
+- **Check for updates** is one row; its automatic switch
+  (`checkUpdatesOnStart`, same default) is now the top row of the updater
+  screen (Up to it, A or a tap toggles it, Down back to the buttons).
+- **What, button art:** every A B X Y, LB RB, LT RT, L3 R3, Start (Menu)
+  and Select (View) picture in Pegasus X is now the XBSX-Experience theme's
+  (`assets/images/controller/0-11.png` in luxureousproductions-bit/
+  XBSX-Experience main, copied byte for byte into `assets/gamepad/x360/`
+  under the names Pegasus X used). The old ones are kept in
+  `assets/gamepad/stock/` as the fallback for Gamepad layout. Prompt bars:
+  `RoundPromptBar` shows the pictures for all ten keys (it had them for
+  A B X Y only; LB / RB / LT / RT / Start / Select were drawn), 30 px as
+  A B X Y were, drawn shapes if a picture can't be loaded; the d-pad stays
+  drawn (the theme has no d-pad art). `PromptBar` (setup, RetroAchievements
+  messages) puts the same pictures in its text, the coloured keys if they
+  can't be loaded.
+- **What, controller picture:** `assets/gamepad/preview.png` (Gamepad
+  layout) is a new flat drawing of an Xbox Series layout controller: left
+  stick upper left, d-pad lower left, right stick lower right, A B X Y,
+  View / Guide / Menu, bumpers and triggers, no logo. Same style (light
+  grey body, dark parts, black outline), same 512 x 340, transparent; its
+  source `preview.svg` beside it. Every `fieldPoints` entry in
+  `GamepadPreview.qml` moved to the new spots.
+- **What, keyboard:** Pegasus X's own on-screen keyboard
+  (`OnScreenKeyboard.qml`) reskinned to the theme's keyboard look (its
+  dark palette): the theme's panel, key colours, rounded keys, Xbox green
+  focus frame, and its icons copied as they are (`assets/keyboard/kb_*.svg`:
+  LT, LB, L3, RB, Start badges, chevrons, shift, space, backspace, enter;
+  X / Y from the button art). Each icon falls back to the old words
+  (`KbGlyph.qml`). Not a port: the theme's keyboard owns its own text, and
+  the eleven screens that use Pegasus X's type into their own fields, with
+  suggestions; the layout, keys, buttons, touch and typing are unchanged.
+- **Not changed:** what any row opens, the setting keys, saved values,
+  defaults, file formats, the theme API, the library, launch commands; the
+  old signals of SettingsMain (kept); everything listed out of scope (Library
+  Options names, Scraper extra systems, RetroAchievements beyond the
+  pictures, setup wording, Help, button mapping, GameDirEditor).
+- **Tests:** test env: the main list (top / bottom), Advanced, Gamepad
+  layout, the updater's switch; Missing games shown for each pair of saved
+  values and picked both ways, with `settings.txt` read back after each.
+- **Files:** `src/frontend/menu/settings/SettingsMain.qml`,
+  `SettingsAdvanced.qml` (new), `SettingsScreen.qml`, `UpdateDialog.qml`,
+  `common/RoundPromptBar.qml`, `common/PromptBar.qml`,
+  `common/OnScreenKeyboard.qml`, `common/KbGlyph.qml` (new),
+  `gamepad/GamepadField.qml`, `gamepad/GamepadFooter.qml`,
+  `gamepad/GamepadPreview.qml`, `src/frontend/assets/gamepad/x360/*`
+  (12 theme files), `assets/gamepad/stock/*` (the old 12),
+  `assets/gamepad/preview.png`, `preview.svg` (new),
+  `assets/keyboard/*` (11 theme files), `src/frontend/frontend.qrc`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Settings regroup, XBSX button art, new controller picture, themed keyboard".
+
 ### Damaged-file recovery, build 1: safe saves for nine files
 
 - **What:** nine files were saved by writing straight into them (the old

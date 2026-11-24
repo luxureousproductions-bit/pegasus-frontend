@@ -20,7 +20,11 @@ import QtQuick 2.6
 
 // Pegasus X: Pegasus' own on-screen keyboard, laid out like XboxOSv2's (and
 // the Xbox one): a letter grid between two columns of command keys, with the
-// controller buttons drawn on them. Works with the controller and touch, and
+// controller buttons drawn on them. Its look is the XBSX-Experience theme's
+// keyboard (Global/VirtualKeyboard.qml there, dark palette): its colours,
+// rounded keys, the green focus frame, and its icons copied as they are
+// (assets/keyboard/kb_*.svg; X / Y: its button art). Each icon falls back to
+// the words the key had before if it can't be loaded (KbGlyph.qml). Works with the controller and touch, and
 // types into `target` (a TextInput or TextEdit) at its cursor, so Android's
 // keyboard never has to open.
 //
@@ -65,11 +69,19 @@ FocusScope {
     width: implicitWidth
     height: implicitHeight
 
-    // Pegasus' settings colours
-    readonly property color keyFill: "#333"
-    readonly property color keyFillCmd: "#3c3c3c"
-    readonly property color keyFillSel: "#3aa"
-    readonly property color textSel: "#111"
+    // the XBSX-Experience theme's keyboard look (its dark palette): solid
+    // keys, the focused one lighter with an Xbox green frame, white text
+    readonly property color panelColor: "#0D0D0D"
+    readonly property color keyFill: "#2B2B2B"      // letters, numbers
+    readonly property color keyFillCmd: "#3F3F3F"   // the command keys round them
+    readonly property color keyFillSel: "#6E6E6E"   // the focused key
+    readonly property color accent: "#107C10"       // its frame
+    readonly property color ink: "#FFFFFF"
+    readonly property real keyRadius: vpx(6)
+    readonly property real selBorder: vpx(3)
+    // its pictures: the theme's keyboard icons, and its button art for X / Y
+    readonly property string kbIcons: "qrc:/frontend/assets/keyboard/"
+    readonly property string buttonIcons: "qrc:/frontend/assets/gamepad/x360/"
 
     // -- Pages ------------------------------------------------------------------------
 
@@ -312,8 +324,9 @@ FocusScope {
 
     Rectangle {
         anchors.fill: parent
-        color: "#222"
-        border.color: "#555"
+        radius: vpx(8)
+        color: Qt.rgba(0.051, 0.051, 0.051, 0.94)   // panelColor at the theme's 0.94
+        border.color: Qt.rgba(1, 1, 1, 0.08)
         border.width: vpx(1)
         MouseArea { anchors.fill: parent }  // taps between keys stay here
     }
@@ -496,15 +509,16 @@ FocusScope {
                         readonly property bool highlighted: root.activeFocus && root.row === -1 && index === root.sugIndex
                         width: Math.min(sugText.implicitWidth + vpx(24), vpx(260))
                         height: sugBar.height
-                        color: highlighted ? root.keyFillSel : root.keyFill
-                        border.color: root.keyFillSel
-                        border.width: highlighted ? 0 : vpx(1)
+                        radius: vpx(4)
+                        color: highlighted ? root.keyFillSel : "transparent"
+                        border.color: root.accent
+                        border.width: highlighted ? root.selBorder : 0
                         Text {
                             id: sugText
                             width: Math.min(implicitWidth, vpx(236))
                             text: modelData
                             elide: Text.ElideRight
-                            color: parent.highlighted ? root.textSel : "#9dd"
+                            color: root.ink
                             font.family: globalFonts.sans
                             font.pixelSize: vpx(17)
                             anchors.centerIn: parent
@@ -530,24 +544,50 @@ FocusScope {
                         readonly property bool sel: root.selSide(true, modelData.slot)
                         width: root.sideW
                         height: root.keyH * modelData.h + root.keyGap * (modelData.h - 1)
+                        radius: root.keyRadius
                         color: sel ? root.keyFillSel : ((modelData.k === "CMD_SHIFT" && root.shifted) ? "#555" : root.keyFillCmd)
-                        Column {
+                        border.color: root.accent
+                        border.width: sel ? root.selBorder : 0
+                        // #+=  [LT]
+                        Row {
+                            visible: modelData.k === "CMD_PAGE"
                             anchors.centerIn: parent
-                            spacing: vpx(4)
+                            spacing: vpx(7)
                             Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: modelData.k === "CMD_PAGE" ? root.pageLabel : modelData.k === "CMD_LEFT" ? "‹" : "⇧"
-                                color: parent.parent.sel ? root.textSel : "#eee"
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: root.pageLabel
+                                color: root.ink
                                 font.family: globalFonts.sans
-                                font.pixelSize: modelData.k === "CMD_LEFT" ? vpx(34) : vpx(20)
-                                font.bold: modelData.k === "CMD_PAGE"
+                                font.pixelSize: vpx(17)
+                                font.bold: true
                             }
-                            Text {
+                            KbGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: vpx(23); height: vpx(25)
+                                source: root.kbIcons + "kb_badge_lt.svg"
+                                fallback: "LT"
+                            }
+                        }
+                        // <  [LB]   /   shift  [L3]
+                        Column {
+                            visible: modelData.k !== "CMD_PAGE"
+                            anchors.centerIn: parent
+                            spacing: vpx(8)
+                            KbGlyph {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: root.badgeText(modelData.k)
-                                color: parent.parent.sel ? root.textSel : "#9a9a9a"
-                                font.family: globalFonts.sans
-                                font.pixelSize: vpx(13)
+                                width: modelData.k === "CMD_LEFT" ? vpx(18) : vpx(24)
+                                height: modelData.k === "CMD_LEFT" ? vpx(32) : vpx(30)
+                                source: root.kbIcons + (modelData.k === "CMD_LEFT" ? "kb_chev_left.svg" : "kb_shift.svg")
+                                fallback: modelData.k === "CMD_LEFT" ? "‹" : "⇧"
+                                fallbackSize: modelData.k === "CMD_LEFT" ? vpx(34) : vpx(20)
+                                opacity: modelData.k === "CMD_SHIFT" && !root.shifted ? 0.85 : 1
+                            }
+                            KbGlyph {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: modelData.k === "CMD_LEFT" ? vpx(31) : vpx(22)
+                                height: modelData.k === "CMD_LEFT" ? vpx(22) : vpx(24)
+                                source: root.kbIcons + (modelData.k === "CMD_LEFT" ? "kb_badge_lb.svg" : "kb_badge_l3.svg")
+                                fallback: root.badgeText(modelData.k)
                             }
                         }
                         MouseArea {
@@ -572,11 +612,14 @@ FocusScope {
                                 readonly property bool sel: root.selCentre(parent.rowIndex, index)
                                 width: root.keyW
                                 height: root.keyH
+                                radius: root.keyRadius
                                 color: sel ? root.keyFillSel : root.keyFill
+                                border.color: root.accent
+                                border.width: sel ? root.selBorder : 0
                                 Text {
                                     anchors.centerIn: parent
                                     text: root.shifted ? modelData.toUpperCase() : modelData
-                                    color: parent.sel ? root.textSel : "#eee"
+                                    color: root.ink
                                     font.family: globalFonts.sans
                                     font.pixelSize: vpx(20)
                                 }
@@ -594,26 +637,30 @@ FocusScope {
                 }
                 Row {
                     spacing: root.keyGap
+                    // the space mark  [Y]
                     Rectangle {
                         readonly property bool sel: root.selSpace()
                         width: root.multiLine ? root.keyW * 8 + root.keyGap * 7 : root.gridW
                         height: root.keyH
+                        radius: root.keyRadius
                         color: sel ? root.keyFillSel : root.keyFillCmd
+                        border.color: root.accent
+                        border.width: sel ? root.selBorder : 0
                         Row {
                             anchors.centerIn: parent
                             spacing: vpx(10)
-                            Text {
-                                text: qsTr("space") + api.tr
-                                color: parent.parent.sel ? root.textSel : "#eee"
-                                font.family: globalFonts.sans
-                                font.pixelSize: vpx(18)
-                            }
-                            Text {
+                            KbGlyph {
                                 anchors.verticalCenter: parent.verticalCenter
-                                text: "Y"
-                                color: parent.parent.sel ? root.textSel : "#9a9a9a"
-                                font.family: globalFonts.sans
-                                font.pixelSize: vpx(13)
+                                width: vpx(32); height: vpx(9)
+                                source: root.kbIcons + "kb_space.svg"
+                                fallback: qsTr("space") + api.tr
+                                fallbackSize: vpx(18)
+                            }
+                            KbGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: vpx(22); height: vpx(22)
+                                source: root.buttonIcons + "y.png"
+                                fallback: "Y"
                             }
                         }
                         MouseArea {
@@ -626,11 +673,14 @@ FocusScope {
                         visible: root.multiLine
                         width: root.keyW * 2 + root.keyGap
                         height: root.keyH
+                        radius: root.keyRadius
                         color: sel ? root.keyFillSel : root.keyFillCmd
+                        border.color: root.accent
+                        border.width: sel ? root.selBorder : 0
                         Text {
                             anchors.centerIn: parent
                             text: "↵ " + qsTr("new line") + api.tr
-                            color: parent.sel ? root.textSel : "#eee"
+                            color: root.ink
                             font.family: globalFonts.sans
                             font.pixelSize: vpx(16)
                         }
@@ -651,25 +701,49 @@ FocusScope {
                         readonly property bool sel: root.selSide(false, modelData.slot)
                         width: root.sideW
                         height: root.keyH * modelData.h + root.keyGap * (modelData.h - 1)
-                        color: sel ? root.keyFillSel : (modelData.k === "CMD_DONE" ? "#555" : root.keyFillCmd)
-                        Column {
+                        radius: root.keyRadius
+                        color: sel ? root.keyFillSel : root.keyFillCmd
+                        border.color: root.accent
+                        border.width: sel ? root.selBorder : 0
+                        // backspace  [X]
+                        Row {
+                            visible: modelData.k === "CMD_DEL"
                             anchors.centerIn: parent
-                            spacing: vpx(4)
-                            Text {
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                text: modelData.k === "CMD_DEL" ? "← " + qsTr("del") + api.tr
-                                    : modelData.k === "CMD_RIGHT" ? "›" : qsTr("Done") + api.tr
-                                color: parent.parent.sel ? root.textSel : "#eee"
-                                font.family: globalFonts.sans
-                                font.pixelSize: modelData.k === "CMD_RIGHT" ? vpx(34) : vpx(18)
-                                font.bold: modelData.k === "CMD_DONE"
+                            spacing: vpx(8)
+                            KbGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: vpx(26); height: vpx(20)
+                                source: root.kbIcons + "kb_backspace.svg"
+                                fallback: "← " + qsTr("del") + api.tr
+                                fallbackSize: vpx(18)
                             }
-                            Text {
+                            KbGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: vpx(22); height: vpx(22)
+                                source: root.buttonIcons + "x.png"
+                                fallback: "X"
+                            }
+                        }
+                        // >  [RB]   /   done (the theme's enter)  [Start]
+                        Column {
+                            visible: modelData.k !== "CMD_DEL"
+                            anchors.centerIn: parent
+                            spacing: vpx(8)
+                            KbGlyph {
                                 anchors.horizontalCenter: parent.horizontalCenter
-                                text: root.badgeText(modelData.k)
-                                color: parent.parent.sel ? root.textSel : "#9a9a9a"
-                                font.family: globalFonts.sans
-                                font.pixelSize: vpx(13)
+                                width: modelData.k === "CMD_RIGHT" ? vpx(18) : vpx(32)
+                                height: modelData.k === "CMD_RIGHT" ? vpx(32) : vpx(26)
+                                source: root.kbIcons + (modelData.k === "CMD_RIGHT" ? "kb_chev_right.svg" : "kb_enter.svg")
+                                fallback: modelData.k === "CMD_RIGHT" ? "›" : qsTr("Done") + api.tr
+                                fallbackSize: modelData.k === "CMD_RIGHT" ? vpx(34) : vpx(18)
+                                fallbackBold: modelData.k === "CMD_DONE"
+                            }
+                            KbGlyph {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                width: modelData.k === "CMD_RIGHT" ? vpx(31) : vpx(20)
+                                height: modelData.k === "CMD_RIGHT" ? vpx(22) : vpx(20)
+                                source: root.kbIcons + (modelData.k === "CMD_RIGHT" ? "kb_badge_rb.svg" : "kb_badge_start.svg")
+                                fallback: root.badgeText(modelData.k)
                             }
                         }
                         MouseArea {
@@ -692,13 +766,17 @@ FocusScope {
                     readonly property bool sel: root.selClip(index)
                     width: (root.gridW - root.keyGap) / 2
                     height: root.keyH * 0.85
+                    radius: root.keyRadius
                     color: sel ? root.keyFillSel : root.keyFillCmd
+                    border.color: root.accent
+                    border.width: sel ? root.selBorder : 0
                     Text {
                         anchors.centerIn: parent
                         text: modelData.t
-                        color: parent.sel ? root.textSel : "#eee"
+                        color: root.ink
                         font.family: globalFonts.sans
                         font.pixelSize: vpx(16)
+                        font.bold: true
                     }
                     MouseArea {
                         anchors.fill: parent

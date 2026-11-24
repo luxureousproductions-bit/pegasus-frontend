@@ -34,6 +34,9 @@ FocusScope {
     readonly property string ustate: updater.state
     readonly property var info: updater.info
     property int choice: 0
+    // Pegasus X: the "check when Pegasus X starts" switch (it was a Settings
+    // row): Up goes to it, Down back to the buttons
+    property bool onSwitch: false
 
     Component.onCompleted: updater.check()
 
@@ -73,11 +76,16 @@ FocusScope {
         }
         else if (api.keys.isAccept(event)) {
             event.accepted = true;
-            act(buttons[Math.min(choice, buttons.length - 1)][1]);
+            if (onSwitch)
+                Internal.settings.checkUpdatesOnStart = !Internal.settings.checkUpdatesOnStart;
+            else
+                act(buttons[Math.min(choice, buttons.length - 1)][1]);
         }
     }
-    Keys.onLeftPressed: choice = Math.max(0, choice - 1)
-    Keys.onRightPressed: choice = Math.min(buttons.length - 1, choice + 1)
+    Keys.onUpPressed: onSwitch = true
+    Keys.onDownPressed: onSwitch = false
+    Keys.onLeftPressed: { onSwitch = false; choice = Math.max(0, choice - 1); }
+    Keys.onRightPressed: { onSwitch = false; choice = Math.min(buttons.length - 1, choice + 1); }
 
     function mb(bytes) { return (bytes / 1048576).toFixed(1); }
 
@@ -187,13 +195,69 @@ FocusScope {
             }
         }
 
+        // the automatic check (Settings' row before, the same setting)
+        Rectangle {
+            width: parent.width
+            height: autoText.height + vpx(18) * 1.5
+            color: root.onSwitch ? "#666" : "#4a4a4a"
+            Column {
+                id: autoText
+                anchors.left: parent.left
+                anchors.leftMargin: vpx(18)
+                anchors.right: autoValue.left
+                anchors.rightMargin: vpx(12)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: vpx(4)
+                Text {
+                    width: parent.width
+                    text: qsTr("Check for updates") + api.tr
+                    color: "#eee"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(18)
+                }
+                Text {
+                    width: parent.width
+                    text: qsTr("Pegasus X and your installed themes, when Pegasus X starts and every 6 hours. A note shows on the theme when something new is out; nothing is downloaded by itself.") + api.tr
+                    color: "#bbb"
+                    font.family: globalFonts.sans
+                    font.pixelSize: vpx(14)
+                    wrapMode: Text.WordWrap
+                }
+            }
+            Text {
+                id: autoValue
+                anchors.right: parent.right
+                anchors.rightMargin: vpx(18)
+                anchors.verticalCenter: parent.verticalCenter
+                text: (Internal.settings.checkUpdatesOnStart ? qsTr("On") : qsTr("Off")) + api.tr
+                color: Internal.settings.checkUpdatesOnStart ? "#6ad" : "#aaa"
+                font.family: globalFonts.sans
+                font.pixelSize: vpx(18)
+                font.bold: true
+            }
+            Rectangle {
+                visible: root.onSwitch
+                width: parent.width
+                height: vpx(3)
+                anchors.bottom: parent.bottom
+                color: "#4ae"
+            }
+            MouseArea {
+                anchors.fill: parent
+                onClicked: {
+                    root.onSwitch = true;
+                    Internal.settings.checkUpdatesOnStart = !Internal.settings.checkUpdatesOnStart;
+                }
+            }
+        }
+
         // button row
         Row {
             width: parent.width
             Repeater {
                 model: root.buttons
                 delegate: Rectangle {
-                    readonly property bool on: index === root.choice || buttonMouse.containsMouse
+                    readonly property bool on: (index === root.choice && !root.onSwitch) || buttonMouse.containsMouse
                     width: parent.width / root.buttons.length
                     height: vpx(18) * 2.25
                     color: on ? "#4ae" : "#666"

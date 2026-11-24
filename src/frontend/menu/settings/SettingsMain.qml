@@ -40,6 +40,7 @@ FocusScope {
     signal openAndroidSafSettings
     signal openProviderSettings
     signal reloadRequested
+    signal openAdvanced
 
     width: parent.width
     height: parent.height
@@ -73,41 +74,73 @@ FocusScope {
     }
 
 
+    // Pegasus X: 12 rows (Games, Look, Controls, Pegasus X, Advanced...); the
+    // rest on the Advanced page (SettingsAdvanced.qml). The screens behind the
+    // rows, and the settings themselves, are as they were.
     readonly property list<SettingsEntry> optionList: [
         SettingsEntry {
-            label: QT_TR_NOOP("Language")
-            type: SettingsEntry.Type.Select
-            selectBox: localeBox
-            selectValue: Internal.settings.locales.currentName
-            section: "general"
+            label: QT_TR_NOOP("Game directory...")
+            desc: QT_TR_NOOP("Your systems and where their games are: pick systems, then the ROM folder they're in, or import a gamelist. Pegasus X keeps one metadata file per system in its own folder; your ROM folders are only read.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openGameDirSettings
+            section: "games"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Library...")
+            desc: QT_TR_NOOP("Your collections and games: edit their details, art and emulators, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openMetadataEditor
+            section: "games"
+            enabled: Internal.settings.esdeImportSupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Scraper...")
+            desc: QT_TR_NOOP("Your games' details and art from ScreenScraper or LaunchboxDB: sources, content, pictures, accounts, and scraping the whole library.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openScraper
+            section: "games"
+            enabled: Internal.settings.esdeImportSupported
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("RetroAchievements...")
+            desc: QT_TR_NOOP("Your games found on RetroAchievements by their ROM's hash, and your progress on them. Themes read the result (game.extra[\"ra-id\"]...).")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openRetroAchievements
+            section: "games"
+            enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
             label: QT_TR_NOOP("Theme")
             type: SettingsEntry.Type.Select
             selectBox: themeBox
             selectValue: Internal.settings.themes.currentName
-            section: "general"
+            section: "look"
         },
         SettingsEntry {
             label: QT_TR_NOOP("Theme downloader...")
             desc: QT_TR_NOOP("Browse the Pegasus theme gallery with pictures, install and update themes, or add one from a GitHub link.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openThemeDownloader
-            section: "general"
+            section: "look"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Fullscreen mode")
-            desc: QT_TR_NOOP("On some platforms this setting may have no effect.")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.fullscreen
-            boolSetter: (val) => Internal.settings.fullscreen = val
-            section: "general"
+            label: QT_TR_NOOP("Language")
+            type: SettingsEntry.Type.Select
+            selectBox: localeBox
+            selectValue: Internal.settings.locales.currentName
+            section: "look"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Pegasus X folder...")
-            desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
+            label: QT_TR_NOOP("Change controls...")
             type: SettingsEntry.Type.Button
-            buttonAction: root.openRootFolder
+            buttonAction: root.openKeySettings
+            section: "controls"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Check for updates...")
+            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openUpdater
             section: "pegasusx"
         },
         SettingsEntry {
@@ -118,21 +151,6 @@ FocusScope {
             section: "pegasusx"
         },
         SettingsEntry {
-            label: QT_TR_NOOP("Check for updates...")
-            desc: QT_TR_NOOP("Download and install the newest Pegasus X build, over this one: your settings, library and themes stay.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openUpdater
-            section: "pegasusx"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Check for updates")
-            desc: QT_TR_NOOP("Pegasus X and your installed themes, when Pegasus X starts and every 6 hours. A note shows on the theme when something new is out; nothing is downloaded by itself.")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.checkUpdatesOnStart
-            boolSetter: (val) => Internal.settings.checkUpdatesOnStart = val
-            section: "pegasusx"
-        },
-        SettingsEntry {
             label: QT_TR_NOOP("Accurate play times...")
             desc: QT_TR_NOOP("Allow Usage access so play times count only the time the emulator was really in front.")
             type: SettingsEntry.Type.Button
@@ -140,102 +158,14 @@ FocusScope {
             section: "pegasusx"
             enabled: Qt.platform.os === "android"
         },
-
+        // Pegasus X: everything else (the folder, scanning, data sources,
+        // gamepad layout, mouse, fullscreen) is on the Advanced page
         SettingsEntry {
-            label: QT_TR_NOOP("Change controls...")
+            label: QT_TR_NOOP("Advanced...")
+            desc: QT_TR_NOOP("Pegasus X folder, Android directories, scanning, missing games, data sources, reloading, gamepad layout, mouse and fullscreen.")
             type: SettingsEntry.Type.Button
-            buttonAction: root.openKeySettings
-            section: "controls"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Change gamepad layout...")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openGamepadSettings
-            section: "controls"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Enable mouse support")
-            desc: QT_TR_NOOP("By default the cursor is visible if there are any pointer devices connected.")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.mouseSupport
-            boolSetter: (val) => Internal.settings.mouseSupport = val
-            section: "controls"
-        },
-
-        SettingsEntry {
-            label: QT_TR_NOOP("Game directory...")
-            desc: QT_TR_NOOP("Your systems and where their games are: pick systems, then the ROM folder they're in, or import a gamelist. Pegasus X keeps one metadata file per system in its own folder; your ROM folders are only read.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openGameDirSettings
-            section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Library...")
-            desc: QT_TR_NOOP("Your collections and games: edit their details, art and emulators, hide what you don't want to see, keep Android sorted. Saved in Pegasus metadata files, so every theme shows it.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openMetadataEditor
-            section: "gaming"
-            enabled: Internal.settings.esdeImportSupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Scraper...")
-            desc: QT_TR_NOOP("Your games' details and art from ScreenScraper or LaunchboxDB: sources, content, pictures, accounts, and scraping the whole library.")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openScraper
-            section: "gaming"
-            enabled: Internal.settings.esdeImportSupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("RetroAchievements...")
-            desc: QT_TR_NOOP("Your games found on RetroAchievements by their ROM's hash, and your progress on them. Themes read the result (game.extra[\"ra-id\"]...).")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openRetroAchievements
-            section: "gaming"
-            enabled: Internal.settings.esdeImportSupported
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Accessible Android directories...")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openAndroidSafSettings
-            section: "gaming"
-            enabled: Qt.platform.os === "android"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Scan for games on launch")
-            desc: QT_TR_NOOP("Read every game folder each time Pegasus X starts. Off: the saved game list is used, and read again by itself when a game folder or metadata file changes (starts faster).")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.scanOnLaunch
-            boolSetter: (val) => Internal.settings.scanOnLaunch = val
-            section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Validate game files")
-            desc: QT_TR_NOOP("Check the game files and only show games that actually exist. You can disable this to improve loading times.")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.verifyFiles
-            boolSetter: (val) => Internal.settings.verifyFiles = val
-            section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Show missing games")
-            desc: QT_TR_NOOP("Show all detected games, including those that may not exist.")
-            type: SettingsEntry.Type.Bool
-            boolValue: Internal.settings.showMissingGames
-            boolSetter: (val) => Internal.settings.showMissingGames = val
-            section: "gaming"
-            enabled: Internal.settings.verifyFiles
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Enable/disable data sources...")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.openProviderSettings
-            section: "gaming"
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Reload all games")
-            type: SettingsEntry.Type.Button
-            buttonAction: root.reloadRequested
-            section: "gaming"
+            buttonAction: root.openAdvanced
+            section: "advanced"
         }
     ]
 
@@ -280,10 +210,11 @@ FocusScope {
             required property string section
 
             readonly property string trText: switch (section) {
-                case "general": return QT_TR_NOOP("General");
+                case "games": return QT_TR_NOOP("Games");
+                case "look": return QT_TR_NOOP("Look");
                 case "controls": return QT_TR_NOOP("Controls");
-                case "gaming": return QT_TR_NOOP("Gaming");
                 case "pegasusx": return QT_TR_NOOP("Pegasus X");
+                default: return "";  // Advanced...: a gap, no title
             }
 
             text: qsTr(trText) + api.tr

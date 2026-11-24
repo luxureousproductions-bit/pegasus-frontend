@@ -125,7 +125,71 @@ start 02-settings "menu/settings/SettingsScreen.qml" 6
 shot 02-settings-top
 keys Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down Down
 shot 02-settings-bottom
+# Advanced... (the last row) and the updater's own switch (Check for updates: 3 rows up)
+keys Return
+sleep 1
+shot 02-settings-advanced
+# Gamepad layout (no pad here: its button pictures on the footer only)
+keys Down Down Down Down Down Down Return
+sleep 2
+shot 02-gamepad-layout
+keys Escape
+sleep 1
+shot 02-settings-advanced-back
+keys Escape
+sleep 1
+keys Up Up Up Return
+sleep 2
+keys Up
+shot 02-settings-updater
+keys Escape
 stop 02-settings
+# Missing games: the two settings there were, shown and set as one choice. Each
+# pair written into settings.txt, then what Advanced shows; then picked, then
+# what settings.txt has
+set_general() {
+    python3 - "$CFG/settings.txt" "$1" "$2" <<'PY'
+import sys, re
+path, key, value = sys.argv[1:4]
+try:
+    text = open(path, encoding="utf-8").read()
+except FileNotFoundError:
+    text = ""
+line = "general.%s: %s" % (key, value)
+if re.search(r"^general\.%s:.*$" % re.escape(key), text, re.M):
+    text = re.sub(r"^general\.%s:.*$" % re.escape(key), line, text, flags=re.M)
+else:
+    text = text.rstrip("\n") + "\n" + line + "\n"
+open(path, "w", encoding="utf-8").write(text)
+PY
+}
+missing_state() { grep -E "^general\.(verify-files|show-missing-games):" "$CFG/settings.txt" | sort | tr '\n' ' '; }
+cp "$CFG/settings.txt" "$R/files/settings-before-missing.txt" 2>/dev/null
+for pair in "true false hide" "true true show" "false false dontcheck" "false true dontcheck-show"; do
+    set -- $pair
+    set_general verify-files "$1"; set_general show-missing-games "$2"
+    start "02-missing-$3" "menu/settings/SettingsAdvanced.qml" 5
+    shot "02-missing-$3"
+    stop "02-missing-$3"
+    echo "$3: written $(missing_state)" >> "$R/files/missing-games.txt"
+done
+# picked: Hide -> Show, then Show -> Don't check (show-missing-games stays as it is)
+set_general verify-files true; set_general show-missing-games false
+start 02-missing-pick "menu/settings/SettingsAdvanced.qml" 5
+keys Down Down Down Return
+sleep 1
+shot 02-missing-box
+keys Down Return
+sleep 1
+echo "picked Show: $(missing_state)" >> "$R/files/missing-games.txt"
+keys Return
+sleep 1
+keys Down Return
+sleep 1
+echo "picked Don't check: $(missing_state)" >> "$R/files/missing-games.txt"
+shot 02-missing-picked
+stop 02-missing-pick
+cp "$R/files/settings-before-missing.txt" "$CFG/settings.txt" 2>/dev/null
 
 # -- 3. Library: collections, a collection, a game -------------------------------------
 start 03-library "menu/settings/MetadataEditor.qml" 6
@@ -776,6 +840,10 @@ PY
     sed 's/^/        /' "$R/files/after-start-over-files.txt" | head -n 30
     if [ -s "$R/files/backups-after-start-over.txt" ]; then echo "    OK: the backup in Download is still there"; else echo "    FAILED: the backup in Download is gone"; fi
     echo "    (screenshots: 15-backup-*, 15-setup-again, 15-wipe-*, 15-after-start-over)"
+    echo
+    echo "## Settings > Advanced: Missing games (verify-files / show-missing-games)"
+    sed 's/^/    /' "$R/files/missing-games.txt" 2>/dev/null
+    echo "    (what Advanced showed for each: screenshots 02-missing-*)"
     echo
     echo "## Library as read (last start)"
     strip_ansi "$R/logs/10-theme.stdout" | grep -E "Metafiles: Found|games found|Overrides:|Imports \(|Library:|Wrote|Kept|Set aside|Made the paths" | sed 's/^/    /' | head -n 40
