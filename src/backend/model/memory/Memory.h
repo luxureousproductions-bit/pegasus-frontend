@@ -36,6 +36,9 @@ public:
     Q_INVOKABLE void unset(const QString&);
 
     void changeTheme(const QString&);
+    /// Pegasus X: Start over deleted the theme settings: what's held here goes
+    /// too, and nothing is written again until the next theme is loaded
+    void forget();
 
 public slots:
     /// Pegasus X: writes pending changes now (before a game starts, when

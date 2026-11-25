@@ -96,6 +96,10 @@ EsdeImportResult esde_import(const QString& esde_dir, const QStringList& system_
 
 /// The systems with games in a folder (by its name or its folders' names)
 std::vector<EsdeImportSystem> rom_folder_systems(const QString& folder);
+/// The folders in a ROM folder that aren't one of its systems: (folder name,
+/// "name": not a system's folder name; else the system it's named for, with
+/// none of its games in it by file type). Never guessed further.
+std::vector<std::pair<QString, QString>> rom_folder_unmatched(const QString& folder);
 /// Every system known (ES-DE's list and your custom ones): for picking
 /// systems before a ROM folder
 struct KnownSystem {

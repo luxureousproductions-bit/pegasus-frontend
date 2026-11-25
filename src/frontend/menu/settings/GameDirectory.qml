@@ -33,6 +33,11 @@ FocusScope {
 
     property string page: "main"     // main, add, found, folders
     property bool addOnly: false     // opened for Add systems alone (the first-start setup)
+    // Pick my ROMs folder (folder first): the folder, then every system found
+    // in it, ticked; folders that aren't one listed, never guessed. In setup
+    // (addOnly) the folder picker opens at once, and B / Cancel goes back to it.
+    property bool folderFirst: false
+    property var unmatched: []       // Settings.unmatchedRomFolders
     property string message: ""
     property bool changed: false     // the library is read again on the way out
     property bool working: false
@@ -57,9 +62,13 @@ FocusScope {
 
     Component.onCompleted: {
         refresh();
-        if (addOnly)
+        if (addOnly && folderFirst)
+            addRomFolder();
+        else if (addOnly)
             openAdd();
     }
+    // folder first, in setup: nothing added, back to setup
+    readonly property bool folderOnly: addOnly && folderFirst
 
     function refresh() {
         systems = Internal.settings.gameDirectorySystems();
@@ -96,6 +105,7 @@ FocusScope {
     function addRomFolder() {
         picked = {};
         folderFor = "";
+        unmatched = [];
         filePicker.openAt(Internal.settings.lastBrowseFolder);
         filePicker.focus = true;
     }
@@ -125,6 +135,10 @@ FocusScope {
     function showMatches(folder) {
         romFolder = folder;
         matches = Internal.settings.matchSystems(folder, Object.keys(picked));
+        // folder first: the folders in it that aren't a system, listed
+        unmatched = pickedCount === 0 ? Internal.settings.unmatchedRomFolders(folder) : [];
+        console.log("Game directory: Pick my ROMs folder " + folder + ": " + matches.length + " systems found, "
+                    + unmatched.length + " folders not matched");
         // every system found is ticked to start with; untick what shouldn't come in
         var t = {};
         for (var i = 0; i < matches.length; i++)
@@ -134,6 +148,17 @@ FocusScope {
         message = "";
         list.currentIndex = 0;
         list.positionViewAtBeginning();
+        if (pickedCount === 0)
+            list.jumpTo(false);  // (folder first: Select all, the first row that can be chosen)
+    }
+    // folder first: every system found ticked, or none
+    function tickAll(on) {
+        var t = {};
+        if (on) {
+            for (var i = 0; i < matches.length; i++)
+                if (matches[i].games > 0) t[matches[i].name] = true;
+        }
+        keepPosition(function() { ticked = t; });
     }
     function toggleTicked(name) {
         var next = Object.assign({}, ticked);
@@ -184,7 +209,12 @@ FocusScope {
                     root.matches = Internal.settings.matchSystems(root.romFolder, Object.keys(root.picked));
             });
             if (root.page === "found" && root.foundCount > 0) {
-                // the systems are in: back to the list
+                // the systems are in: back to the list (setup: back to setup)
+                if (root.folderOnly) {
+                    root.changed = true;
+                    root.close();
+                    return;
+                }
                 root.page = "main";
                 root.list_top();
             }
@@ -286,6 +316,8 @@ FocusScope {
             filePicker.focus = false;
             folderKey = "";
             list.focus = true;
+            if (folderOnly && page !== "found")
+                root.close();  // (setup: nothing picked, nothing added)
             return;
         }
         if (page === "folders") {
@@ -305,6 +337,13 @@ FocusScope {
             return;
         }
         if (page === "found") {
+            if (working)
+                return;  // (the import is under way: it ends here)
+            // Cancel: nothing added (folder first in setup: back to setup)
+            if (folderOnly && pickedCount === 0) {
+                root.close();
+                return;
+            }
             page = pickedCount > 0 ? "add" : "main";
             message = "";
             list_top();
@@ -316,7 +355,8 @@ FocusScope {
             list_top();
             return;
         }
-        if (changed)
+        // (setup reads the library itself, when it's ready for it)
+        if (changed && !addOnly)
             Internal.settings.reloadLibrary();
         root.close();
     }
@@ -334,6 +374,7 @@ FocusScope {
         id: header
         text: (root.page === "main" ? qsTr("Settings > Game directory")
              : root.page === "folders" && root.folderSystem ? qsTr("Game directory > %1").arg(root.folderSystem.name)
+             : root.page === "found" && root.pickedCount === 0 ? qsTr("Game directory > Pick my ROMs folder")
              : qsTr("Game directory > Add systems")) + api.tr
         z: 2
     }
@@ -383,7 +424,7 @@ FocusScope {
                 for (i = 0; i < root.systems.length; i++)
                     total += root.systems[i].games;
                 out.push({ "kind": "section", "text": qsTr("PegasusX/gamedirectory · %1 systems · %2 games").arg(root.systems.length).arg(total) + api.tr });
-                out.push({ "kind": "addfolder", "text": qsTr("Add a ROM folder...") + api.tr, "value": qsTr("every system found in it ›") + api.tr });
+                out.push({ "kind": "addfolder", "text": qsTr("Pick my ROMs folder...") + api.tr, "value": qsTr("finds the systems in it ›") + api.tr });
                 out.push({ "kind": "add", "text": qsTr("Add systems...") + api.tr, "value": qsTr("pick systems, then their ROM folder ›") + api.tr });
                 out.push({ "kind": "esde", "text": qsTr("Import gamelist...") + api.tr, "value": qsTr("ES-DE: details, art, emulators") + api.tr,
                            "muted": !Internal.settings.esdeImportSupported });
@@ -436,6 +477,27 @@ FocusScope {
             }
             // found
             out.push({ "kind": "section", "text": qsTr("ROM folder: %1 · A ticks a system").arg(root.romFolder) + api.tr });
+            // Pick my ROMs folder (folder first): its systems, all ticked; the
+            // folders that aren't one listed; nothing found said plainly
+            if (root.pickedCount === 0) {
+                var found = 0;
+                for (i = 0; i < root.matches.length; i++)
+                    if (root.matches[i].games > 0) found++;
+                if (found === 0) {
+                    out.push({ "kind": "info", "text": qsTr("No systems found in this folder: none of its folders is named like a system (snes, psx, gba, ...) with that system's games in it. Pick the folder that has your system folders, or tick your systems and pick each one's folder.") + api.tr, "value": "" });
+                    if (root.unmatched.length > 0)
+                        out.push({ "kind": "section", "text": qsTr("Folders in it (not added)") + api.tr });
+                    for (i = 0; i < root.unmatched.length; i++)
+                        out.push({ "kind": "info", "text": root.unmatchedText(root.unmatched[i]), "value": "" });
+                    out.push({ "kind": "section", "text": qsTr("What now") + api.tr });
+                    out.push({ "kind": "pickagain", "text": qsTr("Pick another folder...") + api.tr, "value": "" });
+                    out.push({ "kind": "tickinstead", "text": qsTr("Tick my systems instead...") + api.tr, "value": "" });
+                    out.push({ "kind": "cancel", "text": qsTr("Cancel") + api.tr, "value": qsTr("nothing added") + api.tr });
+                    return out;
+                }
+                out.push({ "kind": "selall", "text": qsTr("Select all") + api.tr, "value": qsTr("%1 systems").arg(found) + api.tr });
+                out.push({ "kind": "deselall", "text": qsTr("Deselect all") + api.tr, "value": "" });
+            }
             if (root.matches.length === 0)
                 out.push({ "kind": "info", "text": qsTr("No system folders found here (they're named like snes, psx, gba). Pick the folder that has them, or use Add systems and pick each folder.") + api.tr, "value": "" });
             var matchesAz = az(root.matches, "fullName");
@@ -454,10 +516,17 @@ FocusScope {
                                "value": qsTr("no folder called %1 here · A picks one").arg(m.folderName || m.name) + api.tr, "warn": true });
                 }
             }
+            if (root.pickedCount === 0 && root.unmatched.length > 0) {
+                out.push({ "kind": "section", "text": qsTr("Not added: %1 folders that aren't a system").arg(root.unmatched.length) + api.tr });
+                for (i = 0; i < root.unmatched.length; i++)
+                    out.push({ "kind": "info", "text": root.unmatchedText(root.unmatched[i]), "value": "" });
+            }
             out.push({ "kind": "section", "text": qsTr("What happens") + api.tr });
             out.push({ "kind": "info", "text": qsTr("The games go into gamedirectory/<system>. Your own metadata file is read once (its details and art first) and never written to. A media folder's art is linked by path. Games already in the directory keep what they have.") + api.tr, "value": "" });
             out.push({ "kind": "import", "text": root.working ? qsTr("Reading...") + api.tr
                        : (root.foundCount === 1 ? qsTr("Import 1 system") : qsTr("Import %1 systems").arg(root.foundCount)) + api.tr, "value": "" });
+            if (root.pickedCount === 0)
+                out.push({ "kind": "cancel", "text": qsTr("Cancel") + api.tr, "value": qsTr("nothing added") + api.tr });
             return out;
         }
         model: rows
@@ -529,6 +598,11 @@ FocusScope {
             else if (row.kind === "pick") root.togglePicked(row.name);
             else if (row.kind === "match") { if (row.entry.games > 0) root.toggleTicked(row.entry.name); else root.pickFolderFor(row.entry.name); }
             else if (row.kind === "import") root.importFound();
+            else if (row.kind === "selall") root.tickAll(true);
+            else if (row.kind === "deselall") root.tickAll(false);
+            else if (row.kind === "pickagain") root.addRomFolder();
+            else if (row.kind === "tickinstead") root.openAdd();
+            else if (row.kind === "cancel") root.back();
         }
         Keys.onPressed: {
             if (pageKeys(event))
@@ -665,6 +739,12 @@ FocusScope {
         }
     }
 
+    // a folder not added, and why
+    function unmatchedText(u) {
+        return u.system === ""
+            ? qsTr("%1 · not a system's folder name").arg(u.folder) + api.tr
+            : qsTr("%1 · named for %2, but none of its games are in it").arg(u.folder).arg(u.system) + api.tr;
+    }
     function shortFolder(path) {
         var p = String(path || "").replace(/\/+$/, "");
         var parts = p.split("/");
@@ -679,6 +759,7 @@ FocusScope {
             : root.page === "main" ? qsTr("A rescan / remove · Y remove · LT / RT top / bottom · B back") + api.tr
             : root.page === "folders" ? qsTr("A remove a folder / add one · B back") + api.tr
             : root.page === "add" ? qsTr("A tick · LT / RT top / bottom · B back") + api.tr
+            : root.pickedCount === 0 ? qsTr("A tick · Import is at the bottom · LT / RT top / bottom · B cancel") + api.tr
             : qsTr("A tick a system or pick the folder · Import is at the bottom · B back") + api.tr
         anchors.bottom: parent.bottom
         anchors.left: parent.left

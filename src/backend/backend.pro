@@ -26,6 +26,7 @@ SOURCES += \
     Updater.cpp \
     BackupReset.cpp \
     Recovery.cpp \
+    SetupState.cpp \
     SafeFile.cpp \
     Scraper.cpp \
     LaunchBoxDb.cpp \
@@ -48,6 +49,7 @@ HEADERS += \
     Updater.h \
     BackupReset.h \
     Recovery.h \
+    SetupState.h \
     SafeFile.h \
     Scraper.h \
     LaunchBoxDb.h \

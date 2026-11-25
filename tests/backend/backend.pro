@@ -4,6 +4,7 @@ SUBDIRS += \
     api \
     backup \
     recovery \
+    setupstate \
     safefile \
     scraper \
     configfile \

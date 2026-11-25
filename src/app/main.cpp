@@ -20,6 +20,7 @@
 #include "backend/Log.h"
 #include "backend/Paths.h"
 #include "backend/Recovery.h"
+#include "backend/SetupState.h"
 #include "backend/platform/TerminalKbd.h"
 
 #include <QCommandLineParser>
@@ -104,6 +105,9 @@ int main(int argc, char *argv[])
     recovery::run_root();
     const QStringList stale_locks = clear_stale_settings_locks();
     recovery::run_all();
+    // Pegasus X: is first-start setup done (SetupState.h)? Decided once, here,
+    // before the backend starts (while it isn't, no theme loads)
+    setupstate::session() = setupstate::decide(setupstate::dirs());
 
     int result = 0;
     {
@@ -117,6 +121,7 @@ int main(int argc, char *argv[])
             else
                 Log::warning(LOGMSG("%1").arg(line));
         }
+        Log::info(LOGMSG("%1").arg(setupstate::session().log));
         backend.start();
         result = app.exec();
 

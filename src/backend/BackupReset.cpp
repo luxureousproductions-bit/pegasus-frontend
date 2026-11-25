@@ -805,31 +805,40 @@ std::vector<Named> wipe_names(const Places& places)
     const auto add = [&out](const QString& base, const QString& name, const QString& what) {
         out.push_back({ &base, name, what });
     };
-    // the Pegasus X folder
-    add(places.data, QStringLiteral("pegasusx.ini"), QStringLiteral("Pegasus X settings and logins"));
-    add(places.data, QStringLiteral("settings.txt"), QStringLiteral("Settings (theme, language, controls)"));
-    add(places.data, QStringLiteral("game_dirs.txt"), QStringLiteral("Game folders list"));
-    add(places.data, QStringLiteral("sdl_controllers.txt"), QStringLiteral("Gamepad layouts"));
-    add(places.data, QStringLiteral("favorites.txt"), QStringLiteral("Favorites"));
-    add(places.data, QStringLiteral("stats.db"), QStringLiteral("Play time"));
-    add(places.data, QStringLiteral("pegasusx-hidden.json"), QStringLiteral("Hidden games and collections"));
-    add(places.data, QStringLiteral("pegasusx-android-kinds.json"), QStringLiteral("Android sections"));
-    add(places.data, QStringLiteral("pegasusx-android-apps.json"), QStringLiteral("Android apps to import"));
-    add(places.data, QStringLiteral("pegasusx-emulators.json"), QStringLiteral("Emulator choices"));
-    add(places.data, QStringLiteral("pegasusx-rom-folders.txt"), QStringLiteral("ROM folder list (not the ROMs)"));
-    add(places.data, QStringLiteral("pegasusx-themes"), QStringLiteral("Theme store records (not the themes)"));
-    add(places.data, QStringLiteral("gamedirectory"), QStringLiteral("Game directory (each system's metadata)"));
-    add(places.data, QStringLiteral("metadata"), QStringLiteral("Edits, imports, Needs your check, RetroAchievements matches"));
-    add(places.data, QStringLiteral("metafiles"), QStringLiteral("Older edits"));
-    add(places.data, QStringLiteral("imported"), QStringLiteral("Copies of ES-DE gamelists (not ES-DE's own)"));
-    add(places.data, QStringLiteral("theme_settings"), QStringLiteral("Theme options saved through Pegasus"));
-    add(places.data, QStringLiteral("downloaded_media"), QStringLiteral("Scraped art"));
-    add(places.data, QStringLiteral("backup"), QStringLiteral("Backups made before changes"));
-    add(places.data, QStringLiteral("launchbox"), QStringLiteral("LaunchboxDB download"));
-    add(places.data, QStringLiteral("esde-lists"), QStringLiteral("Downloaded emulator list"));
+    // the Pegasus X folder, and the app's own folder when that isn't it: what
+    // was there before an App Data Folder was picked (copied, not moved, then)
+    const bool apart = !places.priv.isEmpty() && canonical_or_clean(places.priv) != canonical_or_clean(places.data);
+    const auto add_data = [&add](const QString& base, const QString& note) {
+        add(base, QStringLiteral("pegasusx.ini"), QStringLiteral("Pegasus X settings and logins") + note);
+        add(base, QStringLiteral("settings.txt"), QStringLiteral("Settings (theme, language, controls)") + note);
+        add(base, QStringLiteral("game_dirs.txt"), QStringLiteral("Game folders list") + note);
+        add(base, QStringLiteral("sdl_controllers.txt"), QStringLiteral("Gamepad layouts") + note);
+        add(base, QStringLiteral("favorites.txt"), QStringLiteral("Favorites") + note);
+        add(base, QStringLiteral("stats.db"), QStringLiteral("Play time") + note);
+        add(base, QStringLiteral("pegasusx-hidden.json"), QStringLiteral("Hidden games and collections") + note);
+        add(base, QStringLiteral("pegasusx-android-kinds.json"), QStringLiteral("Android sections") + note);
+        add(base, QStringLiteral("pegasusx-android-apps.json"), QStringLiteral("Android apps to import") + note);
+        add(base, QStringLiteral("pegasusx-emulators.json"), QStringLiteral("Emulator choices") + note);
+        add(base, QStringLiteral("pegasusx-rom-folders.txt"), QStringLiteral("ROM folder list (not the ROMs)") + note);
+        add(base, QStringLiteral("pegasusx-themes"), QStringLiteral("Theme store records (not the themes)") + note);
+        add(base, QStringLiteral("gamedirectory"), QStringLiteral("Game directory (each system's metadata)") + note);
+        add(base, QStringLiteral("metadata"), QStringLiteral("Edits, imports, Needs your check, RetroAchievements matches") + note);
+        add(base, QStringLiteral("metafiles"), QStringLiteral("Older edits") + note);
+        add(base, QStringLiteral("imported"), QStringLiteral("Copies of ES-DE gamelists (not ES-DE's own)") + note);
+        add(base, QStringLiteral("theme_settings"), QStringLiteral("Theme options saved through Pegasus") + note);
+        add(base, QStringLiteral("downloaded_media"), QStringLiteral("Scraped art") + note);
+        add(base, QStringLiteral("backup"), QStringLiteral("Backups made before changes") + note);
+        add(base, QStringLiteral("launchbox"), QStringLiteral("LaunchboxDB download") + note);
+        add(base, QStringLiteral("esde-lists"), QStringLiteral("Downloaded emulator list") + note);
+    };
+    add_data(places.data, QString());
+    if (apart)
+        add_data(places.priv, QStringLiteral(" (an older copy in the app's folder)"));
     // app storage: setup, the GitHub token
     add(places.priv, QStringLiteral("pegasusx-wizard"), QStringLiteral("Setup progress"));
-    add(places.priv, QStringLiteral("pegasusx-root-asked"), QStringLiteral("Setup done marker"));
+    add(places.priv, QStringLiteral("pegasusx-root-asked"), QStringLiteral("Setup done marker (older builds)"));
+    add(places.app_data, QStringLiteral("pegasusx-setup-done"), QStringLiteral("Setup done marker"));
+    add(places.app_data, QStringLiteral("pegasusx-setup-step"), QStringLiteral("Setup progress"));
     add(places.app_data, QStringLiteral("pegasusx-private.ini"), QStringLiteral("GitHub token"));
     // caches
     add(places.cache, QStringLiteral("gameindex-v1.json"), QStringLiteral("Game list cache"));
@@ -848,6 +857,8 @@ std::vector<Named> wipe_names(const Places& places)
                               "pegasusx-android-kinds.json", "pegasusx-android-apps.json",
                               "pegasusx-emulators.json", "pegasusx-rom-folders.txt" }) {
         add(places.data, QLatin1String(name) + QLatin1String(".pxgood"), good_what.arg(QLatin1String(name)));
+        if (apart)
+            add(places.priv, QLatin1String(name) + QLatin1String(".pxgood"), good_what.arg(QLatin1String(name)));
     }
     add(places.app_data, QStringLiteral("pegasusx-private.ini.pxgood"), good_what.arg(QStringLiteral("pegasusx-private.ini")));
     add(places.data, QStringLiteral("damaged"), QStringLiteral("Damaged files moved aside"));

@@ -270,6 +270,10 @@ Backend::Backend(const CliArgs& args)
     // Pegasus X: hidden games and the like only need the cached list read again
     QObject::connect(m_api_private->settingsPtr(), &model::Settings::libraryReloadRequested,
                      [this](){ onScanRequested(false); });
+    // Pegasus X: Start over deleted the theme settings: the ones held in
+    // memory go too, so nothing writes them back before Pegasus X starts again
+    QObject::connect(m_api_private->settingsPtr(), &model::Settings::dataWiped,
+                     [this](){ m_api_public->memory().forget(); });
 
     QObject::connect(m_api_public, &model::ApiObject::favoritesChanged,
                      [this](){ onFavoritesChanged(); });
@@ -299,6 +303,12 @@ void Backend::start()
     m_api_private->settings().postInit();
     sessionRecover();
     onProcessFinished();
+    // Pegasus X: while first-start setup is open, the library is read when it
+    // asks (its last step, or when it's finished), not now
+    if (m_api_private->settings().setupActive()) {
+        Log::info(LOGMSG("Setup: open: the library is read when setup asks for it"));
+        return;
+    }
     onScanRequested(AppSettings::general.scan_on_launch);
 }
 

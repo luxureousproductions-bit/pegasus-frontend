@@ -2423,6 +2423,27 @@ std::vector<EsdeImportSystem> rom_folder_systems(const QString& folder)
     return out;
 }
 
+std::vector<std::pair<QString, QString>> rom_folder_unmatched(const QString& folder)
+{
+    std::vector<std::pair<QString, QString>> out;
+    const ImportSetup setup = rom_folder_setup();
+    const QString clean = QDir::cleanPath(folder);
+    // the folder is one system's itself: nothing in it to list
+    if (!system_of_folder(setup, QFileInfo(clean).fileName()).isEmpty())
+        return out;
+    for (const QFileInfo& sub : QDir(clean).entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot | QDir::Readable, QDir::Name)) {
+        const QString name = system_of_folder(setup, sub.fileName());
+        if (name.isEmpty()) {
+            out.emplace_back(sub.fileName(), QStringLiteral("name"));
+            continue;
+        }
+        const EsdeSystem& sys = setup.systems.at(name);
+        if (quick_game_count(sub.absoluteFilePath(), parse_extensions(sys.extensions)) == 0)
+            out.emplace_back(sub.fileName(), sys.fullname.isEmpty() ? name : sys.fullname);
+    }
+    return out;
+}
+
 EsdeImportResult rom_folder_import(const QString& folder, const std::function<void(int, int, const QString&)>& progress)
 {
     const ImportSetup setup = rom_folder_setup();

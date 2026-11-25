@@ -42,6 +42,7 @@
 #include "LaunchBoxDb.h"
 #include "RetroAchievements.h"
 #include "Recovery.h"
+#include "SetupState.h"
 #include "providers/GameDirectory.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusFilter.h"
@@ -80,10 +81,13 @@
 #include <QGuiApplication>
 #include <QSet>
 #include <QTextStream>
+#include <QProcess>
+#include <QTimer>
 
 #ifdef Q_OS_ANDROID
 #include <QtAndroid>
 #include <QtAndroidExtras/QAndroidIntent>
+#include <QtAndroidExtras/QAndroidJniObject>
 #endif
 
 
@@ -163,6 +167,8 @@ QThreadPool* emulator_pool()
 
 Settings::Settings(QObject* parent)
     : QObject(parent)
+    // (a screen opened for testing, or a test scrape: never setup)
+    , m_setup_active(!setupstate::session().done && startupScreen().isEmpty() && testScrapeTitle().isEmpty())
 {}
 
 QVariantList Settings::recoveryReport() const
@@ -223,7 +229,8 @@ QString Settings::rootMissing() const
 
 bool Settings::rootSetupNeeded() const
 {
-    return !rootChosen() && !QFileInfo::exists(paths::privateConfigDir() + QStringLiteral("/pegasusx-root-asked"));
+    // (setup's state is one marker now: SetupState.h)
+    return !setupstate::session().done;
 }
 
 void Settings::setRootSetupAsked()
@@ -236,21 +243,72 @@ void Settings::setRootSetupAsked()
 
 int Settings::wizardStep() const
 {
-    QFile file(paths::privateConfigDir() + QStringLiteral("/pegasusx-wizard"));
-    if (!file.open(QIODevice::ReadOnly))
-        return 0;
-    return qBound(0, QString::fromLatin1(file.readAll()).trimmed().toInt(), 4);
+    return setupstate::step(setupstate::dirs());
 }
 
 void Settings::setWizardStep(int step)
 {
-    const QString path = paths::privateConfigDir() + QStringLiteral("/pegasusx-wizard");
-    if (step <= 0) {
-        QFile::remove(path);
-        return;
+    if (step <= 0)
+        return finishSetup(false);
+    setupstate::set_step(setupstate::dirs(), step);
+    setupstate::session().step = step;
+}
+
+bool Settings::setupActive() const
+{
+    return m_setup_active;
+}
+
+void Settings::finishSetup(bool skipped)
+{
+    const int at = setupstate::step(setupstate::dirs());
+    if (!setupstate::finish(setupstate::dirs()))
+        Log::warning(LOGMSG("Setup: couldn't write `%1`").arg(setupstate::done_path(setupstate::dirs())));
+    setupstate::session().done = true;
+    setupstate::session().found.clear();
+    Log::info(LOGMSG("Setup: %1 at step %2: the theme loads").arg(skipped ? QStringLiteral("skipped") : QStringLiteral("finished")).arg(at));
+    if (m_setup_active) {
+        m_setup_active = false;
+        emit setupActiveChanged();
     }
-    QDir().mkpath(paths::privateConfigDir());
-    safefile::write(path, QByteArray::number(step) + '\n');
+    emit pegasusxSettingsChanged();
+}
+
+QString Settings::setupFoundData() const
+{
+    return setupstate::session().found;
+}
+
+void Settings::restartApp()
+{
+    if (m_restarting)
+        return;
+    m_restarting = true;
+    Log::info(LOGMSG("Pegasus X: closing to start again"));
+#if defined(Q_OS_ANDROID)
+    // (as it quits, after the theme's settings are written: RestartActivity)
+    connect(qApp, &QCoreApplication::aboutToQuit, []{
+        QAndroidJniObject::callStaticMethod<void>("org/pegasus_frontend/android/MainActivity", "restartApp", "()V");
+    });
+#elif defined(PEGASUSX_TESTENV)
+    // the test environment starts it again itself
+    Log::info(LOGMSG("Pegasus X: (test environment) not started again here"));
+#else
+    connect(qApp, &QCoreApplication::aboutToQuit, []{
+        // the same options, without the screen opened for testing
+        QStringList args = QCoreApplication::arguments().mid(1);
+        for (int i = args.size() - 1; i >= 0; i--) {
+            if (args[i].startsWith(QLatin1String("--pegasusx-open"))) {
+                const bool with_value = !args[i].contains(QLatin1Char('=')) && i + 1 < args.size();
+                if (with_value)
+                    args.removeAt(i + 1);
+                args.removeAt(i);
+            }
+        }
+        QProcess::startDetached(QCoreApplication::applicationFilePath(), args);
+    });
+#endif
+    QCoreApplication::quit();
 }
 
 namespace {
@@ -479,8 +537,12 @@ QString Settings::setRootDir(const QString& dir_in, bool move_data)
         QString error;
         if (move_data) {
             // the Pegasus X folder setting itself and the caches stay out
+            // (nor setup's step and the private folder's own: they belong there)
             const int copied = copy_tree(now, dir, { QStringLiteral("pegasusx-root.txt"), QStringLiteral("pegasusx-root-asked"),
-                                                      QStringLiteral(".pegasusx-write-test") }, error);
+                                                      QStringLiteral(".pegasusx-write-test"), QStringLiteral("pegasusx-wizard"),
+                                                      QStringLiteral("pegasusx-root.txt.pxgood"),
+                                                      QStringLiteral("pegasusx-root.txt.pxsave"),
+                                                      QStringLiteral("pegasusx-root.txt.pxold") }, error);
             if (copied >= 0) {
                 Log::info(LOGMSG("Pegasus X folder: %1 files copied from `%2` to `%3`").arg(copied).arg(now, dir));
                 fix_moved_root(now, dir, old_media);
@@ -631,19 +693,29 @@ void Settings::startOver()
         QMetaObject::invokeMethod(this, [this, error]{
             m_backup_busy = false;
             // a new install from here: setup from step 1, no Android app picked
-            setWizardStep(1);
+            setupstate::reopen(setupstate::dirs(), 1);
+            setupstate::session().done = false;
             providers::library::start_app_selection_empty();
-            emit pegasusxSettingsChanged();
-            emit libraryRulesChanged();
+            // what's still held in memory (the theme's settings, Pegasus X's
+            // settings) would be written back: Pegasus X starts again instead
+            emit dataWiped();
+            Log::info(LOGMSG("Setup: Start over: setup from step 1 at the next start"));
             emit startOverFinished(error);
-            emit setupRequested(true);
+            QTimer::singleShot(1500, this, [this]{ restartApp(); });
         }, Qt::QueuedConnection);
     });
 }
 
 void Settings::runSetupAgain()
 {
-    setWizardStep(1);
+    // nothing deleted; the theme is closed until setup is finished or skipped
+    setupstate::reopen(setupstate::dirs(), 1);
+    setupstate::session().done = false;
+    Log::info(LOGMSG("Setup: run again from step 1"));
+    if (!m_setup_active) {
+        m_setup_active = true;
+        emit setupActiveChanged();
+    }
     emit setupRequested(false);
 }
 
@@ -722,7 +794,7 @@ void Settings::postInit()
     // first scan): Android apps to import starts with no app picked. A
     // library from an older build has no setup to do: its apps are kept as
     // picked when the library is read (LibraryRules, merge_android)
-    if (rootSetupNeeded() || wizardStep() > 0)
+    if (!setupstate::session().done)
         providers::library::start_app_selection_empty();
 #endif
     // builds 2230-2238 could leave genres hidden from Library > Genres
@@ -777,6 +849,9 @@ void Settings::startRomFolderRefresh()
 {
 #ifdef WITH_COMPAT_ESDE
     if (m_rom_refresh_started)
+        return;
+    // not while setup is open (the library read when it's done starts it)
+    if (m_setup_active)
         return;
     m_rom_refresh_started = true;
     QtConcurrent::run([this]{
@@ -1504,6 +1579,22 @@ QVariantMap import_result_map(const providers::esde::EsdeImportResult& result)
 }
 } // namespace
 #endif
+
+QVariantList Settings::unmatchedRomFolders(const QString& folder) const
+{
+    QVariantList out;
+#ifdef WITH_COMPAT_ESDE
+    for (const auto& entry : providers::esde::rom_folder_unmatched(folder)) {
+        out.append(QVariantMap {
+            { QStringLiteral("folder"), entry.first },
+            { QStringLiteral("system"), entry.second == QLatin1String("name") ? QString() : entry.second },
+        });
+    }
+#else
+    Q_UNUSED(folder);
+#endif
+    return out;
+}
 
 void Settings::importSystems(const QString& folder, const QStringList& systems)
 {

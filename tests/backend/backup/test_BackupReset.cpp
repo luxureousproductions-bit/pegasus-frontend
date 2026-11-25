@@ -139,6 +139,12 @@ void test_BackupReset::make_fixture()
     // app storage and caches
     write(m_places.priv + QStringLiteral("/pegasusx-root.txt"), m_places.data.toUtf8());
     write(m_places.priv + QStringLiteral("/pegasusx-wizard"), "2\n");
+    // the copy left in the app's own folder when the App Data Folder was picked
+    write(m_places.priv + QStringLiteral("/settings.txt"), "general.theme: themes/OLD\n");
+    write(m_places.priv + QStringLiteral("/theme_settings/XBSX.json"), "{\"accent\":\"red\"}");
+    write(m_places.priv + QStringLiteral("/gamedirectory/snes/metadata.pegasus.txt"), "collection: SNES\n");
+    write(m_places.priv + QStringLiteral("/themes/Old/theme.qml"), "Item {}");
+    write(m_places.app_data + QStringLiteral("/pegasusx-setup-done"), "done\n");
     write(m_places.priv + QStringLiteral("/pegasusx-root-asked"), "asked\n");
     write(m_places.app_data + QStringLiteral("/pegasusx-private.ini"), "[github]\ntoken=SECRETTOKEN\n");
     write(m_places.cache + QStringLiteral("/gameindex-v1.json"), "{}");
@@ -394,6 +400,14 @@ void test_BackupReset::start_over_deletes_only_its_list()
                                  m_places.priv + QStringLiteral("/damaged") })
         QVERIFY2(!QFileInfo::exists(path), qPrintable(path));
     QCOMPARE(read(m_places.priv + QStringLiteral("/pegasusx-root.txt.pxgood")), m_places.data.toUtf8());
+    // the older copy in the app's own folder went too (Pegasus X's data, the
+    // theme settings, the setup marker); its themes stay
+    for (const QString& path : { m_places.priv + QStringLiteral("/settings.txt"),
+                                 m_places.priv + QStringLiteral("/theme_settings"),
+                                 m_places.priv + QStringLiteral("/gamedirectory"),
+                                 m_places.app_data + QStringLiteral("/pegasusx-setup-done") })
+        QVERIFY2(!QFileInfo::exists(path), qPrintable(path));
+    QCOMPARE(read(m_places.priv + QStringLiteral("/themes/Old/theme.qml")), QByteArray("Item {}"));
     // kept: the folder itself, the theme, the ROMs inside and outside, other files,
     // the folder setting, the log, what the links pointed to
     QVERIFY(QFileInfo(m_places.data).isDir());

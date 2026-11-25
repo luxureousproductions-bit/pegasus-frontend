@@ -5,6 +5,95 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Setup that stays done, nothing behind it, Pick my ROMs folder
+
+- **Why setup never finished (the cause):** any library read while setup
+  was open gave the loading screen the focus (main.qml, the scanner's
+  `onRunningChanged`), and setup's screen is only visible while it has the
+  focus. Leaving Game directory after adding systems reads the library, so
+  setup vanished, the theme came up, `finish()` never ran, and its step
+  file stayed: every start went on a step back. The theme was also already
+  loaded under setup (it opened from the theme's first load, lead 1: chime,
+  welcome toast).
+- **Leads:** 1 confirmed (with the focus cause above). 2: safe-save
+  leftovers or recovery can't bring a step file back (recovery doesn't
+  check it; removing it leaves no `.pxsave`/`.pxold`); `finish()` ran on
+  every way out but the one above; step 1's copy did copy `pegasusx-wizard`
+  into the new folder (unused there, now left out). 3: on Android "inside
+  the app" is `/storage/emulated/0/pegasus-frontend`, shared storage (Qt
+  5.15's GenericDataLocation): Clear data doesn't empty it, so the old
+  setup, library and art loaded with no question. Start over did delete a
+  picked App Data Folder's data and kept `pegasusx-root.txt`, but left the
+  older copy in the app's own folder, and what the running app held in
+  memory (theme settings, Pegasus X settings) was written back afterwards.
+- **One done marker:** `pegasusx-setup-done` in the app's own storage
+  (AppDataLocation: Clear data and an uninstall empty it), the step beside
+  it (`pegasusx-setup-step`), both with SafeFile; decided once at the start
+  (`SetupState.cpp`), one "Setup:" log line. An older build's finished
+  setup (`pegasusx-root-asked` or a folder setting, no step, the app's
+  cache not empty) counts as done and gets the marker; an older build's
+  step goes on. Done or skipped, setup only comes back with Run setup again
+  or Start over.
+- **While setup is open:** no theme (so no theme sounds or toasts), no
+  update check, no Pegasus X toasts, no background ROM folder refresh, no
+  library read at the start; setup reads the library for step 4 and when
+  it ends, staying on screen ("Reading your games..."). Finished or
+  skipped: the theme loads once, then what a start shows (update check,
+  recovery notice). Done installs start as before.
+- **Data found:** no marker but Pegasus data in the Pegasus X folder (game
+  folders, favorites, game directory, theme settings, art...; not a
+  settings.txt alone): step 1 asks: Use it (setup goes on with it), Start
+  fresh (a confirm, then what Start over deletes, then a restart), or Pick
+  another folder.
+- **Start over** (as agreed) deletes Pegasus X's data and logins
+  (pegasusx.ini), theme settings, the game directory, art, caches, the
+  GitHub token, setup's marker, in the picked App Data Folder and, now,
+  the older copy in the app's own folder too; never ROMs, ES-DE's folder,
+  installed themes or which folder is used. Then Pegasus X starts again
+  (nothing from before stays in memory; the theme's settings held in
+  memory are dropped first) with setup at step 1. Run setup again deletes
+  nothing: the theme closes until setup is finished or skipped.
+- **App Data Folder:** after the copy Pegasus X starts again by itself
+  (2.5 s to read the note, or Restart now) and setup goes on at step 2.
+  Android: a small activity in its own process (`RestartActivity`, opened
+  while Pegasus X is on screen) opens it again once the old process is
+  gone; desktop: started again with the same options.
+- **Pick my ROMs folder** (setup step 2, and Settings > Game directory,
+  where "Add a ROM folder..." was): the folder, then every system found in
+  it by folder name and the games' file types, all ticked, Select all /
+  Deselect all; folders that aren't a system listed with why ("not a
+  system's folder name", or "named for X, but none of its games are in
+  it"), never guessed; nothing found: said so, with Pick another folder,
+  Tick my systems instead, Cancel. Cancel / B adds nothing. A, touch, the
+  round A/B prompts, one hint bar. Add systems (tick first) unchanged.
+- **Not changed:** metadata import, art, launch commands, custom systems,
+  the app picker, the scraper, other Settings screens, the theme, file and
+  library formats.
+- **Tests:** test_SetupState (new: new install, marker, step, older
+  build's step and finished setup, Clear data with data found, defaults
+  aren't data, finish then 3 starts, reopen); test_BackupReset (the older
+  copy and the marker deleted, themes kept). Test env: the first start
+  (data found, Start fresh's confirm cancelled, Use it, Pick my ROMs folder,
+  Import, Next, Skip, step 4 with setup on screen, the theme after), 3
+  restarts, Run setup again (no file changed), closed at step 2 and going
+  on there, Start over with a picked App Data Folder (both copies, themes
+  kept, closes itself, setup on the next start), Pick my ROMs folder
+  matched / unmatched / Deselect all / Select all / Cancel / nothing found.
+- **Files:** `src/backend/SetupState.h`, `SetupState.cpp` (new),
+  `src/backend/backend.pro`, `CMakeLists.txt`, `src/app/main.cpp`,
+  `src/backend/Backend.cpp`, `src/backend/BackupReset.cpp`,
+  `src/backend/model/internal/settings/Settings.h`, `Settings.cpp`,
+  `src/backend/model/memory/Memory.h`, `Memory.cpp`,
+  `src/backend/providers/esde/EsdeProvider.h`, `EsdeProvider.cpp`,
+  `src/app/platform/android/.../RestartActivity.java` (new),
+  `MainActivity.java`, `AndroidManifest.xml`, `src/app/install.pri`,
+  `src/frontend/main.qml`, `menu/settings/FirstRunWizard.qml`,
+  `GameDirectory.qml`, `RootFolderSetup.qml`, `BackupResetScreen.qml`,
+  `tests/backend/setupstate/` (new), `tests/backend/backend.pro`,
+  `tests/CMakeLists.txt`, `tests/backend/backup/test_BackupReset.cpp`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Setup that stays done, nothing behind it, Pick my ROMs folder".
+
 ### Damaged-file recovery: an emptied pegasusx.ini isn't damage
 
 - **What:** an empty pegasusx.ini, pegasusx-private.ini or

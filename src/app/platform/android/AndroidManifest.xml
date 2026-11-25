@@ -69,6 +69,16 @@
             <!-- meta-data android:name="android.app.splash_screen_sticky" android:value="true"/ -->
         </activity>
 
+        <!-- Pegasus X: starts Pegasus X again (a new App Data Folder, Start over),
+             from a process of its own -->
+        <activity
+            android:name="org.pegasus_frontend.android.RestartActivity"
+            android:process=":restart"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Pegasus X: opened again after an update it started itself -->
         <receiver
             android:name="org.pegasus_frontend.android.UpdateReceiver"

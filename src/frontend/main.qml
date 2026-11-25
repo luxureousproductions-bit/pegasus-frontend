@@ -86,6 +86,10 @@ Window {
             readonly property url apiThemePath: Internal.settings.themes.currentQmlPath
 
             function getThemeFile() {
+                // Pegasus X: no theme while first-start setup is open (SetupState.h):
+                // it loads once setup is finished or skipped
+                if (Internal.settings.setupActive)
+                    return "";
                 if (Internal.scanner.running)
                     return "";
                 if (api.collections.count === 0)
@@ -143,7 +147,10 @@ Window {
                 if (status == Loader.Error)
                     source = "messages/ThemeError.qml";
             }
-            onLoaded: item.focus = focus
+            onLoaded: {
+                console.log("Theme: loaded " + source);
+                item.focus = focus;
+            }
             onFocusChanged: if (item) item.focus = focus
         }
 
@@ -401,9 +408,12 @@ Window {
     }
     Connections {
         target: firstRunSetup.item
+        // setup finished or skipped: the theme loads now (the splash until it's
+        // ready, then what a start shows: update check, notices)
         function onClose() {
-            content.focus = true;
             firstRunSetup.source = "";
+            splashScreen.focus = true;
+            splashScreen.hideMaybe();
         }
     }
     // Pegasus X: damaged files fixed at the start (Recovery.h): which, and how
@@ -507,17 +517,11 @@ Window {
     Connections {
         target: Internal.settings
         function onReloadAllRequested() { splashScreen.toTheme = true; }
-        // Pegasus X: Backup & reset: setup opens now (Run setup again), or once
-        // the library is read again (Start over)
+        // Pegasus X: Backup & reset: Run setup again: the theme closes (setupActive)
+        // and setup opens now; it loads again when setup is finished or skipped
         function onSetupRequested(reload) {
             if (mainMenu.item)
                 mainMenu.item.closeAll();
-            if (reload) {
-                splashScreen.setupAfterLoad = true;
-                splashScreen.toTheme = true;
-                Internal.settings.reloadLibrary();
-                return;
-            }
             splashScreen.openSetup();
         }
         // a theme picked in the theme downloader: the menu closes, it loads
@@ -536,6 +540,10 @@ Window {
     Connections {
         target: Internal.scanner
         function onRunningChanged() {
+            // Pegasus X: setup reads the library itself (its last step): it
+            // stays on screen, with its own "Reading your games"
+            if (Internal.settings.setupActive)
+                return;
             if (Internal.scanner.running) {
                 // Pegasus X: remember if the menu was open (eg. a reload from
                 // the settings), to give it back the focus afterwards
@@ -560,7 +568,8 @@ Window {
         visible: focus
 
         readonly property bool dataLoading: Internal.scanner.running
-        readonly property bool skinLoading: theme.status === Loader.Null || theme.status === Loader.Loading
+        readonly property bool skinLoading: !Internal.settings.setupActive
+            && (theme.status === Loader.Null || theme.status === Loader.Loading)
 
         showDataProgressText: dataLoading
         progress: Internal.scanner.progress
@@ -568,11 +577,18 @@ Window {
 
         property bool restoreMenu: false
         property bool toTheme: false
-        property bool setupAfterLoad: false   // Start over: setup once the library is read again
         function openSetup() {
             firstRunSetup.source = "";
             firstRunSetup.setSource("menu/settings/FirstRunWizard.qml");
             firstRunSetup.focus = true;
+        }
+        // Pegasus X: setup not done: it opens at once, before any theme, sound,
+        // toast or update check (they come when it's finished or skipped)
+        Component.onCompleted: {
+            if (Internal.settings.setupActive) {
+                console.log("Setup: open (no theme until it's finished or skipped)");
+                Qt.callLater(openSetup);
+            }
         }
 
         // Pegasus X: --pegasusx-open=<screen> (testing): that menu screen,
@@ -676,6 +692,13 @@ Window {
         }
 
         function hideMaybe() {
+            // Pegasus X: setup is open: it keeps the screen (nothing of a
+            // start's happens until it's finished or skipped)
+            if (Internal.settings.setupActive) {
+                if (!dataLoading)
+                    Internal.scanner.reset();
+                return;
+            }
             if (focus && !dataLoading && !skinLoading) {
                 content.focus = true;
                 if (!startupScreenDone) {
@@ -712,18 +735,9 @@ Window {
                     else if (testTitle !== "") {
                         testScrape(testTitle);
                     }
-                    // the first start: where everything is kept
-                    // (four steps: folder, game folders, import gamelist, complete my
-                    // library; it goes on from where it was if Pegasus X closed in between)
-                    // (four steps: folder, systems and ROM folders, import gamelist, complete
-                    // my library; it goes on from where it was if Pegasus X closed in between)
-                    if ((Internal.settings.rootSetupNeeded || Internal.settings.wizardStep() > 0)
-                            && Internal.settings.startupScreen() === "" && testTitle === "") {
-                        firstRunSetup.setSource("menu/settings/FirstRunWizard.qml");
-                        firstRunSetup.focus = true;
-                    }
+                    // (the first start's setup opens before all this: Component.onCompleted)
                     // damaged files fixed at the start: which, and how (once)
-                    else if (Internal.settings.recoveryReport().length > 0 && Internal.settings.startupScreen() === "") {
+                    if (Internal.settings.recoveryReport().length > 0 && Internal.settings.startupScreen() === "") {
                         recoveryNotice.setSource("menu/settings/RecoveryNotice.qml");
                         recoveryNotice.focus = true;
                     }
@@ -747,10 +761,6 @@ Window {
                     mainMenu.forceActiveFocus();
                 restoreMenu = false;
                 toTheme = false;
-                if (setupAfterLoad) {
-                    setupAfterLoad = false;
-                    openSetup();
-                }
                 Internal.scanner.reset();
             }
         }

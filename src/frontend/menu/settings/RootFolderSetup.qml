@@ -23,7 +23,9 @@ import QtQuick 2.6
 // Pegasus X: the Pegasus X folder, where everything lives (settings, themes,
 // metadata, logs, art as downloaded_media/<system>/<kind>). Shown at the first start,
 // and from Settings > Pegasus X folder. Changing it means starting Pegasus X
-// again, so the last step closes the app.
+// again: once the data is copied it starts again by itself (a moment to read
+// the note first; Restart now does it at once). In setup, setup goes on at
+// step 2 after the restart.
 FocusScope {
     id: root
 
@@ -49,6 +51,8 @@ FocusScope {
             root.error = error;
             root.step = error === "" ? "done" : "picked";
             dialog.choice = 0;
+            if (root.step === "done")
+                restartTimer.start();
         }
     }
 
@@ -82,7 +86,7 @@ FocusScope {
             switch (root.step) {
                 case "intro": return [ qsTr("Pick a folder") + api.tr, root.firstRun ? qsTr("Keep it inside the app") + api.tr : qsTr("Keep as is") + api.tr ];
                 case "picked": return [ qsTr("Use it and move my data there") + api.tr, qsTr("Use it, start fresh") + api.tr, qsTr("Pick another") + api.tr ];
-                case "done": return [ qsTr("Close Pegasus X") + api.tr ];
+                case "done": return [ qsTr("Restart now") + api.tr ];
             }
             return [];
         }
@@ -102,7 +106,9 @@ FocusScope {
                 case "moving":
                     return qsTr("Copying your settings, themes, metadata and art to %1...\n\nThis can take a while; Pegasus X keeps running.").arg(root.chosen) + api.tr;
                 case "done":
-                    return qsTr("Done. Pegasus X uses %1 from its next start: it closes now, open it again.").arg(root.chosen) + api.tr;
+                    return (root.firstRun
+                        ? qsTr("Done. Pegasus X starts again now with %1, and setup goes on from step 2.")
+                        : qsTr("Done. Pegasus X starts again now with %1.")).arg(root.chosen) + api.tr;
             }
             return "";
         }
@@ -118,15 +124,25 @@ FocusScope {
                     else root.pickFolder();
                     break;
                 case "done":
-                    Internal.settings.quitApp();
+                    Internal.settings.restartApp();
                     break;
             }
         }
         onCancelled: {
             if (root.step === "done")
-                Internal.settings.quitApp();
+                Internal.settings.restartApp();
             else if (root.step !== "moving")
                 root.leave();
+        }
+    }
+
+    // the folder is set: Pegasus X starts again by itself
+    Timer {
+        id: restartTimer
+        interval: 2500
+        onTriggered: {
+            console.log("Pegasus X folder: set to " + root.chosen + ", starting again");
+            Internal.settings.restartApp();
         }
     }
 

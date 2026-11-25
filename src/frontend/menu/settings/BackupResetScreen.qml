@@ -93,12 +93,10 @@ FocusScope {
             dialog.changed = result.changed;
         }
         function onStartOverFinished(error) {
-            root.busy = false;
             console.log("Backup & reset: start over done" + (error !== "" ? ", " + error : ""));
-            // setup opens next (main.qml): this screen goes back to Settings
-            list.focus = true;
-            root.openPage("main");
-            root.close();
+            // Pegasus X starts again in a moment (nothing from before stays in
+            // memory), with setup at step 1
+            root.wipeDone = error !== "" ? error : " ";
         }
     }
 
@@ -533,7 +531,7 @@ FocusScope {
             else if (what === "wipe1" && index === 1) {
                 // the second, deliberate confirm
                 show("wipe2", qsTr("Delete it now?") + api.tr,
-                     qsTr("Last check: Pegasus X's data (%1) is deleted now and setup opens. This can't be undone.").arg(root.mb(root.plan.mb)) + api.tr,
+                     qsTr("Last check: Pegasus X's data (%1) is deleted now, then Pegasus X starts again with setup. This can't be undone.").arg(root.mb(root.plan.mb)) + api.tr,
                      [qsTr("Cancel") + api.tr, qsTr("Delete and start over") + api.tr], 0);
             }
             else if (what === "wipe2" && index === 1) {
@@ -550,11 +548,14 @@ FocusScope {
                 Internal.settings.reloadLibrary();
         }
     }
+    property string wipeDone: ""   // Start over done (" ", or what couldn't be deleted)
     PegasusDialog {
         id: busyDialog
         z: 6
         title: qsTr("Start over") + api.tr
-        text: qsTr("Deleting Pegasus X's data...") + api.tr
+        text: root.wipeDone === "" ? qsTr("Deleting Pegasus X's data...") + api.tr
+            : (root.wipeDone.trim() !== "" ? root.wipeDone.trim() + "\n\n" : "")
+              + qsTr("Done. Pegasus X starts again now, with setup.") + api.tr
         busy: true
     }
 

@@ -77,6 +77,10 @@ class Settings : public QObject {
     Q_PROPERTY(bool rootChosen READ rootChosen NOTIFY pegasusxSettingsChanged)
     /// no folder chosen and never asked: the setup shows at the first start
     Q_PROPERTY(bool rootSetupNeeded READ rootSetupNeeded NOTIFY pegasusxSettingsChanged)
+    /// Pegasus X: first-start setup is open (SetupState.h): no theme, update
+    /// checks, toasts or background ROM folder refresh until it's finished or
+    /// skipped (never with --pegasusx-open or a test scrape)
+    Q_PROPERTY(bool setupActive READ setupActive NOTIFY setupActiveChanged)
     /// the Pegasus X folder that couldn't be used at this start (SD card
     /// missing?), the app's own folder being used instead; else empty
     Q_PROPERTY(QString rootMissing READ rootMissing CONSTANT)
@@ -109,10 +113,20 @@ public:
     bool rootSetupNeeded() const;
     QString rootMissing() const;
     Q_INVOKABLE void setRootSetupAsked();
-    /// The first-start setup's step (1-4), or 0 when it's done (kept outside
-    /// the Pegasus X folder, so picking one in step 1 doesn't lose it)
+    /// The first-start setup's step (1-4), or 0 when it's done (kept in the
+    /// app's own storage, so picking a folder in step 1 doesn't lose it)
     Q_INVOKABLE int wizardStep() const;
     Q_INVOKABLE void setWizardStep(int step);
+    bool setupActive() const;
+    /// setup finished or skipped: the done marker; the theme loads
+    Q_INVOKABLE void finishSetup(bool skipped);
+    /// the Pegasus X folder, when setup found Pegasus data in it this start
+    /// (step 1 asks: use it, or start fresh); else empty
+    Q_INVOKABLE QString setupFoundData() const;
+    /// start fresh: what Start over deletes, deleted, then Pegasus X starts again
+    Q_INVOKABLE void setupStartFresh() { startOver(); }
+    /// Pegasus X closes and starts again (a new Pegasus X folder, Start over)
+    Q_INVOKABLE void restartApp();
     /// Makes `dir` the Pegasus X folder (from the next start); with `move_data`,
     /// what's in the folder used now is copied there first. Returns what's
     /// wrong right away, or "" when the work started: rootDirChanged tells how
@@ -137,7 +151,8 @@ public:
     Q_INVOKABLE void startRestore(const QString& path);
     /// Start over: { remove: [{ path, what, mb }], keep: [texts], mb }
     Q_INVOKABLE QVariantMap startOverPlan() const;
-    /// deletes it all, then setup opens: startOverFinished, setupRequested
+    /// deletes it all, then Pegasus X starts again with setup at step 1:
+    /// startOverFinished
     Q_INVOKABLE void startOver();
     /// setup again from step 1, nothing deleted: setupRequested
     Q_INVOKABLE void runSetupAgain();
@@ -201,6 +216,10 @@ public:
     /// a ROM folder's systems among those picked: [{ name, fullName, folders, games,
     /// ownMetadata, mediaFolder, gamelist }] plus the picked ones without a folder (games 0)
     Q_INVOKABLE QVariantList matchSystems(const QString& folder, const QStringList& picked);
+    /// Pick my ROMs folder: the folders in it that aren't a system (listed, not
+    /// guessed): [{ folder, system }] (system: "" for a name that isn't one; else
+    /// the system it's named for, with no games of it in there)
+    Q_INVOKABLE QVariantList unmatchedRomFolders(const QString& folder) const;
     /// imports these systems of a ROM folder (background: romFolderImportFinished)
     Q_INVOKABLE void importSystems(const QString& folder, const QStringList& systems);
     /// imports one folder as one system (background: romFolderImportFinished)
@@ -532,8 +551,12 @@ signals:
     void backupFinished(QString path, QString error);
     void restoreFinished(QVariantMap result);
     void startOverFinished(QString error);
-    /// first-time setup to open now (after the library is read again: `reload`)
+    /// first-time setup to open now (Run setup again)
     void setupRequested(bool reload);
+    void setupActiveChanged();
+    /// Start over deleted Pegasus X's data: what's held in memory goes too
+    /// (the theme's settings, api.memory)
+    void dataWiped();
     /// Pegasus X: the theme in use was updated in the theme downloader: built again
     void currentThemeUpdated();
     /// Pegasus X: the menu closes, back to the theme (eg. "Use it now")
@@ -589,6 +612,8 @@ private:
     QNetworkAccessManager* m_netman = nullptr;
     std::atomic<bool> m_backup_cancel { false };
     bool m_backup_busy = false;
+    bool m_setup_active = false;
+    bool m_restarting = false;
     scraper::Scraper* m_scraper = nullptr;
     mutable scraper::LaunchBoxDb* m_launchbox = nullptr;
     scraper::LaunchBoxDb& launchBox() const;

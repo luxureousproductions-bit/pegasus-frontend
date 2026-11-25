@@ -32,6 +32,8 @@ add_library(pegasus-backend
     BackupReset.h
     Recovery.cpp
     Recovery.h
+    SetupState.cpp
+    SetupState.h
     SafeFile.cpp
     SafeFile.h
     Scraper.cpp

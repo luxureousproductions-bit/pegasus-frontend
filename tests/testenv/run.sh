@@ -60,23 +60,48 @@ stop() {  # name
 mkdir -p "$CFG"
 printf '[genres]\nhidden=platform\n' >> "$CFG/pegasusx.ini"
 
-# -- 1. first start: the ES-DE import and the ROM folder import, then the theme --
+# -- 1. first start: the ES-DE import and the ROM folder import, then setup, then the theme --
+# The fixture's game_dirs.txt is Pegasus data already in the folder: step 1 asks to use it or
+# start fresh (Start fresh's confirm shown, cancelled; Use it). Step 2: Pick my ROMs folder
+# (the picker's "Suggested" is the last folder browsed: MyGames), every system found ticked,
+# Import, back in setup; Next; step 3 Skip; step 4 reads the library with setup still on
+# screen (build 2274 and before: the theme came up here); then the theme, once.
+printf '\n[browse]\nlast=%s\n' "$T/MyGames" >> "$CFG/pegasusx.ini"
 start 01-first-start "" 15 PEGASUSX_TEST_ESDE_IMPORT=1 "PEGASUSX_TEST_ROM_FOLDERS=$T/MyGames"
-# the first-start setup: through its four steps (keeping the folder, skipping the rest)
 shot 01-wizard-1
-keys Return
+keys Down Return
+sleep 1
+shot 01-wizard-1-start-fresh
+keys Escape Up Return
 sleep 1
 shot 01-wizard-2
-keys Down Return
+keys Return
+sleep 1
+keys f Right Right Right Right Right Right Right Return i
+sleep 2
+shot 01-wizard-2-found
+keys Page_Down Up Return
+sleep 6
+shot 01-wizard-2-imported
+keys Return
 sleep 1
 shot 01-wizard-3
 keys Down Return
-sleep 3
+sleep 6
 shot 01-wizard-4
 keys Down Return
-sleep 2
+sleep 5
 shot 01-theme
 stop 01-first-start
+APPDATA="$(dirname "$(find "$HOME/.local/share" -name 'pegasusx-setup-done' 2>/dev/null | head -n 1)")"
+{ [ -n "$APPDATA" ] && [ "$APPDATA" != "." ]; } || APPDATA="$XDG_DATA_HOME/pegasus-frontend/pegasus-frontend"
+echo "$APPDATA" > "$R/files/appdata-dir.txt"
+# three more starts: setup stays done (no setup, the theme each time)
+for n in 1 2 3; do
+    start "01-restart-$n" "" 10
+    [ "$n" = 1 ] && shot 01-restart-1
+    stop "01-restart-$n"
+done
 cp "$CFG/pegasusx.ini" "$R/files/pegasusx-after-first-start.ini" 2>/dev/null
 cp "$CFG/pegasusx-android-apps.json" "$R/files/apps-after-setup.json" 2>/dev/null
 cp "$CFG/game_dirs.txt" "$R/files/game_dirs.txt" 2>/dev/null
@@ -329,13 +354,13 @@ stop 07-updater
 printf '\n[browse]\nlast=%s\n' "$T/storage/ROMs" >> "$CFG/pegasusx.ini"
 start 08-gamedirs "menu/settings/GameDirectory.qml" 5
 shot 08-gamedirs
-# Add a ROM folder: the picker opens on the drives; Y: the quick jumps, the last one is
+# Pick my ROMs folder: the picker opens on the drives; Y: the quick jumps, the last one is
 # "Suggested" (the last folder browsed, ROMs: gba, snes in it); X "Use this folder"
 keys Return f Right Right Right Right Right Right Right Return i
 sleep 1
 shot 08-gamedirs-picked
-# untick one of the systems found
-keys Down Return
+# untick one of the systems found (below Select all / Deselect all)
+keys Down Down Return
 shot 08-gamedirs-ticked
 keys Escape
 sleep 1
@@ -349,6 +374,43 @@ sleep 1
 keys Down Down Down Down Return
 shot 08-gamedirs-system
 stop 08-gamedirs
+# -- 8d. Pick my ROMs folder: matched and unmatched folders, Deselect all / Select all, Cancel
+# (nothing added: the game directory the same after), then a folder with no system in it --
+FF="$T/FolderFirst"
+mkdir -p "$FF/snes" "$FF/gba" "$FF/Random Stuff" "$FF/psx" "$T/NoSystems/notes" "$T/NoSystems/Pictures"
+head -c 2048 /dev/urandom > "$FF/snes/Folder First Quest (USA).sfc"
+head -c 2048 /dev/urandom > "$FF/gba/Folder First Advance (USA).gba"
+echo "not a game" > "$FF/Random Stuff/readme.txt"
+echo "not a game" > "$FF/psx/notes.txt"
+echo "x" > "$T/NoSystems/notes/a.txt"
+find "$CFG/gamedirectory" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/folderfirst-before.txt"
+sed -i "/^\[browse\]/,/^\[/ s|^last=.*|last=$FF|" "$CFG/pegasusx.ini"
+start 08d-folder-first "menu/settings/GameDirectory.qml" 5
+keys Return f Right Right Right Right Right Right Right Return i
+sleep 2
+shot 08d-folder-first-found
+keys Down Return
+shot 08d-folder-first-deselected
+keys Up Return
+shot 08d-folder-first-selected
+keys Page_Down
+shot 08d-folder-first-bottom
+keys Escape
+sleep 1
+shot 08d-folder-first-cancelled
+stop 08d-folder-first
+find "$CFG/gamedirectory" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/folderfirst-after.txt"
+sed -i "/^\[browse\]/,/^\[/ s|^last=.*|last=$T/NoSystems|" "$CFG/pegasusx.ini"
+start 08e-folder-first-empty "menu/settings/GameDirectory.qml" 5
+keys Return f Right Right Right Right Right Right Right Return i
+sleep 2
+shot 08e-folder-first-nothing
+# Tick my systems instead: the list to tick
+keys Down Return
+sleep 1
+shot 08e-tick-instead
+stop 08e-folder-first-empty
+
 # -- 8b. a system's ROM folders: the Folders view, adding the SD card's folder, removing it ------
 SD="$T/sdcard"
 sed -i "/^\[browse\]/,/^\[/ s|^last=.*|last=$SD/ROMs|" "$CFG/pegasusx.ini"
@@ -537,10 +599,11 @@ data.setdefault("collections", [])
 data.setdefault("games", []).append({"path": "android:com.test.retroarch", "title": "Retro Emu", "collections": ["Android"]})
 json.dump(data, open(path, "w"), indent=4)
 PY
-# a new install with apps (setup still to do: the test environment never runs setup, so
-# pegasusx-root-asked isn't there): the picker opens with every app unticked; with none
+# a new install with apps (setup still to do: no setup-done marker, no older build's
+# pegasusx-root-asked): the picker opens with every app unticked; with none
 # picked there's no Android collection, and Library > Options still has the picker
 rm -f "$CFG/pegasusx-android-apps.json" "$CFG/pegasusx-root-asked" "$CFG/pegasusx-wizard"
+rm -f "$APPDATA/pegasusx-setup-done" "$APPDATA/pegasusx-setup-step"
 find "$HOME" -name "gameindex-v1.json" -delete 2>/dev/null
 start 14-apps-new "menu/settings/AndroidAppPicker.qml" 8 "PEGASUSX_TEST_APPS=$APPS"
 shot 14-new-picker
@@ -551,7 +614,9 @@ keys Page_Down
 shot 14-new-library-options
 stop 14-apps-new-library
 # a library from an older build: setup done (as on a device after setup), no picks saved
+# (no setup-done marker yet: an older build's pegasusx-root-asked and the app's cache say done)
 rm -f "$CFG/pegasusx-android-apps.json"
+rm -f "$APPDATA/pegasusx-setup-done" "$APPDATA/pegasusx-setup-step"
 echo asked > "$CFG/pegasusx-root-asked"
 find "$HOME" -name "gameindex-v1.json" -delete 2>/dev/null
 start 14-apps-first "" 10 "PEGASUSX_TEST_APPS=$APPS"
@@ -626,17 +691,42 @@ keys Down Down Return
 wait_log "Backup & reset: backup" 60 "$R/logs/15-backup.stdout"
 sleep 1
 shot 15-backup-done
-# Run setup again: setup opens, nothing changes
+# Run setup again: setup opens (the theme closes), nothing changes
 find "$CFG" -type f -not -name "lastrun.log" -not -name "pegasusx-wizard" -exec md5sum {} + 2>/dev/null | sort > "$R/files/before-setup-again.txt"
 keys Escape Down Down Return
 sleep 3
 shot 15-setup-again
 find "$CFG" -type f -not -name "lastrun.log" -not -name "pegasusx-wizard" -exec md5sum {} + 2>/dev/null | sort > "$R/files/after-setup-again.txt"
+# on to step 2, then Pegasus X closed mid-setup: the next start goes on at step 2 (no theme),
+# B twice: back to step 1, then skip setup: the theme
+keys Return
+sleep 1
 stop 15-backup
+start 15-resume "" 10
+shot 15-resume-step-2
+keys Escape
+sleep 1
+keys Escape
+sleep 5
+shot 15-resume-skipped
+stop 15-resume
 ls "$T/storage/Download" > "$R/files/backups.txt" 2>/dev/null
 BK="$(ls "$T/storage/Download"/PegasusX-backup-*.tar 2>/dev/null | head -n 1)"
 [ -n "$BK" ] && tar -tf "$BK" > "$R/files/backup-contents.txt" 2>&1
 [ -n "$BK" ] && cp "$BK" "$R/files/backup.tar"
+# Start over with an App Data Folder picked: PXFolder holds Pegasus X's data (a copy of the
+# folder's), the app's own folder still has the older copy (as a move leaves it); both go,
+# the themes in both stay, and which folder is used stays. Setup's marker and step are kept
+# aside and put back after (the app's own storage), with the Pegasus X folder.
+PX="$T/PXFolder"
+rm -rf "$PX" "$T/appdata-saved"
+mkdir -p "$PX"
+(cd "$CFG" && tar -cf - --exclude=./pegasusx-root.txt --exclude=./pegasusx-root-asked --exclude=./lastrun.log --exclude=./themes .) | (cd "$PX" && tar -xf -)
+mkdir -p "$PX/themes/OtherTheme"
+echo "Item {}" > "$PX/themes/OtherTheme/theme.qml"
+echo "$PX" > "$CFG/pegasusx-root.txt"
+cp -a "$APPDATA" "$T/appdata-saved"
+find "$T/MyGames" "$T/storage/ES-DE" "$T/storage/ROMs" "$CFG/themes" "$PX/themes" "$T/outside.txt" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/kept-before.txt"
 # Start over: the Start over page, both confirms (Cancel focused: Right picks the other button)
 rm -f "$CFG/pegasusx-wizard"
 start 15-start-over "menu/settings/BackupResetScreen.qml" 5
@@ -651,15 +741,25 @@ sleep 1
 shot 15-wipe-confirm-2
 keys Right Return
 wait_log "Backup & reset: start over done" 60 "$R/logs/15-start-over.stdout"
-sleep 8
-shot 15-after-start-over
+sleep 1
+shot 15-start-over-restarting
+# it closes by itself to start again (the test environment starts it again here)
+for _ in $(seq 1 30); do kill -0 "$PID" 2>/dev/null || break; sleep 0.5; done
+if kill -0 "$PID" 2>/dev/null; then echo "still running" > "$R/files/start-over-quit.txt"; else echo "closed by itself" > "$R/files/start-over-quit.txt"; fi
 stop 15-start-over
 find "$CFG" -type f -not -name "lastrun.log" | sed "s|$CFG/||" | sort > "$R/files/after-start-over-files.txt"
-find "$T/MyGames" "$T/storage/ES-DE" "$T/storage/ROMs" "$CFG/themes" "$T/outside.txt" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/kept-after.txt"
+find "$PX" -type f -not -name "lastrun.log" | sed "s|$PX/||" | sort > "$R/files/after-start-over-px-files.txt"
+ls -a "$APPDATA" > "$R/files/after-start-over-appdata.txt" 2>&1
+find "$T/MyGames" "$T/storage/ES-DE" "$T/storage/ROMs" "$CFG/themes" "$PX/themes" "$T/outside.txt" -type f -exec md5sum {} + 2>/dev/null | sort > "$R/files/kept-after.txt"
 ls "$T/storage/Download" > "$R/files/backups-after-start-over.txt" 2>/dev/null
-# the Pegasus X folder as it was (for the summary below)
-rm -rf "$CFG"
+# the start after it: setup from step 1, no theme
+start 15-after-start-over "" 10
+shot 15-after-start-over
+stop 15-after-start-over
+# the Pegasus X folder and the app's storage as they were (for the summary below)
+rm -rf "$CFG" "$PX" "$APPDATA"
 mv "$T/cfg-saved" "$CFG"
+cp -a "$T/appdata-saved" "$APPDATA"
 
 # -- 16. damaged-file recovery (Recovery.h): files damaged or cut short before a start -------------
 # settings.txt turned to junk, pegasusx-hidden.json (or favorites.txt) cut in half, game_dirs.txt
@@ -926,14 +1026,51 @@ PY
         echo "    FAILED: Start over changed kept files:"
         diff "$R/files/kept-before.txt" "$R/files/kept-after.txt" | head -n 10 | sed 's/^/        /'
     fi
-    for gone in "pegasusx.ini" "settings.txt" "game_dirs.txt" "gamedirectory/" "downloaded_media/" "metadata/" "pegasusx-hidden.json" \
-                "settings.txt.pxgood" "pegasusx.ini.pxgood" "game_dirs.txt.pxgood" "damaged/"; do
-        if grep -q "^$gone" "$R/files/after-start-over-files.txt"; then echo "    note: $gone is there after Start over (written again since?)"; else echo "    OK: $gone deleted by Start over"; fi
+    for list in after-start-over-px-files after-start-over-files; do
+        where="the App Data Folder (PXFolder)"; [ "$list" = after-start-over-files ] && where="the app's own folder (older copy)"
+        for gone in "pegasusx.ini" "settings.txt" "game_dirs.txt" "gamedirectory/" "downloaded_media/" "metadata/" "pegasusx-hidden.json" \
+                    "theme_settings/" "settings.txt.pxgood" "pegasusx.ini.pxgood" "game_dirs.txt.pxgood" "damaged/" "pegasusx-root-asked"; do
+            if grep -q "^$gone" "$R/files/$list.txt"; then echo "    FAILED: $gone still in $where after Start over"; else echo "    OK: $gone deleted from $where"; fi
+        done
     done
-    echo "    files in the Pegasus X folder after Start over (and the session after it):"
-    sed 's/^/        /' "$R/files/after-start-over-files.txt" | head -n 30
+    if grep -q "^pegasusx-root.txt$" "$R/files/after-start-over-files.txt"; then echo "    OK: pegasusx-root.txt kept (the App Data Folder stays picked)"; else echo "    FAILED: pegasusx-root.txt gone"; fi
+    if grep -q "pegasusx-setup-done" "$R/files/after-start-over-appdata.txt"; then echo "    FAILED: the setup-done marker is still there"; else echo "    OK: no setup-done marker after Start over"; fi
+    echo "    after Start over Pegasus X $(cat "$R/files/start-over-quit.txt" 2>/dev/null) ($(strip_ansi "$R/logs/15-start-over.stdout" | grep -c "closing to start again") \"closing to start again\" lines)"
+    echo "    files after Start over: PXFolder:"
+    sed 's/^/        /' "$R/files/after-start-over-px-files.txt" | head -n 20
+    echo "    the app's own folder:"
+    sed 's/^/        /' "$R/files/after-start-over-files.txt" | head -n 20
     if [ -s "$R/files/backups-after-start-over.txt" ]; then echo "    OK: the backup in Download is still there"; else echo "    FAILED: the backup in Download is gone"; fi
-    echo "    (screenshots: 15-backup-*, 15-setup-again, 15-wipe-*, 15-after-start-over)"
+    echo "    (screenshots: 15-backup-*, 15-setup-again, 15-resume-*, 15-wipe-*, 15-start-over-restarting, 15-after-start-over)"
+    echo
+    echo "## Setup (it stays up to step 4, never comes back once done, no theme while it's open)"
+    for n in 01-first-start 01-restart-1 01-restart-2 01-restart-3 15-backup 15-resume 15-after-start-over; do
+        echo "    $n:"
+        strip_ansi "$R/logs/$n.stdout" | grep -E "Setup: |Theme: loaded|Pegasus X folder: |Game directory: Pick my ROMs" | sed 's/^\[i\] //; s/^qml: //' | head -n 12 | sed 's/^/        /'
+    done
+    first="$(strip_ansi "$R/logs/01-first-start.stdout" | grep -n -E "Setup: (finished|skipped)|Theme: loaded" | head -n 1)"
+    case "$first" in
+        *"Setup: finished"*|*"Setup: skipped"*) echo "    OK: first start: no theme before setup finished (first of the two: ${first#*:})" ;;
+        *) echo "    FAILED: first start: the theme loaded before setup finished (${first#*:})" ;;
+    esac
+    for n in 1 2 3; do
+        if strip_ansi "$R/logs/01-restart-$n.stdout" | grep -q "Setup: open"; then echo "    FAILED: restart $n opened setup"
+        elif strip_ansi "$R/logs/01-restart-$n.stdout" | grep -q "Setup: done"; then echo "    OK: restart $n: setup done, not shown"
+        else echo "    FAILED: restart $n: no \"Setup: done\" line"; fi
+    done
+    if strip_ansi "$R/logs/15-resume.stdout" | grep -q "goes on at step 2"; then echo "    OK: closed mid-setup (step 2): the next start went on at step 2"; else echo "    FAILED: closed mid-setup: not at step 2"; fi
+    if strip_ansi "$R/logs/15-after-start-over.stdout" | grep -q "Theme: loaded"; then echo "    FAILED: after Start over a theme loaded with setup open"; else echo "    OK: after Start over: setup, no theme"; fi
+    echo "    (screenshots: 01-wizard-*, 01-theme, 01-restart-1, 15-setup-again, 15-resume-*, 15-after-start-over)"
+    echo
+    echo "## Pick my ROMs folder (08d, 08e; in setup: 01-wizard-2-*)"
+    strip_ansi "$R/logs/08d-folder-first.stdout" "$R/logs/08e-folder-first-empty.stdout" "$R/logs/08-gamedirs.stdout" | grep -h "Pick my ROMs folder" | sed 's/^qml: //; s/^/    /'
+    if diff -q "$R/files/folderfirst-before.txt" "$R/files/folderfirst-after.txt" >/dev/null 2>&1; then
+        echo "    OK: Cancel added nothing (the game directory the same, $(wc -l < "$R/files/folderfirst-after.txt") files)"
+    else
+        echo "    FAILED: Cancel changed the game directory:"
+        diff "$R/files/folderfirst-before.txt" "$R/files/folderfirst-after.txt" | head -n 10 | sed 's/^/        /'
+    fi
+    echo "    (screenshots: 08d-folder-first-*, 08e-folder-first-nothing, 08e-tick-instead)"
     echo
     echo "## Damaged-file recovery (16-recovery*)"
     echo "    last good copies before the damage: $(tr '\n' ' ' < "$R/files/good-copies.txt")"

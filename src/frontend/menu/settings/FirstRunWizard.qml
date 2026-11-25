@@ -21,9 +21,12 @@ import QtQuick 2.6
 
 // Pegasus X: the first start, in four steps: where to keep things, your game
 // folders, import gamelist, complete my library. Each step opens the screen
-// Settings has for it; B goes back a step. Where it is is kept outside the
-// Pegasus X folder (Settings.wizardStep), so a folder picked in step 1 (which
-// needs a restart) goes on from step 2.
+// Settings has for it; B goes back a step. Where it is is kept in the app's
+// own storage (Settings.wizardStep, SetupState.h), so a folder picked in step 1
+// (Pegasus X starts again) goes on from step 2. No theme is loaded while it's
+// open (main.qml); the library is read here, for step 4, and when it ends.
+// Finished or skipped, it never opens again by itself (Settings.finishSetup):
+// only Run setup again or Start over bring it back.
 FocusScope {
     id: root
 
@@ -33,6 +36,11 @@ FocusScope {
     property int tick: 0   // bumped when a step's screen closes, so the texts read again
     property bool libraryChanged: false   // game folders or an import: read again before step 4
     property bool appsPicked: false       // Android apps to import: read again by the end of setup too
+    property bool readOnce: false         // the library read by setup this session
+    // Pegasus data already in the Pegasus X folder (after Android's Clear data,
+    // or another Pegasus's): step 1 asks to use it or start fresh
+    readonly property string found: Internal.settings.setupFoundData()
+    property bool wiping: false
 
     anchors.fill: parent
     enabled: focus
@@ -48,19 +56,23 @@ FocusScope {
         Internal.settings.setWizardStep(n);
         list.currentIndex = 0;
         list.focus = true;
-        if (n === 4 && libraryChanged) {
-            libraryChanged = false;
-            Internal.settings.reloadLibrary();
-        }
+        if (n === 4 && (libraryChanged || !readOnce))
+            readLibrary();
         if (n === 4)
             refreshStatus();
     }
-    function finish() {
-        // the picked apps, when setup ends before step 4 read the library again
-        if (appsPicked && libraryChanged)
-            Internal.settings.reloadLibrary();
-        Internal.settings.setWizardStep(0);
+    function readLibrary() {
+        libraryChanged = false;
+        readOnce = true;
+        Internal.settings.reloadLibrary();
+    }
+    // finished (or skipped: B on step 1): never again by itself; the theme loads
+    function finish(skipped) {
+        // the library as setup left it (it isn't read at a start with setup open)
+        if (libraryChanged || !readOnce)
+            readLibrary();
         Internal.settings.setRootSetupAsked();
+        Internal.settings.finishSetup(!!skipped);
         root.close();
     }
 
@@ -79,7 +91,7 @@ FocusScope {
     ]
     readonly property string title: {
         switch (step) {
-            case 1: return qsTr("Where Pegasus X keeps things") + api.tr;
+            case 1: return (root.found !== "" ? qsTr("Pegasus X data found") : qsTr("Where Pegasus X keeps things")) + api.tr;
             case 2: return qsTr("Which systems do you have?") + api.tr;
             case 3: return qsTr("Import gamelist") + api.tr;
             case 4: return qsTr("Complete my library") + api.tr;
@@ -90,10 +102,15 @@ FocusScope {
         var t = tick;
         switch (step) {
             case 1:
+                if (root.found !== "") {
+                    var c = Internal.settings.rootDirContents();
+                    return qsTr("%1 already has Pegasus data in it (%2 files, %3 MB): settings, game folders, theme settings or scraped art. Use it as it is (setup goes on with it), or start fresh.")
+                        .arg(root.found).arg(c.files || 0).arg((c.mb || 0).toFixed(1)) + api.tr;
+                }
                 return qsTr("Settings, themes, game details and scraped art all live in one folder. Inside the app is fine to start; a folder of your own (eg. PegasusX on an SD card) survives an uninstall and is easy to reach.") + api.tr;
             case 2:
                 var n = Internal.settings.gameDirectorySystems().length;
-                return (n === 0 ? qsTr("Pick your systems, then the folder your ROMs are in. Pegasus X finds each system's folder by name (snes, psx, ...) and makes its game directory. Your ROM folders are only read.")
+                return (n === 0 ? qsTr("Pick the folder your ROMs are in and Pegasus X finds your systems in it, or tick your systems first, then their folder. Systems are found by folder name (snes, psx, ...) and the games' file types. Your ROM folders are only read.")
                                 : qsTr("%1 systems in your game directory. Add more, or go on.").arg(n)) + api.tr;
             case 3:
                 return qsTr("Already set up another front end? Bring its games, details and art in, so there's nothing to do again.") + api.tr;
@@ -113,7 +130,9 @@ FocusScope {
     // small print under the text
     readonly property string fine: {
         switch (step) {
-            case 1: return qsTr("Picking a folder of your own closes Pegasus X once your data is moved; setup goes on from step 2 when you open it again.") + api.tr;
+            case 1: return (root.found !== ""
+                ? qsTr("Start fresh deletes what Start over deletes, there and in the app's own folder; your ROMs, ES-DE's folder and your themes stay. Pegasus X starts again.")
+                : qsTr("Picking a folder of your own copies your data there, then Pegasus X starts again and setup goes on from step 2.")) + api.tr;
             case 3: return qsTr("Imports ES-DE folders: its gamelists, media and the emulators it uses. ES-DE itself stays as it is.") + api.tr;
             case 4: return qsTr("Only empty spots are filled. Games it isn't sure about wait in Settings > Library > Needs your check.") + api.tr;
         }
@@ -122,7 +141,11 @@ FocusScope {
     readonly property var options: {
         var t = tick;
         switch (step) {
-            case 1: return [
+            case 1: return root.found !== "" ? [
+                { "act": "use", "text": qsTr("Use it") + api.tr, "value": root.found },
+                { "act": "fresh", "text": qsTr("Start fresh...") + api.tr, "value": qsTr("deletes it") + api.tr },
+                { "act": "pick", "text": qsTr("Pick another folder...") + api.tr, "value": "" },
+            ] : [
                 // (setup run again, or after Start over: the folder in use is kept)
                 Internal.settings.rootChosen
                     ? { "act": "keep", "text": qsTr("Keep using this folder") + api.tr, "value": Internal.settings.rootDir }
@@ -131,7 +154,10 @@ FocusScope {
             ];
             case 2:
                 var have = Internal.settings.gameDirectorySystems().length;
-                var two = [ { "act": "dirs", "text": qsTr("Add systems...") + api.tr, "value": have === 0 ? qsTr("nothing added yet") + api.tr : "" } ];
+                var two = [
+                    { "act": "romfolder", "text": qsTr("Pick my ROMs folder...") + api.tr, "value": qsTr("finds the systems in it") + api.tr },
+                    { "act": "dirs", "text": qsTr("Add systems...") + api.tr, "value": have === 0 ? qsTr("nothing added yet") + api.tr : "" },
+                ];
                 // Android apps to import (a new install: none until you pick)
                 if (Qt.platform.os === "android" || Internal.settings.androidAppChoices().length > 0) {
                     var picked = Internal.settings.androidAppSelection().length;
@@ -150,7 +176,7 @@ FocusScope {
                 var some = !Internal.scanner.running && (st.any || 0) > 0;
                 return some ? [
                     { "act": "complete", "text": qsTr("Start and go to my games") + api.tr, "value": qsTr("%1 games").arg(st.any) + api.tr },
-                    { "act": "finish", "text": qsTr("Skip, go to my games") + api.tr, "value": "" },
+                    { "act": "skip4", "text": qsTr("Skip, go to my games") + api.tr, "value": "" },
                 ] : [
                     { "act": "finish", "text": qsTr("Go to my games") + api.tr, "value": "" },
                 ];
@@ -163,6 +189,15 @@ FocusScope {
                 Internal.settings.setRootSetupAsked();
                 goTo(2);
                 break;
+            case "use":
+                // the data found, as it is: setup goes on with it (its systems in step 2)
+                console.log("Setup: the Pegasus data found in " + root.found + " is used");
+                Internal.settings.setRootSetupAsked();
+                goTo(2);
+                break;
+            case "fresh":
+                freshDialog.show();
+                break;
             case "pick":
                 // done there: it closes Pegasus X; setup goes on from step 2
                 Internal.settings.setWizardStep(2);
@@ -170,6 +205,9 @@ FocusScope {
                 break;
             case "dirs":
                 openSub("GameDirectory.qml", { "addOnly": true });
+                break;
+            case "romfolder":
+                openSub("GameDirectory.qml", { "addOnly": true, "folderFirst": true });
                 break;
             case "apps":
                 openSub("AndroidAppPicker.qml", {});
@@ -185,10 +223,11 @@ FocusScope {
                     { "boxes": true, "shots": true, "details": true, "fanart": false, "videos": false });
                 if (error !== "")
                     console.warn("Complete my library: " + error);
-                finish();
+                finish(false);
                 break;
             case "finish":
-                finish();
+            case "skip4":
+                finish(false);
                 break;
         }
     }
@@ -207,7 +246,7 @@ FocusScope {
         else if (from.indexOf("GameDirectory") >= 0) {
             libraryChanged = true;
             tick++;  // the texts read the directory again
-            list.currentIndex = 1;  // Next
+            list.currentIndex = list.count - 1;  // Next
         }
         else if (from.indexOf("AndroidAppPicker") >= 0) {
             libraryChanged = true;  // read again before step 4
@@ -327,7 +366,7 @@ FocusScope {
                 if (root.step > 1)
                     root.goTo(root.step - 1);
                 else
-                    root.finish();
+                    root.finish(true);
             }
         }
 
@@ -373,14 +412,50 @@ FocusScope {
         }
     }
 
-    PromptBar {
+    RoundPromptBar {
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
         // (a step's screen, eg. Game directory and its folder picker, has its own)
-        visible: !subscreen.visible
-        text: (root.step > 1 ? qsTr("A choose · B previous step") : qsTr("A choose · B skip setup")) + api.tr
-              + qsTr(" · Each step can be done later in Settings") + api.tr
+        visible: !subscreen.visible && !freshDialog.visible
+        items: [
+            { "keys": ["A"], "text": qsTr("choose") + api.tr },
+            { "keys": ["B"], "text": (root.step > 1 ? qsTr("previous step") : qsTr("skip setup")) + api.tr },
+        ]
+    }
+
+    // Start fresh (data found): asked once more, Cancel focused; then it's
+    // deleted as Start over does and Pegasus X starts again
+    PegasusDialog {
+        id: freshDialog
+        z: 6
+        function show() {
+            root.wiping = false;
+            choice = 0;
+            focus = true;
+        }
+        title: qsTr("Start fresh?") + api.tr
+        busy: root.wiping
+        text: root.wiping
+            ? qsTr("Deleting... Pegasus X starts again when it's done.") + api.tr
+            : qsTr("Pegasus X's data in %1 is deleted: settings, logins, game directory, theme settings, scraped art. Your ROMs, ES-DE's folder and your themes stay. This can't be undone.").arg(root.found) + api.tr
+        buttons: [ qsTr("Cancel") + api.tr, qsTr("Delete and start fresh") + api.tr ]
+        onPicked: {
+            if (index !== 1) {
+                focus = false;
+                list.focus = true;
+                return;
+            }
+            root.wiping = true;
+            console.log("Setup: start fresh: deleting the Pegasus data in " + root.found);
+            Internal.settings.setupStartFresh();
+        }
+        onCancelled: {
+            if (root.wiping)
+                return;
+            focus = false;
+            list.focus = true;
+        }
     }
 
     // the screen a step opens (Settings' own)

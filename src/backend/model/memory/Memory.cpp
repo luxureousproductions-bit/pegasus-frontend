@@ -243,6 +243,15 @@ void Memory::unset(const QString& key)
     markDirty();
 }
 
+void Memory::forget()
+{
+    m_save_timer.stop();
+    m_dirty = false;
+    m_current_theme.clear();  // (save_map_maybe writes nothing without one)
+    m_data.clear();
+    emit dataChanged();
+}
+
 void Memory::changeTheme(const QString& theme_root_dir)
 {
     Q_ASSERT(theme_root_dir.endsWith('/'));

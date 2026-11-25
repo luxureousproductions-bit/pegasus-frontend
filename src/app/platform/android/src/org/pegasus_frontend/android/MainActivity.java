@@ -59,6 +59,20 @@ public class MainActivity extends org.qtproject.qt5.android.bindings.QtActivity 
     public static Context context() {
         return m_self != null ? m_self.getApplicationContext() : null;
     }
+    // Pegasus X: Pegasus X started again (RestartActivity), called as it quits
+    public static void restartApp() {
+        final Activity self = m_self;
+        if (self == null)
+            return;
+        try {
+            Intent intent = new Intent(self, RestartActivity.class);
+            intent.putExtra(RestartActivity.EXTRA_PID, android.os.Process.myPid());
+            self.startActivity(intent);
+        }
+        catch (Exception e) {
+            // it only closes: opened again by hand
+        }
+    }
     private static PackageManager m_pm;
     private static int m_icon_density;
 
