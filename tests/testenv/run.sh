@@ -1046,19 +1046,25 @@ PY
     echo "## Setup (it stays up to step 4, never comes back once done, no theme while it's open)"
     for n in 01-first-start 01-restart-1 01-restart-2 01-restart-3 15-backup 15-resume 15-after-start-over; do
         echo "    $n:"
-        strip_ansi "$R/logs/$n.stdout" | grep -E "Setup: |Theme: loaded|Pegasus X folder: |Game directory: Pick my ROMs" | sed 's/^\[i\] //; s/^qml: //' | head -n 12 | sed 's/^/        /'
+        strip_ansi "$R/logs/$n.stdout" | grep -E "Setup: |Theme: loaded|Pegasus X folder: |Game directory: Pick my ROMs" | sed 's/^\[i\] //; s/^qml: //' | head -n 16 | sed 's/^/        /'
     done
     first="$(strip_ansi "$R/logs/01-first-start.stdout" | grep -n -E "Setup: (finished|skipped)|Theme: loaded" | head -n 1)"
     case "$first" in
         *"Setup: finished"*|*"Setup: skipped"*) echo "    OK: first start: no theme before setup finished (first of the two: ${first#*:})" ;;
         *) echo "    FAILED: first start: the theme loaded before setup finished (${first#*:})" ;;
     esac
+    seq="$(strip_ansi "$R/logs/01-first-start.stdout" | grep -o -E "Setup: (on screen|off screen|finished|skipped)|Theme: loaded" | tr '\n' ',')"
+    echo "    first start, in order: $seq"
+    case "$seq" in
+        "Setup: on screen,Setup: finished,Setup: off screen,Theme: loaded"*) echo "    OK: first start: setup on screen until it finished, then the theme" ;;
+        *) echo "    FAILED: first start: setup left the screen before it finished, or a theme came first" ;;
+    esac
     for n in 1 2 3; do
         if strip_ansi "$R/logs/01-restart-$n.stdout" | grep -q "Setup: open"; then echo "    FAILED: restart $n opened setup"
         elif strip_ansi "$R/logs/01-restart-$n.stdout" | grep -q "Setup: done"; then echo "    OK: restart $n: setup done, not shown"
         else echo "    FAILED: restart $n: no \"Setup: done\" line"; fi
     done
-    if strip_ansi "$R/logs/15-resume.stdout" | grep -q "goes on at step 2"; then echo "    OK: closed mid-setup (step 2): the next start went on at step 2"; else echo "    FAILED: closed mid-setup: not at step 2"; fi
+    if strip_ansi "$R/logs/15-resume.stdout" | grep -q "goes on at step 2" && strip_ansi "$R/logs/15-resume.stdout" | grep -q "Setup: on screen"; then echo "    OK: closed mid-setup (step 2): the next start went on at step 2"; else echo "    FAILED: closed mid-setup: not at step 2"; fi
     if strip_ansi "$R/logs/15-after-start-over.stdout" | grep -q "Theme: loaded"; then echo "    FAILED: after Start over a theme loaded with setup open"; else echo "    OK: after Start over: setup, no theme"; fi
     echo "    (screenshots: 01-wizard-*, 01-theme, 01-restart-1, 15-setup-again, 15-resume-*, 15-after-start-over)"
     echo

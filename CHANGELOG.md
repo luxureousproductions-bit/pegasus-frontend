@@ -5,6 +5,23 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Setup: on screen at the start too
+
+- **What:** build 2275's setup opened at the start and was covered at once:
+  the start's theme switch (`theme.finishSwap`, 120 ms after the theme is
+  set) gave the loading screen the focus, and setup is only visible with the
+  focus. Its test env run showed it (the splash on every setup screenshot,
+  setup never finished, the restarts at step 1, and the checks that read the
+  library after the first start failing with it). While setup is open the
+  switch now only sets the theme's source back (still empty until setup is
+  done) and leaves the focus alone. A "Setup: on screen" / "off screen" log
+  line, and the test env checks the order: on screen, finished, off screen,
+  theme.
+- **Not changed:** everything else of 2275.
+- **Tests:** test env again (setup's steps, restarts, the library checks).
+- **Files:** `src/frontend/main.qml`, `tests/testenv/run.sh`, `CHANGELOG.md`.
+- **Commit:** "Setup: on screen at the start too".
+
 ### Setup that stays done, nothing behind it, Pick my ROMs folder
 
 - **Why setup never finished (the cause):** any library read while setup

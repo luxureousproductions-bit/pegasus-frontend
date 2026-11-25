@@ -111,6 +111,13 @@ Window {
             function finishSwap() {
                 if (!swapPending || mainMenu.focus)
                     return;
+                // Pegasus X: setup is open: it keeps the screen (no theme, and
+                // the splash doesn't take the focus); the theme loads after it
+                if (Internal.settings.setupActive) {
+                    swapPending = false;
+                    source = Qt.binding(getThemeFile);
+                    return;
+                }
                 swapPending = false;
                 gc();
                 splashScreen.restoreMenu = false;
@@ -403,6 +410,8 @@ Window {
         anchors.fill: parent
         enabled: focus
         visible: focus && status === Loader.Ready
+        // (the log shows setup never leaves the screen before it's finished)
+        onVisibleChanged: console.log("Setup: " + (visible ? "on screen" : "off screen"))
         onLoaded: item.focus = true
         onFocusChanged: if (item && focus) item.focus = true
     }
