@@ -232,7 +232,7 @@ FocusScope {
 
             readonly property string trText: switch (section) {
                 case "games": return QT_TR_NOOP("Games");
-                case "look": return QT_TR_NOOP("Look");
+                case "look": return QT_TR_NOOP("Appearance");
                 case "controls": return QT_TR_NOOP("Controls");
                 case "pegasusx": return QT_TR_NOOP("Pegasus X");
                 default: return "";  // Advanced...: a gap, no title

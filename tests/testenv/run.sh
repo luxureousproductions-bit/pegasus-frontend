@@ -5,6 +5,7 @@
 #   $1: pegasus-fe   $2: the fixture folder   $3: the results folder
 set -u
 BIN="$(readlink -f "$1")"
+HERE="$(cd "$(dirname "$0")" && pwd)"
 T="$(readlink -f "$2")"
 R="$(mkdir -p "$3" && readlink -f "$3")"
 export HOME="$T/home"
@@ -950,6 +951,16 @@ ls "$CFG/damaged" > "$R/files/meta-damaged.txt" 2>&1
 rm -rf "$CFG"
 mv "$T/cfg-before-meta" "$CFG"
 
+# -- 18. Settings > Gamepad layout's picture: every button's highlight, at the page's sizes -------
+# (no pad here, so the page shows no picture: GamepadPreview.qml alone, in qmlscene, with
+# gamepad_points.qml; each highlight's middle checked against where the button is)
+mkdir -p "$R/gamepad"
+if command -v qmlscene >/dev/null 2>&1; then
+    (cd "$R/gamepad" && timeout 180 qmlscene "$HERE/gamepad_points.qml" > ../logs/18-gamepad-points.stdout 2>&1)
+else
+    echo "no qmlscene" > "$R/logs/18-gamepad-points.stdout"
+fi
+
 # -- summary --------------------------------------------------------------------------------------
 # the game directory as it is at the end (written along the way)
 find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
@@ -1220,6 +1231,67 @@ PY
         diff "$R/files/folderfirst-before.txt" "$R/files/folderfirst-after.txt" | head -n 10 | sed 's/^/        /'
     fi
     echo "    (screenshots: 08d-folder-first-*, 08e-folder-first-nothing, 08e-tick-instead)"
+    echo
+    echo "## Gamepad layout: each button's highlight on the picture (18, in qmlscene)"
+    python3 - "$R" <<'PY' | sed 's/^/    /'
+import re, sys, os
+R = sys.argv[1]
+text = open(R + "/logs/18-gamepad-points.stdout", errors="replace").read()
+if "no qmlscene" in text:
+    print("NOT RUN: no qmlscene in the test environment")
+    sys.exit(0)
+# where each button is on the 839 x 561 picture (pixels, measured on it), and how far
+# a highlight may be from it (half the button, about)
+want = { "a": (632.5, 227, 18), "b": (690.5, 170, 18), "x": (574.5, 170.5, 18), "y": (632.5, 114.5, 18),
+         "dpup": (313, 265, 14), "dpdown": (313, 343, 14), "dpleft": (274, 304, 14), "dpright": (351, 304, 14),
+         "lsx": (209, 170, 30), "lsy": (209, 170, 30), "lsb": (209, 170, 30),
+         "rsx": (527, 297, 30), "rsy": (527, 297, 30), "rsb": (527, 297, 30),
+         "select": (360, 170.5, 10), "start": (480, 170.5, 10), "guide": (420.5, 77, 20),
+         "lb": (232, 22, 14), "rb": (607, 22, 14), "lt": (160, 42, 14), "rt": (679, 42, 14) }
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
+rows = re.findall(r"POINT (gamepad-(\d+)-(\w+)) ([-\d. ]+)", text)
+if not rows:
+    print("FAILED: no highlight positions written:")
+    print(text[-800:])
+    sys.exit(0)
+bad = 0
+for name, screen, field, nums in rows:
+    x, y, w, h, pw, ph, cx, cy = [float(v) for v in nums.split()]
+    # the picture's pixel under the highlight's middle
+    left = (w - pw) / 2
+    top = (h - ph) / 2
+    px = (cx - left) / pw * 839
+    py = (cy - top) / ph * 561
+    wx, wy, tol = want[field]
+    d = ((px - wx) ** 2 + (py - wy) ** 2) ** 0.5
+    shape = abs(pw / ph - 839 / 561) < 0.01
+    found = ""
+    if Image and os.path.exists("%s/gamepad/%s.png" % (R, name)):
+        im = Image.open("%s/gamepad/%s.png" % (R, name)).convert("RGB")
+        xs = ys = n = 0
+        # (around where it should be)
+        bx = int(x + left + wx / 839 * pw)
+        by = int(y + top + wy / 561 * ph)
+        for yy in range(max(0, by - 40), min(im.height, by + 41)):
+            for xx in range(max(0, bx - 40), min(im.width, bx + 41)):
+                r, g, b = im.getpixel((xx, yy))
+                if r < 90 and g > 180 and b > 180:   # the highlight, #3cc
+                    xs += xx; ys += yy; n += 1
+        if n:
+            dx, dy = xs / n - x, ys / n - y   # in the picture's item
+            found = " · drawn at %.0f, %.0f" % ((dx - left) / pw * 839, (dy - top) / ph * 561)
+            d = max(d, (((dx - left) / pw * 839 - wx) ** 2 + ((dy - top) / ph * 561 - wy) ** 2) ** 0.5)
+    ok = d <= tol and shape
+    bad += 0 if ok else 1
+    print("%s: %s screen %s: picture %.0f x %.0f, highlight on %.0f, %.0f (button at %g, %g; %.1f px off)%s"
+          % ("OK" if ok else "FAILED", field, screen, pw, ph, px, py, wx, wy, d, found))
+print("%s: %d highlights at %d sizes, %d off their button or the picture out of shape"
+      % ("OK" if bad == 0 else "FAILED", len(rows), len(set(r[1] for r in rows)), bad))
+PY
+    echo "    (pictures: gamepad/gamepad-<screen width>-<button>.png)"
     echo
     echo "## Library > Metadata (17-metadata*)"
     for n in 17-metadata 17-metadata-restart 17-metadata-recovery; do

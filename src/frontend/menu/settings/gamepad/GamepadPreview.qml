@@ -17,36 +17,39 @@
 
 import QtQuick 2.0
 
-// Pegasus X: assets/gamepad/preview.png is an Xbox Series controller in white
-// outlines (offset sticks, d-pad lower left, A B X Y, View / Guide / Menu,
-// bumpers and triggers; Guide: the XBSX-Experience theme's sphere), 512 x 340
-// as before, its source preview.svg beside it; fieldPoints are where each
-// button is on it (fractions of the picture's width and height).
+// Pegasus X: assets/gamepad/preview.png is an Xbox controller, front view
+// (839 x 561, transparent around it), used as it is: kept to its shape and
+// scaled smoothly, never stretched. fieldPoints are where each button is on
+// it (fractions of the picture's width and height; in pixels beside them).
+// Bumpers and triggers can't be seen from the front: LB / RB sit in the
+// middle of the white shoulder pieces at the top, LT / RT on the outer ends
+// of the same pieces (where the triggers are, behind them).
+// (preview.svg beside it is the drawing of builds 2271-2277, no longer used)
 Image {
     property string currentField: ""
 
     readonly property var fieldPoints: {
-        'x': [0.6602, 0.3529],
-        'y': [0.7266, 0.2529],
-        'a': [0.7266, 0.4529],
-        'b': [0.7930, 0.3529],
-        'start': [0.5664, 0.3559],
-        'guide': [0.5000, 0.2353],
-        'select': [0.4336, 0.3559],
-        'lsb': [0.2734, 0.3529],
-        'lsx': [0.2734, 0.3529],
-        'lsy': [0.2734, 0.3529],
-        'rsb': [0.6289, 0.6059],
-        'rsx': [0.6289, 0.6059],
-        'rsy': [0.6289, 0.6059],
-        'lt': [0.2734, 0.0588],
-        'lb': [0.2930, 0.1118],
-        'rt': [0.7266, 0.0588],
-        'rb': [0.7070, 0.1118],
-        'dpup': [0.3809, 0.5324],
-        'dpdown': [0.3809, 0.6794],
-        'dpleft': [0.3320, 0.6059],
-        'dpright': [0.4297, 0.6059],
+        'x': [0.6847, 0.3039],       // 574.5, 170.5
+        'y': [0.7539, 0.2041],       // 632.5, 114.5
+        'a': [0.7539, 0.4046],       // 632.5, 227
+        'b': [0.8230, 0.3030],       // 690.5, 170
+        'start': [0.5721, 0.3039],   // 480, 170.5 (Menu)
+        'guide': [0.5012, 0.1373],   // 420.5, 77 (the Xbox button)
+        'select': [0.4291, 0.3039],  // 360, 170.5 (View)
+        'lsb': [0.2491, 0.3030],     // 209, 170
+        'lsx': [0.2491, 0.3030],
+        'lsy': [0.2491, 0.3030],
+        'rsb': [0.6281, 0.5294],     // 527, 297
+        'rsx': [0.6281, 0.5294],
+        'rsy': [0.6281, 0.5294],
+        'lt': [0.1907, 0.0749],      // 160, 42: the left shoulder piece's outer end
+        'lb': [0.2765, 0.0392],      // 232, 22: the left shoulder piece's middle
+        'rt': [0.8093, 0.0749],      // 679, 42
+        'rb': [0.7235, 0.0392],      // 607, 22
+        'dpup': [0.3731, 0.4724],    // 313, 265
+        'dpdown': [0.3731, 0.6114],  // 313, 343
+        'dpleft': [0.3266, 0.5419],  // 274, 304
+        'dpright': [0.4184, 0.5419], // 351, 304
     }
     readonly property var verticalAxes: ['lsy', 'rsy']
     readonly property var horizontalAxes: ['lsx', 'rsx']
@@ -60,6 +63,10 @@ Image {
 
     source: "qrc:/frontend/assets/gamepad/preview.png"
     fillMode: Image.PreserveAspectFit
+    // read in at the size it's shown (a smooth, sharp scale of the picture,
+    // its shape kept), and drawn smoothly
+    sourceSize.width: Math.max(1, Math.round(width))
+    smooth: true
 
 
     Rectangle {

@@ -5,6 +5,36 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-25
 
+### Gamepad layout: your controller picture; Look is Appearance
+
+- **What:** Settings > Gamepad layout shows your controller picture
+  (Xbox, front view, 839 x 561, transparent around it) in place of the
+  Xbox Series outline of 2271, used as it is: `src/frontend/assets/gamepad/preview.png`
+  (sha256 8369922d7993d3baa0a16ad683aa73573d26caff874c4f4f18a4e6f0cd0ebc93,
+  the file as it came through the chat). It keeps its shape (fit, never
+  stretched), is read in at the size it's shown and drawn smoothly.
+  Every button's highlight was moved onto it, measured on the picture: A,
+  B, X, Y, the d-pad's four arms, both sticks (axes and presses), View,
+  Menu, the Xbox button. Bumpers and triggers can't be seen from the
+  front: LB / RB sit in the middle of the white shoulder pieces at the top,
+  LT / RT on those pieces' outer ends (where the triggers are, behind
+  them). Settings' group "Look" reads "Appearance": the same rows, in the
+  same order.
+- **Not changed:** the button list, labels, prompts and pictures on the
+  page; `preview.svg` (the 2271 drawing's source) stays in the folder,
+  unused; everything else.
+- **Tests:** test env step 18: the picture alone (GamepadPreview.qml as the
+  app has it) in qmlscene, every button's highlight at 0.3 of 854, 1280 and
+  1920 wide screens, its middle checked against the button on the picture
+  (qmlscene added to the test environment's optional packages). The
+  Settings screenshots show Appearance.
+- **Files:** `src/frontend/assets/gamepad/preview.png`,
+  `src/frontend/menu/settings/gamepad/GamepadPreview.qml`,
+  `src/frontend/menu/settings/SettingsMain.qml`,
+  `tests/testenv/gamepad_points.qml` (new), `tests/testenv/run.sh`,
+  `.github/workflows/test-env.yml`, `CHANGELOG.md`.
+- **Commit:** "Gamepad layout: your controller picture; Look is Appearance".
+
 ### Metadata analyzer, first build: tabs, suggested merges, merges as aliases
 
 - **What:** Library > Genres is Library > Metadata, with three tabs
