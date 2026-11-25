@@ -357,6 +357,16 @@ void test_BackupReset::foreign_path_in_backup_changes_nothing()
 
 void test_BackupReset::start_over_deletes_only_its_list()
 {
+    // damaged-file recovery's last good copies and damaged folders go too;
+    // pegasusx-root.txt's good copy stays with the folder setting
+    write(data("favorites.txt.pxgood"), "/roms/a.sfc\n");
+    write(data("settings.txt.pxgood"), "general.theme: x\n");
+    write(data("damaged/2026-11-24_22-30-05 favorites.txt"), "junk");
+    write(m_places.app_data + QStringLiteral("/pegasusx-private.ini.pxgood"), "[github]\ntoken=SECRETTOKEN\n");
+    write(m_places.app_data + QStringLiteral("/damaged/2026-11-24_22-30-05 pegasusx-private.ini"), "junk");
+    write(m_places.priv + QStringLiteral("/damaged/2026-11-24_22-30-05 pegasusx-root.txt"), "junk");
+    write(m_places.priv + QStringLiteral("/pegasusx-root.txt.pxgood"), m_places.data.toUtf8());
+
     const backup::WipePlan plan = backup::wipe_plan(m_places);
     QStringList planned;
     for (const backup::WipeItem& item : plan.remove)
@@ -377,8 +387,13 @@ void test_BackupReset::start_over_deletes_only_its_list()
                                  m_places.priv + QStringLiteral("/pegasusx-root-asked"),
                                  m_places.app_data + QStringLiteral("/pegasusx-private.ini"),
                                  m_places.cache + QStringLiteral("/gameindex-v1.json"),
-                                 m_places.cache + QStringLiteral("/netcache") })
+                                 m_places.cache + QStringLiteral("/netcache"),
+                                 data("favorites.txt.pxgood"), data("settings.txt.pxgood"), data("damaged"),
+                                 m_places.app_data + QStringLiteral("/pegasusx-private.ini.pxgood"),
+                                 m_places.app_data + QStringLiteral("/damaged"),
+                                 m_places.priv + QStringLiteral("/damaged") })
         QVERIFY2(!QFileInfo::exists(path), qPrintable(path));
+    QCOMPARE(read(m_places.priv + QStringLiteral("/pegasusx-root.txt.pxgood")), m_places.data.toUtf8());
     // kept: the folder itself, the theme, the ROMs inside and outside, other files,
     // the folder setting, the log, what the links pointed to
     QVERIFY(QFileInfo(m_places.data).isDir());

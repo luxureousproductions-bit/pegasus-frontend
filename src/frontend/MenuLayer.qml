@@ -46,6 +46,15 @@ FocusScope {
         subscreen.focus = true;
         root.state = "sub";
     }
+    // Pegasus X: ...with some of its properties set (eg. Backup & reset, at
+    // picking a backup to restore, from the damaged-files notice)
+    function openScreenWith(url, props) {
+        openedAt = Date.now();
+        subscreen.source = "";
+        subscreen.setSource(url, props);
+        subscreen.focus = true;
+        root.state = "sub";
+    }
 
     anchors.fill: parent
     visible: shade.opacity > 0

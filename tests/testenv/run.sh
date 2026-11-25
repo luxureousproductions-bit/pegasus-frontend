@@ -661,6 +661,52 @@ ls "$T/storage/Download" > "$R/files/backups-after-start-over.txt" 2>/dev/null
 rm -rf "$CFG"
 mv "$T/cfg-saved" "$CFG"
 
+# -- 16. damaged-file recovery (Recovery.h): files damaged or cut short before a start -------------
+# settings.txt turned to junk, pegasusx-hidden.json (or favorites.txt) cut in half, game_dirs.txt
+# left as only game_dirs.txt.pxold (a save cut short); each start's notice: Y details then B Keep,
+# then X Restore from a backup; a start with nothing to fix shows nothing. Put back as it was after.
+cp -a "$CFG" "$T/cfg-before-damage"
+ls "$CFG" | grep -E '\.pxgood$' > "$R/files/good-copies.txt"
+HALF="pegasusx-hidden.json"; [ -s "$CFG/$HALF" ] || HALF="favorites.txt"
+for f in settings.txt "$HALF" game_dirs.txt pegasusx.ini; do
+    [ -f "$CFG/$f" ] && md5sum < "$CFG/$f" | cut -d' ' -f1 > "$R/files/orig-$f.md5"
+    [ -f "$CFG/$f.pxgood" ] && md5sum < "$CFG/$f.pxgood" | cut -d' ' -f1 > "$R/files/good-$f.md5"
+done
+head -c 3000 /dev/urandom > "$CFG/settings.txt"
+[ -s "$CFG/$HALF" ] && python3 -c "import sys; p=sys.argv[1]; b=open(p,'rb').read(); open(p,'wb').write(b[:len(b)//2])" "$CFG/$HALF"
+[ -f "$CFG/game_dirs.txt" ] && mv "$CFG/game_dirs.txt" "$CFG/game_dirs.txt.pxold"
+echo "$HALF" > "$R/files/half-cut.txt"
+start 16-recovery "" 15
+shot 16-recovery-notice
+keys f
+sleep 1
+shot 16-recovery-details
+keys Escape
+sleep 1
+shot 16-recovery-after-keep
+stop 16-recovery
+for f in settings.txt "$HALF" game_dirs.txt; do
+    [ -f "$CFG/$f" ] && md5sum < "$CFG/$f" | cut -d' ' -f1 > "$R/files/after-$f.md5"
+done
+ls -l "$CFG/damaged" > "$R/files/damaged-1.txt" 2>&1
+ls "$CFG" | grep -E '\.(pxsave|pxold)$' > "$R/files/leftovers-1.txt"
+# again: pegasusx.ini full of zero bytes; the notice's X opens Backup & reset's restore picker
+head -c 2000 /dev/zero > "$CFG/pegasusx.ini"
+start 16-recovery-restore "" 15
+shot 16-recovery-notice-2
+keys i
+sleep 3
+shot 16-recovery-restore-picker
+stop 16-recovery-restore
+[ -f "$CFG/pegasusx.ini" ] && md5sum < "$CFG/pegasusx.ini" | cut -d' ' -f1 > "$R/files/after-pegasusx.ini.md5"
+ls -l "$CFG/damaged" > "$R/files/damaged-2.txt" 2>&1
+# nothing to fix: no notice
+start 16-recovery-none "" 15
+shot 16-recovery-none
+stop 16-recovery-none
+rm -rf "$CFG"
+mv "$T/cfg-before-damage" "$CFG"
+
 # -- summary --------------------------------------------------------------------------------------
 # the game directory as it is at the end (written along the way)
 find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
@@ -880,13 +926,47 @@ PY
         echo "    FAILED: Start over changed kept files:"
         diff "$R/files/kept-before.txt" "$R/files/kept-after.txt" | head -n 10 | sed 's/^/        /'
     fi
-    for gone in "pegasusx.ini" "settings.txt" "game_dirs.txt" "gamedirectory/" "downloaded_media/" "metadata/" "pegasusx-hidden.json"; do
+    for gone in "pegasusx.ini" "settings.txt" "game_dirs.txt" "gamedirectory/" "downloaded_media/" "metadata/" "pegasusx-hidden.json" \
+                "settings.txt.pxgood" "pegasusx.ini.pxgood" "game_dirs.txt.pxgood" "damaged/"; do
         if grep -q "^$gone" "$R/files/after-start-over-files.txt"; then echo "    note: $gone is there after Start over (written again since?)"; else echo "    OK: $gone deleted by Start over"; fi
     done
     echo "    files in the Pegasus X folder after Start over (and the session after it):"
     sed 's/^/        /' "$R/files/after-start-over-files.txt" | head -n 30
     if [ -s "$R/files/backups-after-start-over.txt" ]; then echo "    OK: the backup in Download is still there"; else echo "    FAILED: the backup in Download is gone"; fi
     echo "    (screenshots: 15-backup-*, 15-setup-again, 15-wipe-*, 15-after-start-over)"
+    echo
+    echo "## Damaged-file recovery (16-recovery*)"
+    echo "    last good copies before the damage: $(tr '\n' ' ' < "$R/files/good-copies.txt")"
+    echo "    Recovery: lines, first start (settings.txt junk, $(cat "$R/files/half-cut.txt") cut in half, game_dirs.txt only as .pxold):"
+    strip_ansi "$R/logs/16-recovery.stdout" | grep -h "Recovery:" | sed 's/^/        /' | head -n 40
+    HALF="$(cat "$R/files/half-cut.txt")"
+    for f in settings.txt "$HALF"; do
+        if [ -s "$R/files/good-$f.md5" ] && cmp -s "$R/files/good-$f.md5" "$R/files/after-$f.md5"; then
+            echo "    OK: $f is its last good copy again (same checksum)"
+        else
+            echo "    FAILED: $f isn't its last good copy (good $(cat "$R/files/good-$f.md5" 2>/dev/null), now $(cat "$R/files/after-$f.md5" 2>/dev/null))"
+        fi
+    done
+    if [ -s "$R/files/orig-game_dirs.txt.md5" ] && cmp -s "$R/files/orig-game_dirs.txt.md5" "$R/files/after-game_dirs.txt.md5"; then
+        echo "    OK: game_dirs.txt put back from game_dirs.txt.pxold (same checksum as before)"
+    else
+        echo "    FAILED: game_dirs.txt wasn't put back as it was"
+    fi
+    if [ -s "$R/files/leftovers-1.txt" ]; then echo "    FAILED: leftovers after the start: $(tr '\n' ' ' < "$R/files/leftovers-1.txt")"; else echo "    OK: no .pxsave / .pxold left"; fi
+    echo "    the damaged folder after it:"
+    sed 's/^/        /' "$R/files/damaged-1.txt"
+    echo "    Recovery: lines, second start (pegasusx.ini all zero bytes; X Restore from a backup):"
+    strip_ansi "$R/logs/16-recovery-restore.stdout" | grep -h "Recovery:" | sed 's/^/        /' | head -n 20
+    if [ -s "$R/files/good-pegasusx.ini.md5" ] && cmp -s "$R/files/good-pegasusx.ini.md5" "$R/files/after-pegasusx.ini.md5"; then
+        echo "    OK: pegasusx.ini is its last good copy again"
+    else
+        echo "    note: pegasusx.ini differs from its good copy before the damage (the first start may have saved it, making a new one)"
+    fi
+    echo "    the damaged folder after it:"
+    sed 's/^/        /' "$R/files/damaged-2.txt"
+    n="$(strip_ansi "$R/logs/16-recovery-none.stdout" | grep -c "Recovery:.*\(damaged:\|put back\|moved to\|defaults\|missing, \)")"
+    echo "    third start (nothing damaged): $n fixing Recovery: lines (expected 0, and no notice: 16-recovery-none)"
+    echo "    (screenshots: 16-recovery-notice, -details, -after-keep, -notice-2, -restore-picker, -none)"
     echo
     echo "## Settings > Advanced: Missing games (verify-files / show-missing-games)"
     sed 's/^/    /' "$R/files/missing-games.txt" 2>/dev/null

@@ -41,6 +41,7 @@
 #include "ScraperKeys.h"
 #include "LaunchBoxDb.h"
 #include "RetroAchievements.h"
+#include "Recovery.h"
 #include "providers/GameDirectory.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusFilter.h"
@@ -163,6 +164,22 @@ QThreadPool* emulator_pool()
 Settings::Settings(QObject* parent)
     : QObject(parent)
 {}
+
+QVariantList Settings::recoveryReport() const
+{
+    QVariantList out;
+    for (const recovery::Fixed& f : recovery::last().fixed) {
+        out.append(QVariantMap {
+            { QStringLiteral("name"), f.name },
+            { QStringLiteral("label"), f.label },
+            { QStringLiteral("path"), f.path },
+            { QStringLiteral("how"), f.how },
+            { QStringLiteral("reason"), f.reason },
+            { QStringLiteral("moved"), f.moved },
+        });
+    }
+    return out;
+}
 
 QString Settings::startupScreen() const
 {

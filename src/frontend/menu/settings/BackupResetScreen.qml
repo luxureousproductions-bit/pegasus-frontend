@@ -48,9 +48,17 @@ FocusScope {
 
     readonly property var status: Internal.settings.backupStatus()
 
+    // Pegasus X: opened from the damaged-files notice's "Restore from a
+    // backup": straight to picking the backup file
+    property bool openRestore: false
+
     Component.onCompleted: {
         folder = status.folder;
         list.jumpTo(false);
+        if (openRestore) {
+            selectKind("pickrestore");
+            activate(rows[list.currentIndex]);
+        }
     }
 
     Connections {

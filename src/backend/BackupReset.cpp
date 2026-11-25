@@ -839,6 +839,20 @@ std::vector<Named> wipe_names(const Places& places)
     add(places.cache, QStringLiteral("update"), QStringLiteral("Downloaded updates"));
     add(places.cache, QStringLiteral("androidapps"), QStringLiteral("Android app details cache"));
     add(places.cache, QStringLiteral("steam"), QStringLiteral("Steam details cache"));
+    // damaged-file recovery (Recovery.h): the last good copies beside the
+    // files above, and the damaged folders (the Pegasus X folder's, the
+    // private ones). pegasusx-root.txt's copy stays, like the file itself.
+    const QString good_what = QStringLiteral("Last good copy of %1");
+    for (const char* name : { "pegasusx.ini", "settings.txt", "game_dirs.txt", "sdl_controllers.txt",
+                              "favorites.txt", "stats.db", "pegasusx-hidden.json",
+                              "pegasusx-android-kinds.json", "pegasusx-android-apps.json",
+                              "pegasusx-emulators.json", "pegasusx-rom-folders.txt" }) {
+        add(places.data, QLatin1String(name) + QLatin1String(".pxgood"), good_what.arg(QLatin1String(name)));
+    }
+    add(places.app_data, QStringLiteral("pegasusx-private.ini.pxgood"), good_what.arg(QStringLiteral("pegasusx-private.ini")));
+    add(places.data, QStringLiteral("damaged"), QStringLiteral("Damaged files moved aside"));
+    add(places.app_data, QStringLiteral("damaged"), QStringLiteral("Damaged private files moved aside"));
+    add(places.priv, QStringLiteral("damaged"), QStringLiteral("Damaged private files moved aside"));
     return out;
 }
 } // namespace

@@ -19,6 +19,7 @@
 #include "backend/Backend.h"
 #include "backend/Log.h"
 #include "backend/Paths.h"
+#include "backend/Recovery.h"
 #include "backend/platform/TerminalKbd.h"
 
 #include <QCommandLineParser>
@@ -97,7 +98,12 @@ int main(int argc, char *argv[])
     // use, and depends on portable mode: that's known now (Backend sets the
     // same value again).
     AppSettings::general.portable = cli_args.portable;
+    // Pegasus X: damaged-file recovery (Recovery.h): where the Pegasus X
+    // folder is first (it decides where the rest are), then the rest, before
+    // anything reads them
+    recovery::run_root();
     const QStringList stale_locks = clear_stale_settings_locks();
+    recovery::run_all();
 
     int result = 0;
     {
@@ -105,6 +111,12 @@ int main(int argc, char *argv[])
         // the log is open now
         for (const QString& line : stale_locks)
             Log::warning(LOGMSG("Startup: %1").arg(line));
+        for (const QString& line : recovery::last().log) {
+            if (line.contains(QLatin1String("last good copy made")))
+                Log::info(LOGMSG("%1").arg(line));
+            else
+                Log::warning(LOGMSG("%1").arg(line));
+        }
         backend.start();
         result = app.exec();
 

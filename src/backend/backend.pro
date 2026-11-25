@@ -25,6 +25,7 @@ SOURCES += \
     ThemeStore.cpp \
     Updater.cpp \
     BackupReset.cpp \
+    Recovery.cpp \
     SafeFile.cpp \
     Scraper.cpp \
     LaunchBoxDb.cpp \
@@ -46,6 +47,7 @@ HEADERS += \
     ThemeStore.h \
     Updater.h \
     BackupReset.h \
+    Recovery.h \
     SafeFile.h \
     Scraper.h \
     LaunchBoxDb.h \

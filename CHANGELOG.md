@@ -5,6 +5,77 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Damaged-file recovery, build 2: last good copies, startup check, notice
+
+- **Why:** with a damaged settings.txt, favorites.txt, stats.db,
+  pegasusx.ini or pegasusx-hidden.json, Pegasus X started at defaults or
+  empty with no warning, and the next save wrote over the damaged file.
+- **Files checked at each start, before anything reads them**
+  (`src/backend/Recovery.cpp`): in the Pegasus X folder settings.txt,
+  pegasusx.ini, game_dirs.txt, pegasusx-rom-folders.txt, favorites.txt,
+  pegasusx-hidden.json, pegasusx-android-apps.json,
+  pegasusx-android-kinds.json, stats.db, pegasusx-emulators.json,
+  sdl_controllers.txt; in the private folder pegasusx-root.txt (first,
+  before the Pegasus X folder is decided) and pegasusx-private.ini.
+- **Damaged means:** JSON files: doesn't parse, or not an object (an
+  array for pegasusx-emulators.json). stats.db: no SQLite header, or
+  `PRAGMA integrity_check` isn't "ok". Text files: zero bytes in it, not
+  UTF-8, or control characters; then settings.txt / the .ini files /
+  sdl_controllers.txt / the ROM folder list are damaged when fewer than
+  half their lines are lines of their kind ("key: value", "key=value" or
+  "[section]", a mapping, "folder<TAB>system"); pegasusx-root.txt must be
+  one absolute path. An empty file is damage only when its last good copy
+  isn't empty (and for the ROM folder list, when it had folders);
+  favorites.txt and game_dirs.txt may always be empty, so emptying
+  favorites or hidden on purpose is never flagged (an emptied list empties
+  its good copy too).
+- **Last good copy:** `<name>.pxgood` beside the file, written with
+  SafeFile, only from a file that passed, made again when they differ.
+  pegasusx-private.ini's and pegasusx-root.txt's stay in the private
+  folder; backups never take them.
+- **Damaged file:** moved (never deleted or written over) to `damaged/`
+  in the Pegasus X folder (`damaged/` in the private folder for the
+  private files), named "yyyy-MM-dd_HH-mm-ss <name>" (stats.db's
+  -journal/-wal/-shm with it). Its good copy takes its place if it passes,
+  else that file starts at its defaults (no file); a good copy that fails
+  goes to `damaged/` too. A file that can't be moved is left as it is.
+- **Missing after a cut save:** with `.pxsave` and `.pxold` both there,
+  `.pxsave` is tried first (written in full before the old file was
+  moved), then `.pxold`; with one, that one. The first that passes the
+  check is renamed back; if none passes they go to `damaged/` and the
+  good copy (or defaults) is used. Missing with neither: left alone (first
+  start, or removed on purpose). A fine file's leftover `.pxsave` /
+  `.pxold` are removed.
+- **Notice** (`RecoveryNotice.qml`): once after the start, only when
+  something was fixed: which files and how, with Keep (B), Restore from a
+  backup (X: Backup & reset's restore picker) and Details (Y: the reason
+  and what went to `damaged/`, full paths). A on a button and touch too;
+  the round A/B/X/Y prompts. Each action is a "Recovery:" log line.
+- **Start over** (your answer) also deletes the `.pxgood` copies and the
+  `damaged/` folders (Pegasus X folder and private), listed on its page;
+  pegasusx-root.txt's good copy stays with the folder setting.
+- **Not changed:** file and library formats, defaults, the theme, other
+  screens, logging, backups' contents.
+- **Tests:** new test_Recovery (junk / half-cut / wrong-type per kind,
+  empty on purpose, ROM folders emptied, missing with .pxold, .pxsave,
+  both, both with .pxsave cut, nothing whole, damaged good copy ->
+  defaults, leftovers cleaned, other files byte-for-byte unchanged);
+  test_BackupReset checks Start over removes them; test env step 16
+  (settings.txt junk, hidden/favorites cut in half, game_dirs.txt only as
+  .pxold, pegasusx.ini zeros; the notice, Details, Keep, Restore, and a
+  clean start with no notice).
+- **Files:** `src/backend/Recovery.h`, `Recovery.cpp` (new),
+  `src/backend/backend.pro`, `CMakeLists.txt`, `src/app/main.cpp`,
+  `src/backend/BackupReset.cpp`,
+  `src/backend/providers/esde/EsdeProvider.cpp`,
+  `src/backend/model/internal/settings/Settings.h`, `Settings.cpp`,
+  `src/frontend/menu/settings/RecoveryNotice.qml` (new),
+  `BackupResetScreen.qml`, `src/frontend/main.qml`, `MenuLayer.qml`,
+  `frontend.qrc`, `tests/backend/recovery/` (new), `tests/backend/backend.pro`,
+  `tests/CMakeLists.txt`, `tests/backend/backup/test_BackupReset.cpp`,
+  `tests/testenv/run.sh`.
+- **Commit:** "Damaged-file recovery: last good copies, startup check, notice".
+
 ### Settings: three rows back on the main list; Gamepad layout's controller and icons
 
 - **Main list:** Reload all games (Games, below RetroAchievements), Gamepad

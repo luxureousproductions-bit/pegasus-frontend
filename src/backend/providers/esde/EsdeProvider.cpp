@@ -18,6 +18,7 @@
 #include "EsdeProvider.h"
 
 #include "Log.h"
+#include "Recovery.h"
 #include "SafeFile.h"
 #include "model/gaming/Assets.h"
 #include "model/gaming/Collection.h"
@@ -2319,7 +2320,11 @@ void write_rom_folders(const std::vector<std::pair<QString, QString>>& list)
     QSaveFile file(rom_folders_path());
     if (file.open(QIODevice::WriteOnly | QIODevice::Text)) {
         file.write(text.toUtf8());
-        file.commit();
+        // Pegasus X: the last ROM folder taken out on purpose: its last good
+        // copy is emptied too (recovery takes an empty list with folders in
+        // its last good copy for damage)
+        if (file.commit() && list.empty())
+            recovery::saved_empty(rom_folders_path());
     }
 }
 

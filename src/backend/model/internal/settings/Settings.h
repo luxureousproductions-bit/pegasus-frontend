@@ -144,6 +144,10 @@ public:
     Q_INVOKABLE void closeMenu() { emit closeMenuRequested(); }
     /// the screen asked for with --pegasusx-open (testing), or empty
     Q_INVOKABLE QString startupScreen() const;
+    /// Pegasus X: what the start's damaged-file recovery fixed (Recovery.h):
+    /// [{ name, label, path, how ("good copy", "defaults", "put back", "left"),
+    /// reason, moved: [paths in a damaged folder] }]; empty: nothing
+    Q_INVOKABLE QVariantList recoveryReport() const;
     /// the game the test environment scrapes at startup (PEGASUSX_TEST_SCRAPE), or empty
     Q_INVOKABLE QString testScrapeTitle() const;
     /// the test environment: text written to PEGASUSX_TEST_DUMP (the art each game has)

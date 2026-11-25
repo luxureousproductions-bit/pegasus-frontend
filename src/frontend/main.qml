@@ -406,6 +406,28 @@ Window {
             firstRunSetup.source = "";
         }
     }
+    // Pegasus X: damaged files fixed at the start (Recovery.h): which, and how
+    Loader {
+        id: recoveryNotice
+        anchors.fill: parent
+        enabled: focus
+        visible: focus && status === Loader.Ready
+        onLoaded: item.focus = true
+        onFocusChanged: if (item && focus) item.focus = true
+    }
+    Connections {
+        target: recoveryNotice.item
+        function onClose() {
+            content.focus = true;
+            recoveryNotice.source = "";
+        }
+        // Restore from a backup: Settings > Backup & reset, picking the file
+        function onRestoreRequested() {
+            recoveryNotice.source = "";
+            mainMenu.focus = true;
+            mainMenu.item.openScreenWith("menu/settings/BackupResetScreen.qml", { "openRestore": true });
+        }
+    }
     // Pegasus X: a newer build found at start: Update now / Later
     Loader {
         id: updatePrompt
@@ -623,7 +645,7 @@ Window {
                     return;
                 splashScreen.notifiedBuild = latest;
                 // the start: asked right away (Update now / Later)
-                if (splashScreen.firstCheck && !mainMenu.focus) {
+                if (splashScreen.firstCheck && !mainMenu.focus && !recoveryNotice.focus) {
                     splashScreen.firstCheck = false;
                     updatePrompt.setSource("menu/settings/UpdatePrompt.qml");
                     updatePrompt.focus = true;
@@ -699,6 +721,11 @@ Window {
                             && Internal.settings.startupScreen() === "" && testTitle === "") {
                         firstRunSetup.setSource("menu/settings/FirstRunWizard.qml");
                         firstRunSetup.focus = true;
+                    }
+                    // damaged files fixed at the start: which, and how (once)
+                    else if (Internal.settings.recoveryReport().length > 0 && Internal.settings.startupScreen() === "") {
+                        recoveryNotice.setSource("menu/settings/RecoveryNotice.qml");
+                        recoveryNotice.focus = true;
                     }
                     // the Pegasus X folder couldn't be used (SD card missing?): say so,
                     // nothing done in this session is kept there

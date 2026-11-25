@@ -3,6 +3,7 @@ TEMPLATE = subdirs
 SUBDIRS += \
     api \
     backup \
+    recovery \
     safefile \
     scraper \
     configfile \
