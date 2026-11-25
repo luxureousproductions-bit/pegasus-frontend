@@ -266,11 +266,11 @@ void recover(const Spec& spec, Report& report, const QDateTime& now)
         // missing: put back from an interrupted save, if it left a whole copy
         QStringList candidates;
         if (QFileInfo::exists(pxsave) && QFileInfo::exists(pxold))
-            candidates = { pxsave, pxold };  // (.pxsave was written in full before the old file moved)
+            candidates << pxsave << pxold;  // (.pxsave was written in full before the old file moved)
         else if (QFileInfo::exists(pxsave))
-            candidates = { pxsave };
+            candidates << pxsave;
         else if (QFileInfo::exists(pxold))
-            candidates = { pxold };
+            candidates << pxold;
         if (candidates.isEmpty())
             return;  // a first start, or taken out on purpose: nothing to do
 

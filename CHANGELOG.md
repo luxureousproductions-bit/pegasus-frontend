@@ -5,6 +5,20 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Damaged-file recovery: build fix (the list of copies to put back)
+
+- **What:** `Recovery.cpp` filled its list of `.pxsave` / `.pxold` copies
+  with `list = { ... }`, which Qt 5.15's QStringList can't tell apart from
+  its other assignments; every build (Android, Linux, Windows, test env)
+  stopped there. It's filled with `<<` now, the same names in the same
+  order.
+- **Why:** build 2272 (the commit below) didn't compile, so no APK came
+  of it; this is the build to test.
+- **Not changed:** anything the recovery does.
+- **Tests:** the same as the commit below, now that it compiles.
+- **Files:** `src/backend/Recovery.cpp`, `CHANGELOG.md`.
+- **Commit:** "Damaged-file recovery: build fix (the list of copies to put back)".
+
 ### Damaged-file recovery, build 2: last good copies, startup check, notice
 
 - **Why:** with a damaged settings.txt, favorites.txt, stats.db,
