@@ -50,6 +50,14 @@ struct GameData {
     QStringList genres;
     QStringList tags;
 
+    // Pegasus X: the genres, publishers and developers as the game's files
+    // have them, when the shown ones above went through Library > Metadata's
+    // aliases (MetadataAliases.h); has_raw: set
+    QStringList raw_developers;
+    QStringList raw_publishers;
+    QStringList raw_genres;
+    bool has_raw = false;
+
     short player_count = 1;
     float rating = 0.0;
     QDate release_date;
@@ -170,6 +178,9 @@ public:
     QVariantMap& extraMapMut() { return m_extra; }
     /// Pegasus X: after changing the loaded game's details in place
     void notifyDataChanged() { emit dataChanged(); }
+    /// Pegasus X: the lists as the game's files have them (before aliases)
+    GameData& dataMut() { return m_data; }
+    const GameData& data() const { return m_data; }
     /// Pegasus X: after changing the loaded game's extra fields in place
     void notifyExtraChanged() { emit extraChanged(); }
 

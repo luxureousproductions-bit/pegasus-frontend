@@ -25,6 +25,7 @@ SOURCES += \
     ThemeStore.cpp \
     Updater.cpp \
     BackupReset.cpp \
+    MetadataAliases.cpp \
     Recovery.cpp \
     SetupState.cpp \
     SafeFile.cpp \
@@ -48,6 +49,7 @@ HEADERS += \
     ThemeStore.h \
     Updater.h \
     BackupReset.h \
+    MetadataAliases.h \
     Recovery.h \
     SetupState.h \
     SafeFile.h \

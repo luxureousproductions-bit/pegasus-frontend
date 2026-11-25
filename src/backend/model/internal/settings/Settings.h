@@ -349,6 +349,32 @@ public:
     /// list). Each collection's file is backed up ("edit"), read and written
     /// once; the loaded games show it at once. Returns { saved, error }.
     Q_INVOKABLE QVariantMap saveGamesGenres(const QVariantList& games);
+
+    // Pegasus X: Library > Metadata (Genres, Publishers, Developers). Merges are
+    // aliases (MetadataAliases.h), never a change to a game's files.
+    /// Every value of `field` ("genre", "publisher", "developer") in the
+    /// loaded games, its spellings that differ in ways you can't see counted as
+    /// one: [{ key, name, count, spellings: [{ name, count }] }], A to Z (the
+    /// most used spelling is the name). Read in one pass here, its games kept
+    /// for metadataGames and Merge.
+    Q_INVOKABLE QVariantList metadataValues(QObject* all_games, const QString& field);
+    /// The games of a value (its key): [{ obj, title, coll, spelling }], by title
+    Q_INVOKABLE QVariantList metadataGames(const QString& field, const QString& key) const;
+    /// Suggested merges, looked for in the background (never applied):
+    /// metadataSuggested(field, [{ level (0 near-certain, 1 regional, 2 maybe),
+    /// games, values: [{ key, name, count }] }], ms)
+    Q_INVOKABLE void metadataSuggest(const QString& field);
+    /// Merged names: [{ to, key, from: [{ name, count }], games }]
+    Q_INVOKABLE QVariantList metadataMerged(const QString& field) const;
+    /// Every spelling of these values (keys) shown as `to`: saved, and the
+    /// loaded games show it at once. { error, spellings, games }
+    Q_INVOKABLE QVariantMap metadataMerge(QObject* all_games, const QString& field, const QStringList& keys, const QString& to);
+    /// Undo: the spellings shown as `to` shown as they are again. { error, spellings, games }
+    Q_INVOKABLE QVariantMap metadataUndo(QObject* all_games, const QString& field, const QString& to);
+    /// A game's list as its files have it (before merges)
+    Q_INVOKABLE QStringList rawValues(QObject* game, const QString& field) const;
+    /// A spelling as it's shown (its merge's name, or itself)
+    Q_INVOKABLE QString shownValue(const QString& field, const QString& spelling) const;
     /// { shortname, extensions, launch, defaultLabel, defaultCommand } of a collection
     Q_INVOKABLE QVariantMap collectionDetails(const QString& collection_name) const;
     /// The emulators of a collection's system: [{ label, command, installed, recommended, retroarch }]
@@ -542,6 +568,8 @@ public:
     Q_INVOKABLE void reloadProviders();
 
 signals:
+    /// Library > Metadata: its suggestions are ready (metadataSuggest)
+    void metadataSuggested(QString field, QVariantList suggestions, int ms);
     void pegasusxSettingsChanged();
     /// setRootDir finished: `error` is empty when the folder is set
     void rootDirChanged(QString error);
@@ -623,6 +651,19 @@ private:
     QString raStart(QObject* collections, bool only_new, bool progress_only, model::Game* one_game, const QString& one_collection,
                     const QString& only_collection = QString());
     QPointer<model::Game> m_single_game;
+    // Library > Metadata: the last read of each field (metadataValues)
+    struct MetaGroup {
+        QString key;
+        QString name;
+        int count = 0;
+        QHash<QString, int> spellings;   ///< as shown
+        QHash<QString, int> raws;        ///< as the files have them
+        std::vector<std::pair<QPointer<model::Game>, QString>> games;  ///< and its spelling
+    };
+    std::vector<MetaGroup> m_meta[3];
+    QHash<QString, int> m_meta_index[3];   ///< key -> m_meta
+    QHash<QString, int> m_meta_raw_count[3];  ///< a spelling as the files have it -> games
+    int m_meta_gen = 0;
     QHash<QString, QPointer<model::Game>> m_scrape_games;  ///< the games of the run, by path (updated in place when saved)
     int m_scrape_unapplied = 0;                            ///< saved games no longer loaded (a read is needed)
     QHash<QString, QPointer<model::Game>> m_ra_games;

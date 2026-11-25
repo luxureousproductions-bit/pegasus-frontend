@@ -72,7 +72,7 @@
         <file>menu/settings/MetadataEditor.qml</file>
         <file>menu/settings/ScraperScreen.qml</file>
         <file>menu/settings/ScraperSection.qml</file>
-        <file>menu/settings/GenresScreen.qml</file>
+        <file>menu/settings/MetadataScreen.qml</file>
         <file>menu/settings/AndroidAppPicker.qml</file>
         <file>menu/settings/BackupResetScreen.qml</file>
         <file>menu/settings/GenreKey.js</file>

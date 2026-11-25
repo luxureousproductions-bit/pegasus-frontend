@@ -126,6 +126,8 @@ void test_BackupReset::make_fixture()
     write(data("pegasusx-themes/cache.json"), "{}");
     write(data("gamedirectory/snes/metadata.pegasus.txt"), "collection: SNES\n");
     write(data("metadata/review.json"), "{}");
+    // Library > Metadata's merged names
+    write(data("metadata/aliases.json"), "{\"version\":1,\"publisher\":{\"Nintendo of America\":\"Nintendo\"}}");
     write(data("metadata/library-index.json"), "{}");
     write(data("theme_settings/XBSX.json"), "{\"accent\":\"green\"}");
     write(data("downloaded_media/snes/covers/Super Mario World.png"), QByteArray(2048, 'P'));
@@ -201,7 +203,7 @@ void test_BackupReset::backup_leaves_out_caches_themes_logs()
     for (const char* in : { "data/pegasusx.ini", "data/settings.txt", "data/game_dirs.txt", "data/favorites.txt",
                             "data/stats.db", "data/pegasusx-hidden.json", "data/pegasusx-android-apps.json",
                             "data/pegasusx-themes/links.json", "data/gamedirectory/snes/metadata.pegasus.txt",
-                            "data/metadata/review.json", "data/theme_settings/XBSX.json" })
+                            "data/metadata/review.json", "data/theme_settings/XBSX.json", "data/metadata/aliases.json" })
         QVERIFY2(all.contains(in), in);
     for (const char* out : { "downloaded_media", "theme.qml", "lastrun.log", "library-index.json", "backup/old.tar",
                              "launchbox", "cache.json", "MyROMs", "notes.txt", "keep me", "linked.txt", "outlink" })
@@ -210,7 +212,7 @@ void test_BackupReset::backup_leaves_out_caches_themes_logs()
     QCOMPARE(info.error, QString());
     QCOMPARE(info.build, 2253);
     QCOMPARE(info.art, false);
-    QCOMPARE(info.files, 11);
+    QCOMPARE(info.files, 12);
 }
 
 void test_BackupReset::backup_with_art()
@@ -241,6 +243,7 @@ void test_BackupReset::restore_round_trip_keeps_device_logins()
     write(data("game_dirs.txt"), "/elsewhere\n");
     QFile::remove(data("favorites.txt"));
     write(data("gamedirectory/n64/metadata.pegasus.txt"), "collection: N64\n");
+    write(data("metadata/aliases.json"), "{\"version\":1}");
     {
         QSettings ini(data("pegasusx.ini"), QSettings::IniFormat);
         ini.setValue(QStringLiteral("scraper/ssUser"), QStringLiteral("device"));
@@ -257,6 +260,8 @@ void test_BackupReset::restore_round_trip_keeps_device_logins()
     QCOMPARE(read(data("favorites.txt")), QByteArray("/roms/snes/Super Mario World.sfc\n"));
     QVERIFY(!QFileInfo::exists(data("gamedirectory/n64/metadata.pegasus.txt")));
     QCOMPARE(read(data("theme_settings/XBSX.json")), QByteArray("{\"accent\":\"green\"}"));
+    // the merged names as the backup has them
+    QCOMPARE(read(data("metadata/aliases.json")), QByteArray("{\"version\":1,\"publisher\":{\"Nintendo of America\":\"Nintendo\"}}"));
     const QSettings ini(data("pegasusx.ini"), QSettings::IniFormat);
     QCOMPARE(ini.value(QStringLiteral("scraper/ssUser")).toString(), QStringLiteral("device"));
     QCOMPARE(ini.value(QStringLiteral("scraper/ssPassword")).toString(), QStringLiteral("DEVICEPASS"));
@@ -395,6 +400,7 @@ void test_BackupReset::start_over_deletes_only_its_list()
                                  m_places.cache + QStringLiteral("/gameindex-v1.json"),
                                  m_places.cache + QStringLiteral("/netcache"),
                                  data("favorites.txt.pxgood"), data("settings.txt.pxgood"), data("damaged"),
+                                 data("metadata/aliases.json"),
                                  m_places.app_data + QStringLiteral("/pegasusx-private.ini.pxgood"),
                                  m_places.app_data + QStringLiteral("/damaged"),
                                  m_places.priv + QStringLiteral("/damaged") })

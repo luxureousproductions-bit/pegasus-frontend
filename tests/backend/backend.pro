@@ -3,6 +3,7 @@ TEMPLATE = subdirs
 SUBDIRS += \
     api \
     backup \
+    metadataaliases \
     recovery \
     setupstate \
     safefile \

@@ -43,6 +43,7 @@
 #include "RetroAchievements.h"
 #include "Recovery.h"
 #include "SetupState.h"
+#include "MetadataAliases.h"
 #include "providers/GameDirectory.h"
 #include "providers/SearchContext.h"
 #include "providers/pegasus_metadata/PegasusFilter.h"
@@ -59,6 +60,7 @@
 #include <QCoreApplication>
 #include <QCursor>
 #include <QElapsedTimer>
+#include <numeric>
 #include <algorithm>
 #include <QLocale>
 #include <QNetworkAccessManager>
@@ -649,6 +651,9 @@ void Settings::startRestore(const QString& path)
             if (!result.saved_first.isEmpty()) {
                 // the restored settings.txt (theme, language, controls) read in
                 AppSettings::load_config();
+                // Library > Metadata's merged names as the backup has them (the
+                // next library read shows them)
+                aliases::reload();
                 emit pegasusxSettingsChanged();
                 emit libraryRulesChanged();
             }
@@ -2916,12 +2921,13 @@ void apply_scraped(model::Game& game, const QVariantMap& changes)
             game.setDescription(it.value().toString());
         else if (key == QLatin1String("summary"))
             game.setSummary(it.value().toString());
+        // (as the file has them now; shown through Library > Metadata's aliases)
         else if (key == QLatin1String("developer"))
-            game.developerList() = it.value().toStringList();
+            aliases::set_raw(game, aliases::Developer, it.value().toStringList());
         else if (key == QLatin1String("publisher"))
-            game.publisherList() = it.value().toStringList();
+            aliases::set_raw(game, aliases::Publisher, it.value().toStringList());
         else if (key == QLatin1String("genre"))
-            game.genreList() = it.value().toStringList();
+            aliases::set_raw(game, aliases::Genre, it.value().toStringList());
         else if (key == QLatin1String("release"))
             game.setReleaseDate(QDate::fromString(it.value().toString().left(10), Qt::ISODate));
         else if (key == QLatin1String("players"))
@@ -4053,6 +4059,323 @@ QString Settings::firstExistingDir(const QStringList& paths) const
 QStringList Settings::libraryGenres(QObject* all_games) const
 {
     return libraryValues(all_games, QStringLiteral("genre"));
+}
+
+
+// -- Library > Metadata ------------------------------------------------------------------------
+
+namespace {
+const QStringList& meta_list(const model::Game& game, int field)
+{
+    return field == aliases::Genre ? game.genreListConst()
+        : field == aliases::Publisher ? game.publisherListConst() : game.developerListConst();
+}
+// the genres Android sorts apps by: not genres here (as Genres always did)
+bool meta_skipped(int field, const QString& key)
+{
+    return field == aliases::Genre && (key == QLatin1String("application") || key == QLatin1String("emulator"));
+}
+QVariantList meta_counts(const QHash<QString, int>& counts)
+{
+    std::vector<std::pair<QString, int>> v;
+    for (auto it = counts.cbegin(); it != counts.cend(); ++it)
+        v.emplace_back(it.key(), it.value());
+    std::sort(v.begin(), v.end(), [](const std::pair<QString, int>& a, const std::pair<QString, int>& b) {
+        if (a.second != b.second)
+            return a.second > b.second;
+        return a.first < b.first;
+    });
+    QVariantList out;
+    for (const auto& e : v)
+        out.append(QVariantMap { { QStringLiteral("name"), e.first }, { QStringLiteral("count"), e.second } });
+    return out;
+}
+QString meta_coll(const model::Game& game)
+{
+    const auto& colls = game.collectionsModel()->entries();
+    return colls.empty() ? QString() : colls.front()->name();
+}
+} // namespace
+
+QVariantList Settings::metadataValues(QObject* all_games, const QString& field_name)
+{
+    QVariantList out;
+    const int field = aliases::field_of(field_name);
+    const auto* const list = qobject_cast<model::ObjectListModel*>(all_games);
+    if (field < 0 || !list)
+        return out;
+    QElapsedTimer timer;
+    timer.start();
+    const aliases::Table table = aliases::current();
+    std::vector<MetaGroup>& groups = m_meta[field];
+    QHash<QString, int>& index = m_meta_index[field];
+    QHash<QString, int>& raw_count = m_meta_raw_count[field];
+    groups.clear();
+    index.clear();
+    raw_count.clear();
+    const int n = list->count();
+    for (int i = 0; i < n; i++) {
+        auto* const game = qobject_cast<model::Game*>(list->get(i));
+        if (!game)
+            continue;
+        QSet<QString> seen;
+        for (const QString& value : meta_list(*game, field)) {
+            const QString name = value.trimmed();
+            if (name.isEmpty())
+                continue;
+            const QString key = aliases::invisible_key(name);
+            if (seen.contains(key) || meta_skipped(field, key))
+                continue;
+            seen.insert(key);
+            auto it = index.constFind(key);
+            int at = 0;
+            if (it == index.cend()) {
+                at = static_cast<int>(groups.size());
+                index.insert(key, at);
+                groups.emplace_back();
+                groups.back().key = key;
+            }
+            else
+                at = it.value();
+            MetaGroup& g = groups[at];
+            g.count++;
+            g.spellings[name]++;
+            g.games.emplace_back(game, name);
+        }
+        // the spellings as the files have them, under the value they show as
+        QSet<QString> seen_raw;
+        for (const QString& raw : aliases::raw_list(*game, field)) {
+            const QString r = raw.trimmed();
+            if (r.isEmpty() || seen_raw.contains(r))
+                continue;
+            seen_raw.insert(r);
+            raw_count[r]++;
+            const QString key = aliases::invisible_key(aliases::shown(table, field, r).trimmed());
+            const auto it = index.constFind(key);
+            if (it != index.cend())
+                groups[it.value()].raws[r]++;
+        }
+    }
+    for (MetaGroup& g : groups) {
+        // the name: its most used spelling (the same: A to Z)
+        int best = -1;
+        for (auto it = g.spellings.cbegin(); it != g.spellings.cend(); ++it) {
+            if (it.value() > best || (it.value() == best && it.key() < g.name)) {
+                best = it.value();
+                g.name = it.key();
+            }
+        }
+    }
+    std::vector<int> order(groups.size());
+    std::iota(order.begin(), order.end(), 0);
+    std::sort(order.begin(), order.end(), [&groups](int a, int b) {
+        const int c = groups[a].name.toLower().localeAwareCompare(groups[b].name.toLower());
+        return c != 0 ? c < 0 : groups[a].name < groups[b].name;
+    });
+    for (int at : order) {
+        const MetaGroup& g = groups[at];
+        out.append(QVariantMap {
+            { QStringLiteral("key"), g.key },
+            { QStringLiteral("name"), g.name },
+            { QStringLiteral("count"), g.count },
+            { QStringLiteral("spellings"), meta_counts(g.spellings) },
+        });
+    }
+    Log::info(LOGMSG("Metadata: %1 games read for %2s in %3 ms: %4 values")
+        .arg(n).arg(field_name).arg(timer.elapsed()).arg(groups.size()));
+    return out;
+}
+
+QVariantList Settings::metadataGames(const QString& field_name, const QString& key) const
+{
+    QVariantList out;
+    const int field = aliases::field_of(field_name);
+    if (field < 0)
+        return out;
+    const auto it = m_meta_index[field].constFind(key);
+    if (it == m_meta_index[field].cend())
+        return out;
+    const MetaGroup& g = m_meta[field][it.value()];
+    std::vector<std::pair<QString, QVariantMap>> rows;
+    for (const auto& entry : g.games) {
+        if (!entry.first)
+            continue;
+        const model::Game& game = *entry.first;
+        rows.emplace_back(game.title().toLower(), QVariantMap {
+            { QStringLiteral("obj"), QVariant::fromValue<QObject*>(entry.first.data()) },
+            { QStringLiteral("title"), game.title() },
+            { QStringLiteral("coll"), meta_coll(game) },
+            { QStringLiteral("spelling"), entry.second },
+        });
+    }
+    std::stable_sort(rows.begin(), rows.end(), [](const std::pair<QString, QVariantMap>& a, const std::pair<QString, QVariantMap>& b) {
+        return a.first.localeAwareCompare(b.first) < 0;
+    });
+    for (auto& r : rows)
+        out.append(std::move(r.second));
+    return out;
+}
+
+void Settings::metadataSuggest(const QString& field_name)
+{
+    const int field = aliases::field_of(field_name);
+    if (field < 0)
+        return;
+    // the values as read last (names and counts), looked at on another thread
+    std::vector<aliases::Value> values;
+    QStringList keys;
+    for (const MetaGroup& g : m_meta[field]) {
+        aliases::Value v;
+        v.name = g.name;
+        v.count = g.count;
+        values.push_back(v);
+        keys.append(g.key);
+    }
+    const int gen = ++m_meta_gen;
+    QtConcurrent::run([this, field_name, values, keys, gen]{
+        QElapsedTimer timer;
+        timer.start();
+        const std::vector<aliases::Suggestion> found = aliases::suggest(values);
+        QVariantList out;
+        for (const aliases::Suggestion& sg : found) {
+            QVariantList members;
+            for (int i : sg.values) {
+                members.append(QVariantMap {
+                    { QStringLiteral("key"), keys.at(i) },
+                    { QStringLiteral("name"), values[i].name },
+                    { QStringLiteral("count"), values[i].count },
+                });
+            }
+            out.append(QVariantMap {
+                { QStringLiteral("level"), sg.level },
+                { QStringLiteral("games"), sg.games },
+                { QStringLiteral("values"), members },
+            });
+        }
+        const int ms = static_cast<int>(timer.elapsed());
+        const int n = static_cast<int>(values.size());
+        QMetaObject::invokeMethod(this, [this, field_name, out, ms, gen, n]{
+            if (gen != m_meta_gen)
+                return;  // (another one asked for since)
+            Log::info(LOGMSG("Metadata: %1 suggested merges for %2s (%3 values) in %4 ms")
+                .arg(out.size()).arg(field_name).arg(n).arg(ms));
+            emit metadataSuggested(field_name, out, ms);
+        }, Qt::QueuedConnection);
+    });
+}
+
+QVariantList Settings::metadataMerged(const QString& field_name) const
+{
+    QVariantList out;
+    const int field = aliases::field_of(field_name);
+    if (field < 0)
+        return out;
+    const aliases::Table table = aliases::current();
+    QHash<QString, QStringList> by_to;
+    for (auto it = table.map[field].cbegin(); it != table.map[field].cend(); ++it)
+        by_to[it.value()].append(it.key());
+    QStringList tos = by_to.keys();
+    std::sort(tos.begin(), tos.end(), [](const QString& a, const QString& b) {
+        return a.toLower().localeAwareCompare(b.toLower()) < 0;
+    });
+    for (const QString& to : tos) {
+        QHash<QString, int> counts;
+        for (const QString& from : by_to.value(to))
+            counts.insert(from, m_meta_raw_count[field].value(from, 0));
+        const QString key = aliases::invisible_key(to);
+        const auto it = m_meta_index[field].constFind(key);
+        out.append(QVariantMap {
+            { QStringLiteral("to"), to },
+            { QStringLiteral("key"), key },
+            { QStringLiteral("from"), meta_counts(counts) },
+            { QStringLiteral("games"), it != m_meta_index[field].cend() ? m_meta[field][it.value()].count : 0 },
+        });
+    }
+    return out;
+}
+
+namespace {
+// the loaded games shown through the aliases as they are now
+int meta_reapply(QObject* all_games, const aliases::Table& table)
+{
+    const auto* const list = qobject_cast<model::ObjectListModel*>(all_games);
+    if (!list)
+        return 0;
+    int changed = 0;
+    for (int i = 0; i < list->count(); i++) {
+        auto* const game = qobject_cast<model::Game*>(list->get(i));
+        if (game && aliases::reapply(*game, table)) {
+            game->notifyDataChanged();
+            changed++;
+        }
+    }
+    return changed;
+}
+} // namespace
+
+QVariantMap Settings::metadataMerge(QObject* all_games, const QString& field_name, const QStringList& keys, const QString& to)
+{
+    const int field = aliases::field_of(field_name);
+    if (field < 0)
+        return { { QStringLiteral("error"), QStringLiteral("not a field") } };
+    // every spelling of these values: as shown, and as the files have them
+    QStringList from;
+    for (const QString& key : keys) {
+        const auto it = m_meta_index[field].constFind(key);
+        if (it == m_meta_index[field].cend())
+            continue;
+        const MetaGroup& g = m_meta[field][it.value()];
+        for (auto s = g.spellings.cbegin(); s != g.spellings.cend(); ++s)
+            from.append(s.key());
+        for (auto r = g.raws.cbegin(); r != g.raws.cend(); ++r)
+            from.append(r.key());
+    }
+    from.removeDuplicates();
+    aliases::Table table = aliases::current();
+    const QString error = aliases::add(table, field, from, to);
+    if (!error.isEmpty()) {
+        Log::warning(LOGMSG("Metadata: merge into \"%1\" (%2s) not made: %3").arg(to, field_name, error));
+        return { { QStringLiteral("error"), error } };
+    }
+    if (!aliases::save(aliases::file_path(), table))
+        return { { QStringLiteral("error"), QStringLiteral("couldn't save `%1`").arg(aliases::file_path()) } };
+    aliases::set_current(table);
+    const int games = meta_reapply(all_games, table);
+    const QStringList now = aliases::spellings_of(table, field, to.trimmed());
+    Log::info(LOGMSG("Metadata: %1s merged: %2 shown as \"%3\" (%4 games show it now); no game file changed")
+        .arg(field_name, now.join(QStringLiteral(" | ")), to.trimmed()).arg(games));
+    return { { QStringLiteral("error"), QString() }, { QStringLiteral("spellings"), now.size() }, { QStringLiteral("games"), games } };
+}
+
+QVariantMap Settings::metadataUndo(QObject* all_games, const QString& field_name, const QString& to)
+{
+    const int field = aliases::field_of(field_name);
+    if (field < 0)
+        return { { QStringLiteral("error"), QStringLiteral("not a field") } };
+    aliases::Table table = aliases::current();
+    const QStringList from = aliases::spellings_of(table, field, to);
+    const int n = aliases::remove(table, field, from);
+    if (n == 0)
+        return { { QStringLiteral("error"), QStringLiteral("nothing to undo") } };
+    if (!aliases::save(aliases::file_path(), table))
+        return { { QStringLiteral("error"), QStringLiteral("couldn't save `%1`").arg(aliases::file_path()) } };
+    aliases::set_current(table);
+    const int games = meta_reapply(all_games, table);
+    Log::info(LOGMSG("Metadata: %1s merge undone: %2 shown as they are again, not as \"%3\" (%4 games)")
+        .arg(field_name, from.join(QStringLiteral(" | ")), to).arg(games));
+    return { { QStringLiteral("error"), QString() }, { QStringLiteral("spellings"), n }, { QStringLiteral("games"), games } };
+}
+
+QStringList Settings::rawValues(QObject* game_obj, const QString& field_name) const
+{
+    const auto* const game = qobject_cast<model::Game*>(game_obj);
+    const int field = aliases::field_of(field_name);
+    return game && field >= 0 ? aliases::raw_list(*game, field) : QStringList();
+}
+
+QString Settings::shownValue(const QString& field_name, const QString& spelling) const
+{
+    return aliases::shown(aliases::current(), aliases::field_of(field_name), spelling);
 }
 
 

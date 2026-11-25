@@ -153,6 +153,7 @@ QString check(Kind kind, const QByteArray& bytes, const QString& path, const QBy
             // layouts saved
             case Kind::Ini:
             case Kind::SdlMappings:
+            case Kind::JsonObjectOrEmpty:   // (Library > Metadata: no alias)
                 return {};
             case Kind::RomFolders:
                 return QString::fromUtf8(good).contains(QLatin1Char('\t'))
@@ -177,13 +178,15 @@ QString check(Kind kind, const QByteArray& bytes, const QString& path, const QBy
 
     switch (kind) {
         case Kind::JsonObject:
+        case Kind::JsonObjectOrEmpty:
         case Kind::JsonArray: {
             QJsonParseError error;
             const QJsonDocument doc = QJsonDocument::fromJson(bytes, &error);
             if (error.error != QJsonParseError::NoError)
                 return QStringLiteral("not JSON (%1 at %2)").arg(error.errorString()).arg(error.offset);
-            if (kind == Kind::JsonObject ? !doc.isObject() : !doc.isArray())
-                return QStringLiteral("JSON, but not the %1 it holds").arg(kind == Kind::JsonObject ? QStringLiteral("object") : QStringLiteral("list"));
+            const bool object = kind != Kind::JsonArray;
+            if (object ? !doc.isObject() : !doc.isArray())
+                return QStringLiteral("JSON, but not the %1 it holds").arg(object ? QStringLiteral("object") : QStringLiteral("list"));
             return {};
         }
         case Kind::Settings: {
@@ -385,6 +388,8 @@ Report run_all()
         { data, QStringLiteral("stats.db"), Kind::Sqlite, QStringLiteral("Play time"), damaged },
         { data, QStringLiteral("pegasusx-emulators.json"), Kind::JsonArray, QStringLiteral("Emulator choices"), damaged },
         { data, QStringLiteral("sdl_controllers.txt"), Kind::SdlMappings, QStringLiteral("Gamepad layouts"), damaged },
+        { data + QStringLiteral("/metadata"), QStringLiteral("aliases.json"), Kind::JsonObjectOrEmpty,
+          QStringLiteral("Merged names (Library > Metadata)"), damaged },
     };
     for (const Spec& spec : specs)
         recover(spec, report);

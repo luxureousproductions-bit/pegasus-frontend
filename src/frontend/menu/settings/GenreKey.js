@@ -15,7 +15,7 @@
 
 .pragma library
 
-// Pegasus X: how Library > Genres tells genres apart. Spellings that only
+// Pegasus X: how Library > Metadata tells values apart (Genres was its first tab). Spellings that only
 // differ in ways you can't see (or barely) count as one genre: letter case,
 // the apostrophe (' ’ ‘ ‛ ʼ ` ´ ′), runs of spaces (non-breaking ones too),
 // spaces at the ends, and the spacing around "/". A genre with a "/" stays
@@ -116,15 +116,17 @@ function view(rows, query, onlyOnes, order) {
 // `to`; its other genres stay as they are, in their order. The genre `to`
 // ends up once: where it was first (if the game had it already, in that
 // spelling, unless every spelling of it is being replaced: `to` is then a
-// spelling of `fromKey` itself)
-function replace(names, fromKey, to) {
+// spelling of `fromKey` itself). `shownOf` (optional): a spelling as Library
+// > Metadata shows it (merged names): `names` are then the game file's
+// spellings, matched by what they show as
+function replace(names, fromKey, to, shownOf) {
     var target = String(to).trim();
     var toKey = key(target);
     var out = [];
     var placed = false;
     for (var i = 0; i < names.length; i++) {
         var name = String(names[i]);
-        var k = key(name);
+        var k = key(shownOf ? shownOf(name) : name);
         if (k === fromKey)
             name = target;
         else if (k !== toKey) {

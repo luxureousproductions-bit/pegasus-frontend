@@ -58,6 +58,7 @@ enum class Kind {
     Sqlite,       ///< stats.db
     Ini,          ///< pegasusx.ini, pegasusx-private.ini
     SdlMappings,  ///< sdl_controllers.txt: SDL gamepad mappings
+    JsonObjectOrEmpty,  ///< metadata/aliases.json: a JSON object; empty is fine too
 };
 
 struct Spec {

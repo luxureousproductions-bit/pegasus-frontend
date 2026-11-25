@@ -229,14 +229,15 @@ keys Down Return
 sleep 1
 shot 03-library-review
 keys Escape
-# Genres (the row under Needs your check). The fixture's genres, A to Z: Action (1 game),
-# Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up), under Search
-# genres..., Only genres with 1 game and Sort (Search selected first). A genre's page:
-# Change this genre... (selected), its two spellings side by side, then its games
+# Metadata (the row under Needs your check), its Genres tab. The fixture's genres, A to Z:
+# Action (1 game), Platform (Platform, platform) and Shoot'em Up (Shoot'em Up, Shoot’em Up),
+# under Suggested merges, Merged, Search genres..., Only genres with 1 game and Sort
+# (Suggested merges selected first). A genre's page: Change this genre... (selected), its
+# two spellings side by side, then its games
 keys Down Return
-sleep 1
+sleep 2
 shot 03-genres
-keys Down Down Down Down Return
+keys Down Down Down Down Down Down Return
 shot 03-genre-games
 keys Down Down Down Return
 sleep 1
@@ -246,7 +247,7 @@ shot 03-genre-games-back
 keys Escape Down Return
 shot 03-genre-spellings
 # Search genres...: "shoot" narrows the list as it's typed; then cleared
-keys Escape Page_Up Return
+keys Escape Page_Up Down Down Return
 sleep 1
 xdotool type --clearmodifiers --delay 150 "shoot"
 sleep 1
@@ -807,6 +808,148 @@ stop 16-recovery-none
 rm -rf "$CFG"
 mv "$T/cfg-before-damage" "$CFG"
 
+# -- 17. Library > Metadata: suggested merges, merges, a restart and a rescrape, undo, recovery ------
+# A folder of its own (MetaTest, in game_dirs.txt) with publishers and developers spelled several
+# ways: Nintendo, Nintendo of America, Nintendo Co., Ltd.; Sega, SEGA Europe; developers Nintendo
+# EAD, Sega AM2 (divisions: never suggested with Sega), Sega, Hudson Soft / HudsonSoft. Publishers:
+# the first suggestion merged, then the next (both into Nintendo); Developers' suggestions; Merged.
+# No game file may change (checksums before and after). Then a "rescrape" adds a game spelled
+# "Nintendo Co., Ltd.": after a restart it shows as Nintendo. Undo; then aliases.json junked:
+# recovery puts its last good copy back.
+cp -a "$CFG" "$T/cfg-before-meta"
+MT="$T/MetaTest"
+mkdir -p "$MT"
+for g in a b c d e f g h; do head -c 2048 /dev/urandom > "$MT/$g.bin"; done
+cat > "$MT/metadata.pegasus.txt" <<'TXT'
+collection: Meta Test
+shortname: metatest
+extensions: bin
+
+game: Meta Alpha
+file: a.bin
+publisher: Nintendo
+developer: Nintendo EAD
+
+game: Meta Bravo
+file: b.bin
+publisher: Nintendo of America
+developer: Nintendo EAD
+
+game: Meta Charlie
+file: c.bin
+publisher: Nintendo Co., Ltd.
+developer: Sega AM2
+
+game: Meta Delta
+file: d.bin
+publisher: Sega
+developer: Sega AM2
+
+game: Meta Echo
+file: e.bin
+publisher: SEGA Europe
+developer: Sega
+
+game: Meta Foxtrot
+file: f.bin
+publisher: Nintendo of America
+  Nintendo
+developer: Hudson Soft
+
+game: Meta Golf
+file: g.bin
+developer: HudsonSoft
+TXT
+echo "$MT" >> "$CFG/game_dirs.txt"
+originals() {  # every metadata file, gamelist and game directory file: name and checksum
+    find "$MT" "$T/Pegasus" "$T/storage/ROMs" "$T/storage/ES-DE/gamelists" "$T/MyGames" "$CFG/gamedirectory" \
+        -type f \( -name '*.txt' -o -name '*.xml' -o -name '*.json' \) -exec md5sum {} + 2>/dev/null | sort
+}
+start 17-metadata "menu/settings/MetadataEditor.qml" 8
+originals > "$R/files/meta-originals-before.txt"
+keys Down Down Return
+sleep 3
+shot 17-genres
+keys e
+sleep 3
+shot 17-publishers
+keys Return
+sleep 1
+shot 17-publisher-suggestions
+# the first suggestion (near-certain: Nintendo, Nintendo Co., Ltd.): Merge, both ticked
+keys Return
+sleep 1
+shot 17-publisher-merge
+keys Down Down Down Down Return
+sleep 1
+shot 17-publisher-merge-confirm
+keys Right Return
+sleep 2
+shot 17-publisher-merged-1
+# the next one (regional: Nintendo, Nintendo of America)
+keys Page_Up Return
+sleep 2
+shot 17-publisher-suggestions-2
+keys Return
+sleep 1
+shot 17-publisher-merge-2
+keys Down Down Down Down Return
+sleep 1
+keys Right Return
+sleep 2
+shot 17-publisher-merged-2
+# Developers: its suggestions (Sega AM2 never with Sega)
+keys e
+sleep 3
+keys Return
+sleep 1
+shot 17-developer-suggestions
+keys Escape q
+sleep 2
+# Publishers > Merged
+keys Page_Up Down Return
+sleep 1
+shot 17-publisher-merged-list
+originals > "$R/files/meta-originals-after-merge.txt"
+cp "$CFG/metadata/aliases.json" "$R/files/aliases-after-merge.json" 2>/dev/null
+stop 17-metadata
+# a "rescrape" writes the old spelling into a game again; a restart reads it
+cat >> "$MT/metadata.pegasus.txt" <<'TXT'
+
+game: Meta Hotel
+file: h.bin
+publisher: Nintendo Co., Ltd.
+TXT
+originals > "$R/files/meta-originals-rescraped.txt"
+start 17-metadata-restart "menu/settings/MetadataEditor.qml" 8
+keys Down Down Return
+sleep 3
+keys e
+sleep 3
+shot 17-restart-publishers
+# undo: Merged, its first (Nintendo), the confirm's Undo
+keys Page_Up Down Return
+sleep 1
+keys Return
+sleep 1
+shot 17-undo-confirm
+keys Right Return
+sleep 2
+shot 17-undone
+keys Escape
+sleep 2
+originals > "$R/files/meta-originals-after-undo.txt"
+cp "$CFG/metadata/aliases.json" "$R/files/aliases-after-undo.json" 2>/dev/null
+stop 17-metadata-restart
+# aliases.json junked: recovery puts its last good copy back
+head -c 600 /dev/urandom > "$CFG/metadata/aliases.json"
+start 17-metadata-recovery "menu/settings/MetadataEditor.qml" 5
+stop 17-metadata-recovery
+cp "$CFG/metadata/aliases.json" "$R/files/aliases-after-recovery.json" 2>/dev/null
+ls "$CFG/damaged" > "$R/files/meta-damaged.txt" 2>&1
+rm -rf "$CFG"
+mv "$T/cfg-before-meta" "$CFG"
+
 # -- summary --------------------------------------------------------------------------------------
 # the game directory as it is at the end (written along the way)
 find "$CFG/gamedirectory" "$CFG/backup" -type f 2>/dev/null | while read -r f; do
@@ -1077,6 +1220,70 @@ PY
         diff "$R/files/folderfirst-before.txt" "$R/files/folderfirst-after.txt" | head -n 10 | sed 's/^/        /'
     fi
     echo "    (screenshots: 08d-folder-first-*, 08e-folder-first-nothing, 08e-tick-instead)"
+    echo
+    echo "## Library > Metadata (17-metadata*)"
+    for n in 17-metadata 17-metadata-restart 17-metadata-recovery; do
+        echo "    $n:"
+        strip_ansi "$R/logs/$n.stdout" | grep -E "(Genres|Publishers|Developers): (suggested merges|[0-9]+ values|merge |undo )|Metadata: |Recovery: .aliases" \
+            | sed 's/^\[[iw]\] //; s/^qml: //' | cut -c1-400 | sed 's/^/        /'
+    done
+    if diff -q "$R/files/meta-originals-before.txt" "$R/files/meta-originals-after-merge.txt" >/dev/null 2>&1; then
+        echo "    OK: merging changed no game file ($(wc -l < "$R/files/meta-originals-after-merge.txt") metadata files, gamelists and game directory files, same checksums)"
+    else
+        echo "    FAILED: a game file changed while merging:"
+        diff "$R/files/meta-originals-before.txt" "$R/files/meta-originals-after-merge.txt" | head -n 10 | sed 's/^/        /'
+    fi
+    if diff -q "$R/files/meta-originals-rescraped.txt" "$R/files/meta-originals-after-undo.txt" >/dev/null 2>&1; then
+        echo "    OK: the restart and the undo changed no game file"
+    else
+        echo "    FAILED: a game file changed after the restart or the undo:"
+        diff "$R/files/meta-originals-rescraped.txt" "$R/files/meta-originals-after-undo.txt" | head -n 10 | sed 's/^/        /'
+    fi
+    python3 - "$R" <<'PY' | sed 's/^/    /'
+import json, re, sys
+R = sys.argv[1]
+def log(name):
+    try:
+        return re.sub(r"\x1b\[[0-9;]*m", "", open("%s/logs/%s.stdout" % (R, name), encoding="utf-8", errors="replace").read())
+    except OSError:
+        return ""
+def values(text, tab):
+    found = re.findall(r"%s: \d+ values: (.*)" % tab, text)
+    return found
+first = log("17-metadata")
+sug = re.findall(r"Developers: suggested merges \([0-9]+ ms\): (.*)", first)
+bad = [p for line in sug for p in line.split(" | ") if "Sega AM2" in p and re.search(r"(^|: | \+ )Sega( \+|$)", p)]
+print(("FAILED: Sega AM2 suggested with Sega: %s" % bad) if bad else "OK: Sega AM2 never suggested with Sega (%s)" % (sug[-1] if sug else "no developer suggestions logged"))
+pub = re.findall(r"Publishers: suggested merges \([0-9]+ ms\): (.*)", first)
+print(("OK: " if pub and "Nintendo" in pub[0] and "Nintendo of America" in pub[0] else "FAILED: ") + "Nintendo's spellings suggested: %s" % (pub[0] if pub else "none logged"))
+merged = json.load(open(R + "/files/aliases-after-merge.json")) if __import__("os").path.exists(R + "/files/aliases-after-merge.json") else {}
+p = merged.get("publisher", {})
+ok = p.get("Nintendo of America") == "Nintendo" and p.get("Nintendo Co., Ltd.") == "Nintendo"
+print(("OK: " if ok else "FAILED: ") + "aliases.json after the merges: %s" % json.dumps(p, ensure_ascii=False))
+restart = log("17-metadata-restart")
+vals = values(restart, "Publishers")
+if vals:
+    v = vals[0]
+    ok = re.search(r"(^|, )Nintendo \(\d+\)", v) and "Nintendo of America (" not in v and "Nintendo Co., Ltd. (" not in v
+    print(("OK: " if ok else "FAILED: ") + "after a restart and the rescrape, publishers: %s" % v)
+    m = re.search(r"(^|, )Nintendo \((\d+)\)", v)
+    print("    Nintendo's games after the rescrape: %s (Meta Hotel's \"Nintendo Co., Ltd.\" folded in)" % (m.group(2) if m else "?"))
+if len(vals) > 1:
+    v = vals[-1]
+    print(("OK: " if "Nintendo of America (" in v and "Nintendo Co., Ltd. (" in v else "FAILED: ") + "after the undo, publishers: %s" % v)
+try:
+    u = json.load(open(R + "/files/aliases-after-undo.json"))
+    print(("OK: " if not u.get("publisher") else "FAILED: ") + "aliases.json after the undo: %s" % json.dumps(u, ensure_ascii=False))
+except Exception as e:
+    print("FAILED: aliases.json after the undo: %s" % e)
+try:
+    r = json.load(open(R + "/files/aliases-after-recovery.json"))
+    print("OK: aliases.json junked, then put back by recovery: %s" % json.dumps(r, ensure_ascii=False))
+except Exception as e:
+    print("FAILED: aliases.json after recovery: %s" % e)
+PY
+    echo "    the damaged folder: $(tr '\n' ' ' < "$R/files/meta-damaged.txt")"
+    echo "    (screenshots: 17-*)"
     echo
     echo "## Damaged-file recovery (16-recovery*)"
     echo "    last good copies before the damage: $(tr '\n' ' ' < "$R/files/good-copies.txt")"

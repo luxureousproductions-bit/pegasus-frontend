@@ -30,6 +30,8 @@ add_library(pegasus-backend
     Updater.h
     BackupReset.cpp
     BackupReset.h
+    MetadataAliases.cpp
+    MetadataAliases.h
     Recovery.cpp
     Recovery.h
     SetupState.cpp

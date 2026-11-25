@@ -1827,8 +1827,8 @@ FocusScope {
                 out.push({ "kind": "review", "text": qsTr("Needs your check") + api.tr,
                            "value": nReview === 1 ? qsTr("1 game") + api.tr : qsTr("%1 games").arg(nReview) + api.tr,
                            "warn": nReview > 0, "muted": nReview === 0 });
-                out.push({ "kind": "genres", "text": qsTr("Genres") + api.tr,
-                           "value": qsTr("every genre and its games") + api.tr });
+                out.push({ "kind": "genres", "text": qsTr("Metadata") + api.tr,
+                           "value": qsTr("genres, publishers, developers") + api.tr });
                 out.push({ "kind": "section", "text": qsTr("Collections") + api.tr });
                 var perColl = st.collections || {};
                 for (i = 0; i < root.collections.length; i++) {
@@ -2330,7 +2330,7 @@ FocusScope {
             else if (row.kind === "review")
                 root.openReview();
             else if (row.kind === "genres") {
-                genres.start();
+                genres.open();
                 genres.focus = true;
             }
             else if (row.kind === "reviewgame")
@@ -3929,7 +3929,7 @@ FocusScope {
         }
     }
 
-    // -- Genres: every genre and its games (a game opens on its page here) -----------
+    // -- Metadata: genres, publishers, developers and their games (a game opens on its page here) --
 
     AndroidAppPicker {
         id: appPicker
@@ -3945,7 +3945,7 @@ FocusScope {
         }
     }
 
-    GenresScreen {
+    MetadataScreen {
         id: genres
         visible: focus
         z: 6

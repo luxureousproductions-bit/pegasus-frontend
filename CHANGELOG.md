@@ -3,6 +3,76 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-25
+
+### Metadata analyzer, first build: tabs, suggested merges, merges as aliases
+
+- **What:** Library > Genres is Library > Metadata, with three tabs
+  (LB / RB on a tab's list, or a tap): Genres, Publishers, Developers. Each
+  lists its values with game counts, Search..., Only ... with 1 game and
+  Sort; a value opens its games (a game opens in Library) and its spellings
+  that differ in ways you can't see, side by side. Genres keeps "Change this
+  genre in all N games" as it was.
+- **Suggested merges** (a row at the top of each tab), looked for on a
+  thread of their own, never applied by themselves. Near-certain: the same
+  once lowercased, accents and punctuation out, "&" as "and", a leading
+  "The" and a trailing Inc / Ltd / Co / Corp / LLC / GmbH / S.A. / K.K.
+  out. Regional: the same once a trailing NA / USA / of America / Europe /
+  EU / UK / Japan / JP is out too. Maybe: the same without spaces, one
+  inside the other, or 1-2 letters off (by length; not when only numbers
+  differ). A division is never suggested with its parent (one's words all
+  in the other's: Sega AM2 / Sega, Nintendo EAD / Nintendo).
+- **Merge:** a suggestion opens Merge: every spelling with its game count,
+  A ticks or unticks, Show as (the most used to start with; A takes the
+  next ticked one), the games that change, then a confirm. It's an alias,
+  never a game edit: `metadata/aliases.json` in the Pegasus X folder
+  (SafeFile), applied when games are loaded, after the game list cache (so
+  the cache and each game keep their files' spellings), and to the loaded
+  games at once (themes too). It survives a reload, a restart and a
+  rescrape (the old spelling folds in again). A game with two spellings
+  that now match shows the name once. Chains are folded (A->B then B->C
+  keeps A->C and B->C) and loops refused.
+- **Merged** (a row per tab): the merges, A undoes one (with a confirm).
+- **Change this genre** now builds each game's new list from the genres
+  its file has (a merged name never goes into a file it didn't come from);
+  every in-place change of a game (Library, Change this genre, the scraper)
+  keeps its file's spellings and shows them through the aliases.
+- **The alias file** is in damaged-file recovery (a JSON object; empty is
+  not damage), in backups and restores (with metadata/), and Start over
+  deletes it (with metadata/).
+- **Big libraries:** the values are read in one pass in C++ (timed in the
+  log), the suggestions on their own thread.
+- **Controls:** D-pad, LB / RB tabs on a tab's list and 10 rows elsewhere,
+  LT / RT top / bottom, A open / tick, B back; one hint bar with the round
+  A/B/LB/RB/LT/RT pictures; touch works (tabs, rows, the confirms).
+- **Not in this build:** the Missing tab (missing-field counts by system,
+  open in the editor), rescrape hooks, "Looks wrong" checks, any option to
+  write a merge into game files.
+- **Not changed:** scraped files, gamelists, ROM-folder metadata.pegasus.txt
+  and the read-once copies are never written by a merge or undo; setup,
+  logins, backups' secrets, the theme, the scraper, file and library formats,
+  launch commands, artwork.
+- **Tests:** test_MetadataAliases (new: the keys, Nintendo grouped and Sega
+  AM2 / Nintendo EAD never with their parents, chains and loops, undo,
+  aliases on loaded games and the files' spellings kept, the file across a
+  restart and a rescrape, recovery's check, 5000 values); test_BackupReset
+  (the alias file in a backup, restored, deleted by Start over); test env:
+  the Genres steps as before (one more row above them), and step 17: a
+  publisher and developer fixture, two merges, Developers' suggestions,
+  Merged, checksums of every metadata file, gamelist and game directory file
+  before and after, a restart with a rescraped old spelling, undo, the alias
+  file junked and put back.
+- **Files:** `src/backend/MetadataAliases.h`, `MetadataAliases.cpp` (new),
+  `src/backend/backend.pro`, `CMakeLists.txt`, `src/backend/model/gaming/Game.h`,
+  `src/backend/providers/ProviderManager.cpp`, `src/backend/Recovery.h`,
+  `Recovery.cpp`, `src/backend/model/internal/settings/Settings.h`,
+  `Settings.cpp`, `src/frontend/menu/settings/MetadataScreen.qml` (was
+  `GenresScreen.qml`), `GenreKey.js`, `MetadataEditor.qml`,
+  `src/frontend/frontend.qrc`, `tests/backend/metadataaliases/` (new),
+  `tests/backend/backend.pro`, `tests/CMakeLists.txt`,
+  `tests/backend/backup/test_BackupReset.cpp`, `tests/testenv/run.sh`.
+- **Commit:** "Metadata analyzer: tabs, suggested merges, merges as aliases".
+
 ## 2026-11-24
 
 ### Setup: on screen at the start too
