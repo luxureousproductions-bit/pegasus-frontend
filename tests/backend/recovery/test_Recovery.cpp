@@ -254,6 +254,22 @@ void test_Recovery::empty_on_purpose_is_not_damage()
     QCOMPARE(read(path(QStringLiteral("favorites.txt"))), QByteArray());
     QCOMPARE(read(recovery::good_path(path(QStringLiteral("favorites.txt")))), QByteArray());  // (the good copy is the empty list now)
     QVERIFY(read(recovery::good_path(path(QStringLiteral("pegasusx-hidden.json")))).contains("\"games\": ["));
+
+    // pegasusx.ini emptied by QSettings (its last entry removed), no gamepad
+    // layouts: fine too (seen in the test env: the first start removes an old
+    // [genres] entry, and the ini was put back from its good copy each start)
+    const QStringList names { QStringLiteral("pegasusx.ini"), QStringLiteral("pegasusx-private.ini"), QStringLiteral("sdl_controllers.txt") };
+    const Kind kinds[] = { Kind::Ini, Kind::Ini, Kind::SdlMappings };
+    for (int i = 0; i < names.size(); i++) {
+        write(path(names[i]), "");
+        write(recovery::good_path(path(names[i])), good_of(kinds[i]));
+        recovery::Report r;
+        recovery::recover(spec(names[i], kinds[i]), r, NOW);
+        QVERIFY2(r.fixed.empty(), qPrintable(names[i]));
+        QCOMPARE(read(path(names[i])), QByteArray());
+        QCOMPARE(read(recovery::good_path(path(names[i]))), QByteArray());
+    }
+    QVERIFY(in_damaged().isEmpty());
 }
 
 // the ROM folder list: empty while its last good copy has folders is damage;

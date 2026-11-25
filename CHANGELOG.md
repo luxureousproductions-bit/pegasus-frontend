@@ -5,6 +5,26 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Damaged-file recovery: an emptied pegasusx.ini isn't damage
+
+- **What:** an empty pegasusx.ini, pegasusx-private.ini or
+  sdl_controllers.txt passes the check now, whatever its last good copy
+  had (like favorites.txt and game_dirs.txt); its good copy becomes the
+  empty file.
+- **Why:** build 2273's test env showed QSettings writes pegasusx.ini as an
+  empty file when its last entry is removed (the first start takes out an
+  old `[genres] hidden=platform`). Recovery took that for damage and put
+  the good copy back, old entry and all, at every start after (8 times,
+  8 empty files in `damaged/`). An empty file can't be told apart from a
+  save cut short, so emptied wins (never flag a file emptied on purpose).
+- **Not changed:** the other checks; JSON files, stats.db, settings.txt,
+  the ROM folder list and pegasusx-root.txt as before.
+- **Tests:** test_Recovery: empty ini, private ini and sdl_controllers.txt
+  with a non-empty good copy aren't flagged; test env step 16 again.
+- **Files:** `src/backend/Recovery.cpp`,
+  `tests/backend/recovery/test_Recovery.cpp`, `CHANGELOG.md`.
+- **Commit:** "Damaged-file recovery: an emptied pegasusx.ini isn't damage".
+
 ### Damaged-file recovery: build fix (the list of copies to put back)
 
 - **What:** `Recovery.cpp` filled its list of `.pxsave` / `.pxold` copies
@@ -40,7 +60,8 @@ rolled back on its own with `git revert <commit>`.
   "[section]", a mapping, "folder<TAB>system"); pegasusx-root.txt must be
   one absolute path. An empty file is damage only when its last good copy
   isn't empty (and for the ROM folder list, when it had folders);
-  favorites.txt and game_dirs.txt may always be empty, so emptying
+  favorites.txt and game_dirs.txt may always be empty (and, from the next
+  commit up, the .ini files and sdl_controllers.txt), so emptying
   favorites or hidden on purpose is never flagged (an emptied list empties
   its good copy too).
 - **Last good copy:** `<name>.pxgood` beside the file, written with

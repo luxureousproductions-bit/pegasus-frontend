@@ -148,6 +148,11 @@ QString check(Kind kind, const QByteArray& bytes, const QString& path, const QBy
         // had folders and has none any more: damage only then
         switch (kind) {
             case Kind::Lines:
+            // QSettings writes an empty file when its last entry is removed
+            // (an old [genres] entry the first start takes out); no gamepad
+            // layouts saved
+            case Kind::Ini:
+            case Kind::SdlMappings:
                 return {};
             case Kind::RomFolders:
                 return QString::fromUtf8(good).contains(QLatin1Char('\t'))
