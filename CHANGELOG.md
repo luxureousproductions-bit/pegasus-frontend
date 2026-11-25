@@ -5,6 +5,55 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Scraper part 2: the game, not its edition (LaunchBox, libretro)
+
+- **Where the wrong picks came from:** LaunchBox's matching compares plain
+  names: lowercase letters and digits only, with anything in brackets
+  taken out (meant for "(USA)"). So on the database's SNES list
+  "Chrono Trigger+" (a 2024 entry) is "chronotrigger", and on its Xbox list
+  "Need for Speed: Most Wanted (Black Edition)" is "needforspeedmostwanted":
+  both scored 100, the same as the game itself, and the order of the
+  database decided (the edition came first). The system's own platform's
+  best is used at once, so nothing else looked again. The Android entry
+  that got the 2012 game: its 2005 original (PlayStation 2) and the 2012
+  Android game both scored 100, and nothing told them apart.
+  ScreenScraper matches on its own server (checksum, then the name sent),
+  and Hasheous by checksum only: neither picks among names here. libretro
+  takes the exact file name first, and only else the closest name (85 or
+  more): that last step is where an edition could come in.
+- **Now:** a name with an edition the wanted one doesn't have (a "+" or
+  "Plus", "... Edition", Deluxe, HD, Remastered, GOTY / Game of the Year,
+  Collector's, Director's Cut, Definitive, Anniversary; in brackets too)
+  costs 10 points per edition (and so does one the wanted name has that
+  the found one lacks): the game itself (100) beats its edition (90). An
+  edition the file's name or the game's title names is the one wanted, so
+  that file gets the edition. An edition with no plain game on the platform
+  is still found (90 is sure enough). The same cost in libretro's closest
+  name.
+- **Year:** each game to scrape carries a year: the file name's "(2005)",
+  else the game's release date. On the same score the game of that year
+  comes first, and when two platforms tie (an Android port and its
+  original), the only one of that year is used; with no year, or none or
+  both of that year, it's still left for your check, as before. LaunchBox's
+  data has no region; libretro's closest name already prefers the ROM's
+  region.
+- **Not changed:** a game you picked (Needs your check > Use this match,
+  or Choose) is used by its id as before: the scoring isn't asked;
+  ScreenScraper and Hasheous; the sources and their order; the speed
+  changes of the last build; any setting or default.
+- **Tests:** `test_LaunchBoxDb`: the editions of names (10 cases); SNES
+  Chrono Trigger gets Chrono Trigger, not Chrono Trigger+ (listed first);
+  Xbox Need for Speed Most Wanted gets the game, not the Black Edition
+  (listed first); a file or title that names the edition gets it (Black
+  Edition, Chrono Trigger+), and an edition alone is still found; a picked
+  game by its id is that game; a year breaks the 2005 / 2012 tie (and no
+  year, or another one, leaves it a tie).
+- **Files:** `src/backend/LaunchBoxDb.cpp`, `src/backend/LaunchBoxDb.h`,
+  `src/backend/Scraper.cpp`, `src/backend/Scraper.h`,
+  `src/backend/model/internal/settings/Settings.cpp` (the year of a game to
+  scrape), `tests/backend/launchboxdb/test_LaunchBoxDb.cpp`.
+- **Commit:** "Scraper part 2: the game, not its edition (LaunchBox, libretro)".
+
 ### Scraper speed, part 1: shorter waits, downloads at once, smaller files, timings
 
 - **Shorter waits** (`Scraper::get`): every request waited up to 120 s with

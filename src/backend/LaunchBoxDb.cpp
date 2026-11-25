@@ -651,8 +651,62 @@ const std::vector<LaunchBoxDb::Game>& LaunchBoxDb::platform_games(const QString&
     return m_loaded.insert(platform, std::move(games)).value();
 }
 
+QStringList LaunchBoxDb::edition_marks(const QString& name)
+{
+    // (each pattern on the lowercase name, brackets and all: "(Black Edition)")
+    struct Mark { const char* rx; const char* mark; };
+    static const std::vector<Mark> marks {
+        { "[\\w)\\]]\\+(?=\\s|$|[\\)\\]:,.\\-])", "+" },
+        { "\\bplus\\b", "+" },
+        { "\\bdeluxe\\b", "deluxe" },
+        { "\\bhd\\b", "hd" },
+        { "\\bremaster(ed)?\\b", "remastered" },
+        { "\\bgoty\\b|\\bgame of the year\\b", "goty" },
+        { "\\bcollector'?s\\b", "collector's" },
+        { "\\bdirector'?s cut\\b", "director's cut" },
+        { "\\bdefinitive\\b", "definitive" },
+        { "\\banniversary\\b", "anniversary" },
+    };
+    static const std::vector<QRegularExpression> compiled = []{
+        std::vector<QRegularExpression> out;
+        for (const Mark& m : marks)
+            out.emplace_back(QString::fromLatin1(m.rx));
+        return out;
+    }();
+    // "Black Edition", "Special Edition", "Complete Edition"... (not a Switch 2
+    // Edition: that one is handled for Switch 2 already)
+    static const QRegularExpression rx_edition(QStringLiteral("\\b([a-z0-9']+)\\s+edition\\b"));
+
+    QString text = name.toLower();
+    text.replace(QChar(0x2019), QLatin1Char('\''));
+    QStringList out;
+    for (size_t i = 0; i < marks.size(); i++) {
+        if (compiled[i].match(text).hasMatch() && !out.contains(QLatin1String(marks[i].mark)))
+            out.append(QLatin1String(marks[i].mark));
+    }
+    auto it = rx_edition.globalMatch(text);
+    while (it.hasNext()) {
+        const QString word = it.next().captured(1);
+        const QString mark = word == QLatin1String("2") ? QString() : word + QStringLiteral(" edition");
+        if (!mark.isEmpty() && !out.contains(mark))
+            out.append(mark);
+    }
+    return out;
+}
+
+int LaunchBoxDb::edition_mismatch(const QStringList& wanted, const QStringList& found)
+{
+    int out = 0;
+    for (const QString& m : found)
+        out += wanted.contains(m) ? 0 : 1;
+    for (const QString& m : wanted)
+        out += found.contains(m) ? 0 : 1;
+    return out;
+}
+
 std::vector<LaunchBoxDb::Game> LaunchBoxDb::platform_candidates(const QString& platform, const QString& name,
-                                                                 int limit, bool strip_edition)
+                                                                 int limit, bool strip_edition,
+                                                                 const QString& hints, int year)
 {
     std::vector<Game> out;
     // (a Switch 2 name: its "Nintendo Switch 2 Edition" counts as nothing, both sides)
@@ -661,12 +715,28 @@ std::vector<LaunchBoxDb::Game> LaunchBoxDb::platform_candidates(const QString& p
     };
     const QString wanted = plain(name);
     const QString key = plain_key(wanted);
+    // the editions wanted: the ones the name, the file's name or the title say
+    QStringList wanted_marks = edition_marks(wanted);
+    for (const QString& m : edition_marks(plain(hints))) {
+        if (!wanted_marks.contains(m))
+            wanted_marks.append(m);
+    }
+    // Pegasus X: a name with another edition than the one wanted (a "+", a
+    // "(Black Edition)": both vanish from the plain names compared, so they
+    // were as good as the game itself) costs EDITION_COST per edition
+    const auto edition_cost = [&wanted_marks, &plain](const QString& found) {
+        return EDITION_COST * edition_mismatch(wanted_marks, edition_marks(plain(found)));
+    };
     for (const Game& g : platform_games(platform)) {
         int score = name_score(wanted, plain(g.name));
+        if (score > 0)
+            score -= edition_cost(g.name);
         for (const QString& alt : g.alt_names) {
             if (score >= 100)
                 break;
-            score = std::max(score, plain_key(plain(alt)) == key ? 98 : name_score(wanted, plain(alt)) - 2);
+            const int alt_score = plain_key(plain(alt)) == key ? 98 : name_score(wanted, plain(alt)) - 2;
+            if (alt_score > 0)
+                score = std::max(score, alt_score - edition_cost(alt));
         }
         if (score <= 0)
             continue;
@@ -674,7 +744,12 @@ std::vector<LaunchBoxDb::Game> LaunchBoxDb::platform_candidates(const QString& p
         copy.score = score;
         out.push_back(std::move(copy));
     }
-    std::stable_sort(out.begin(), out.end(), [](const Game& a, const Game& b) { return a.score > b.score; });
+    // best first; on the same score the game of the year wanted first
+    std::stable_sort(out.begin(), out.end(), [year](const Game& a, const Game& b) {
+        if (a.score != b.score)
+            return a.score > b.score;
+        return year > 0 && a.year == year && b.year != year;
+    });
     if (static_cast<int>(out.size()) > limit)
         out.resize(static_cast<size_t>(limit));
     return out;
@@ -700,7 +775,8 @@ std::vector<LaunchBoxDb::Game> LaunchBoxDb::candidates(const QString& esde_syste
     return out;
 }
 
-LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& name, int needed)
+LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& name, int needed,
+                                     const QString& hints, int year)
 {
     Match out;
     const bool strip = esde_system == QLatin1String("switch2");
@@ -714,7 +790,7 @@ LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& 
     std::vector<Game> bests;  // each platform's best that's sure enough (bar the own one taken first)
     std::vector<Game> weak;   // the best of every platform searched, none sure enough
     for (const QString& platform : platforms) {
-        std::vector<Game> found = platform_candidates(platform, name, 1, strip);
+        std::vector<Game> found = platform_candidates(platform, name, 1, strip, hints, year);
         if (found.empty())
             continue;
         // the system's own platform first: a sure match there is used
@@ -736,6 +812,19 @@ LaunchBoxDb::Match LaunchBoxDb::best(const QString& esde_system, const QString& 
                 tied.push_back(g);
         }
         if (tied.size() >= 2) {
+            // Pegasus X: one of them of the year wanted (the 2005 game, not
+            // its 2012 namesake): that one
+            if (year > 0) {
+                std::vector<Game> of_year;
+                for (const Game& g : tied) {
+                    if (g.year == year)
+                        of_year.push_back(g);
+                }
+                if (of_year.size() == 1) {
+                    out.game = std::move(of_year.front());
+                    return out;
+                }
+            }
             out.tie = true;
             out.closest = std::move(tied);
             return out;

@@ -1285,12 +1285,23 @@ void Scraper::libretroArt()
                     if (!region.isEmpty())
                         break;
                 }
+                // Pegasus X: the editions wanted (the names' own: the file's, the
+                // title's), any other one costs as in LaunchBox
+                QStringList wanted_marks;
+                for (const QString& name : names) {
+                    for (const QString& m : LaunchBoxDb::edition_marks(name)) {
+                        if (!wanted_marks.contains(m))
+                            wanted_marks.append(m);
+                    }
+                }
                 int best = 0;
                 for (const QString& file : list) {
                     const QString stem = file.left(file.size() - 4);
                     int score = 0;
                     for (const QString& name : names)
                         score = qMax(score, name_score(name, stem));
+                    if (score > 0)
+                        score -= LaunchBoxDb::EDITION_COST * LaunchBoxDb::edition_mismatch(wanted_marks, LaunchBoxDb::edition_marks(stem));
                     if (score < 85)
                         continue;
                     if (!region.isEmpty() && region_of(stem) == region)
@@ -1855,9 +1866,16 @@ void Scraper::lbAuto(bool after_other)
     const int needed = m_settings.value(QStringLiteral("minMatch"), 60).toInt();
     // Pegasus X: the system's own platform first, then its fallbacks
     // (Nintendo Switch for Switch 2; the other saved platforms for Android)
+    // Pegasus X: an edition the file's name or the title has is the one
+    // wanted (else a "+" or a "(Black Edition)" costs a match); the year
+    // breaks a tie (the 2005 game, not its 2012 namesake)
+    const QString file_part = job.path.contains(QLatin1String("://"))
+        ? QUrl::fromPercentEncoding(job.path.toUtf8()).section(QLatin1Char('/'), -1) : job.path;
+    const QString hints = (job.path.startsWith(QLatin1String("android:")) ? QString() : QFileInfo(file_part).completeBaseName())
+                        + QStringLiteral(" | ") + job.title;
     QElapsedTimer lb_timer;
     lb_timer.start();
-    const LaunchBoxDb::Match match = m_lb->best(job.system, name, needed);
+    const LaunchBoxDb::Match match = m_lb->best(job.system, name, needed, hints, job.year);
     note(LOGMSG("LaunchBox: looked up \"%1\" (%2)").arg(name, secs(lb_timer.elapsed())));
     if (match.game.id <= 0) {
         const std::vector<LaunchBoxDb::Game>& found = match.closest;

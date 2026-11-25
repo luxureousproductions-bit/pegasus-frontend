@@ -58,6 +58,14 @@ private slots:
     void search_one_platform();
     void picked_on_a_searched_platform();
     void extra_platform_joins_android_then_leaves();
+    // Pegasus X: editions and years
+    void edition_marks_data();
+    void edition_marks();
+    void chrono_trigger_not_plus();
+    void need_for_speed_not_black_edition();
+    void edition_in_the_file_name_gets_the_edition();
+    void manual_pick_is_kept();
+    void year_breaks_a_tie();
 };
 
 QJsonObject test_LaunchBoxDb::game(int id, const QString& name, const QStringList& alt, const QString& release)
@@ -115,6 +123,18 @@ void test_LaunchBoxDb::initTestCase()
         game(32, QStringLiteral("Doom 64")),
     });
     write_platform(QStringLiteral("Sega 32X"), { game(40, QStringLiteral("Doom")) });
+    // Pegasus X: as LaunchBox has them (each edition listed before its game,
+    // as in the database: the order that decided it before). Not in the
+    // saved platforms' list below: the Android searches stay as they were.
+    write_platform(QStringLiteral("Super Nintendo Entertainment System"), {
+        game(60, QStringLiteral("Chrono Trigger+"), { QStringLiteral("Chrono Trigger Plus") }, QStringLiteral("2024-03-10")),
+        game(61, QStringLiteral("Chrono Trigger"), {}, QStringLiteral("1995-08-22")),
+    });
+    write_platform(QStringLiteral("Microsoft Xbox"), {
+        game(70, QStringLiteral("Need for Speed: Most Wanted (Black Edition)"),
+             { QStringLiteral("Need for Speed: Most Wanted: Black Edition") }, QStringLiteral("2005-11-15")),
+        game(71, QStringLiteral("Need for Speed: Most Wanted"), {}, QStringLiteral("2005-11-15")),
+    });
     // the platforms saved (what Update LaunchboxDB writes into status.json)
     QJsonObject counts;
     for (const char* p : { "Nintendo Switch 2", "Nintendo Switch", "Android", "Nintendo 64", "Sega 32X", "Sony Playstation 2" })
@@ -357,6 +377,100 @@ void test_LaunchBoxDb::extra_platform_joins_android_then_leaves()
     QCOMPARE(Db::saved_platforms().size(), 6);
 }
 
+
+// the editions a name says it is
+void test_LaunchBoxDb::edition_marks_data()
+{
+    QTest::addColumn<QString>("name");
+    QTest::addColumn<QStringList>("marks");
+    QTest::newRow("plain") << QStringLiteral("Chrono Trigger (USA)") << QStringList();
+    QTest::newRow("+") << QStringLiteral("Chrono Trigger+") << QStringList { QStringLiteral("+") };
+    QTest::newRow("plus") << QStringLiteral("Chrono Trigger Plus") << QStringList { QStringLiteral("+") };
+    QTest::newRow("in brackets") << QStringLiteral("Need for Speed: Most Wanted (Black Edition)") << QStringList { QStringLiteral("black edition") };
+    QTest::newRow("deluxe hd") << QStringLiteral("Game Deluxe HD") << QStringList { QStringLiteral("deluxe"), QStringLiteral("hd") };
+    QTest::newRow("remastered") << QStringLiteral("Game - Remastered") << QStringList { QStringLiteral("remastered") };
+    QTest::newRow("goty") << QStringLiteral("Game GOTY") << QStringList { QStringLiteral("goty") };
+    QTest::newRow("collector's") << QStringLiteral("Game: Collector\u2019s Edition") << QStringList { QStringLiteral("collector's"), QStringLiteral("collector's edition") };
+    QTest::newRow("switch 2 edition is not one") << QStringLiteral("Game - Nintendo Switch 2 Edition") << QStringList();
+    QTest::newRow("hd in a word is not one") << QStringLiteral("Hdtv Racer") << QStringList();
+}
+
+void test_LaunchBoxDb::edition_marks()
+{
+    QFETCH(QString, name);
+    QFETCH(QStringList, marks);
+    QCOMPARE(Db::edition_marks(name), marks);
+}
+
+// SNES "Chrono Trigger (USA)": the game, not the 2024 "Chrono Trigger+" listed before it
+void test_LaunchBoxDb::chrono_trigger_not_plus()
+{
+    Db db;
+    const Db::Match m = db.best(QStringLiteral("snes"), QStringLiteral("Chrono Trigger"), 60,
+                                QStringLiteral("Chrono Trigger (USA) | Chrono Trigger"));
+    QCOMPARE(m.game.id, 61);
+    const std::vector<Db::Game> found = db.candidates(QStringLiteral("snes"), QStringLiteral("Chrono Trigger"), 10);
+    QCOMPARE(static_cast<int>(found.size()), 2);
+    QCOMPARE(found.front().id, 61);
+    QVERIFY(found.at(1).score < found.front().score);
+}
+
+// Xbox "Need for Speed - Most Wanted (USA)": the game, not the Black Edition listed before it
+void test_LaunchBoxDb::need_for_speed_not_black_edition()
+{
+    Db db;
+    const Db::Match m = db.best(QStringLiteral("xbox"), QStringLiteral("Need for Speed Most Wanted"), 60,
+                                QStringLiteral("Need for Speed - Most Wanted (USA) | Need for Speed - Most Wanted"));
+    QCOMPARE(m.game.id, 71);
+}
+
+// a file (or title) that names the edition gets the edition
+void test_LaunchBoxDb::edition_in_the_file_name_gets_the_edition()
+{
+    Db db;
+    // the edition in brackets in the file's name (the name searched has none)
+    QCOMPARE(db.best(QStringLiteral("xbox"), QStringLiteral("Need for Speed Most Wanted"), 60,
+                     QStringLiteral("Need for Speed - Most Wanted (Black Edition) (USA) | Need for Speed - Most Wanted")).game.id, 70);
+    // ...or in the title
+    QCOMPARE(db.best(QStringLiteral("xbox"), QStringLiteral("Need for Speed Most Wanted"), 60,
+                     QStringLiteral("nfsmw | Need for Speed: Most Wanted Black Edition")).game.id, 70);
+    // the name searched has the "+"
+    QCOMPARE(db.best(QStringLiteral("snes"), QStringLiteral("Chrono Trigger+"), 60,
+                     QStringLiteral("Chrono Trigger+ | Chrono Trigger+")).game.id, 60);
+    // only the edition there: it's still found (and sure enough)
+    Db db2;
+    const std::vector<Db::Game> only = db2.candidates_on(QStringLiteral("Super Nintendo Entertainment System"), QStringLiteral("Chrono Trigger Plus"), 1);
+    QCOMPARE(only.front().id, 60);
+}
+
+// a game you picked (Needs your check > use, or Choose) is used by its id as it is
+void test_LaunchBoxDb::manual_pick_is_kept()
+{
+    Db db;
+    QCOMPARE(db.game(QStringLiteral("snes"), 60).name, QStringLiteral("Chrono Trigger+"));
+    QCOMPARE(db.game_on(QStringLiteral("Microsoft Xbox"), 70).name, QStringLiteral("Need for Speed: Most Wanted (Black Edition)"));
+    // (and still listed to pick from)
+    bool listed = false;
+    for (const Db::Game& g : db.candidates(QStringLiteral("snes"), QStringLiteral("Chrono Trigger"), 10))
+        listed = listed || g.id == 60;
+    QVERIFY(listed);
+}
+
+// Android: the 2005 game and its 2012 namesake as sure: the year wanted decides
+void test_LaunchBoxDb::year_breaks_a_tie()
+{
+    Db db;
+    const Db::Match m2005 = db.best(QStringLiteral("androidgames"), QStringLiteral("Need for Speed Most Wanted"), 60, QString(), 2005);
+    QVERIFY(!m2005.tie);
+    QCOMPARE(m2005.game.id, 50);
+    QCOMPARE(m2005.game.platform, QStringLiteral("Sony Playstation 2"));
+    const Db::Match m2012 = db.best(QStringLiteral("androidgames"), QStringLiteral("Need for Speed Most Wanted"), 60, QString(), 2012);
+    QCOMPARE(m2012.game.id, 21);
+    // no year: as before, none is guessed
+    QVERIFY(db.best(QStringLiteral("androidgames"), QStringLiteral("Need for Speed Most Wanted"), 60).tie);
+    // a year neither has: none is guessed either
+    QVERIFY(db.best(QStringLiteral("androidgames"), QStringLiteral("Need for Speed Most Wanted"), 60, QString(), 2019).tie);
+}
 
 QTEST_MAIN(test_LaunchBoxDb)
 #include "test_LaunchBoxDb.moc"

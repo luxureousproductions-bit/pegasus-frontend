@@ -2856,6 +2856,12 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
     job.has_publisher = !game->publisherListConst().isEmpty();
     job.has_genre = !game->genreListConst().isEmpty();
     job.has_release = game->releaseDate().isValid();
+    // the year to tell namesakes apart: the file's name's "(2005)", else the game's release
+    {
+        static const QRegularExpression rx_year(QStringLiteral("\\((19[7-9][0-9]|20[0-9][0-9])\\)"));
+        const auto m = rx_year.match(QFileInfo(path).completeBaseName());
+        job.year = m.hasMatch() ? m.captured(1).toInt() : game->releaseDate().isValid() ? game->releaseDate().year() : 0;
+    }
     job.has_players = game->playerCount() > 1;
     job.has_rating = game->rating() > 0.0f;
     job.title_is_file_name = !path.startsWith(QLatin1String("android:"))

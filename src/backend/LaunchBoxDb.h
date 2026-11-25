@@ -78,6 +78,15 @@ public:
     };
     /// two platforms' best matches this close in score are a tie (best())
     static constexpr int TIE_MARGIN = 5;
+    /// Pegasus X: what an edition the wanted name doesn't have (or one it has
+    /// that the found name lacks) costs a match: "Chrono Trigger+" is no
+    /// longer as good as "Chrono Trigger" for "Chrono Trigger (USA)"
+    enum : int { EDITION_COST = 10 };
+    /// Pegasus X: the editions a name says it is ("+", "black edition",
+    /// "deluxe", "hd", "remastered", "goty"...), in brackets too
+    static QStringList edition_marks(const QString& name);
+    /// ...and how many differ between two names' marks
+    static int edition_mismatch(const QStringList& wanted, const QStringList& found);
 
     explicit LaunchBoxDb(QObject* parent = nullptr);
 
@@ -133,7 +142,13 @@ public:
     /// best of them; two platforms within TIE_MARGIN of it: a tie, none used).
     /// For the Android collections the Android platform's best isn't taken
     /// first: it's one of them (an Android port and its console original).
-    Match best(const QString& esde_system, const QString& name, int needed);
+    /// Pegasus X: `hints` (the file's name, the game's title): an edition
+    /// named there is wanted (Black Edition, Deluxe...), else a found name
+    /// with one costs EDITION_COST; `year` (the file's or the game's): on the
+    /// same score the game of that year first, and a tie between platforms
+    /// with one game of that year is that game.
+    Match best(const QString& esde_system, const QString& name, int needed,
+               const QString& hints = QString(), int year = 0);
     /// one game by its id (from the library index; its fallbacks' too), or a game with id 0
     Game game(const QString& esde_system, int id);
 
@@ -146,7 +161,8 @@ private:
     void build(const QStringList& esde_systems);
     QStringList m_extra;   ///< update()'s extra platforms, for build()
     const std::vector<Game>& platform_games(const QString& platform);
-    std::vector<Game> platform_candidates(const QString& platform, const QString& name, int limit, bool strip_edition);
+    std::vector<Game> platform_candidates(const QString& platform, const QString& name, int limit, bool strip_edition,
+                                          const QString& hints = QString(), int year = 0);
 
     QNetworkAccessManager* m_net = nullptr;
     QNetworkReply* m_reply = nullptr;
