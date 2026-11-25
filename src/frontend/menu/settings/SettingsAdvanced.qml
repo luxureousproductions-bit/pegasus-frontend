@@ -23,10 +23,10 @@ import Qt.labs.qmlmodels 1.0
 
 // Pegasus X: Settings > Advanced. The rows that left the main list, in the
 // same look (the same row kinds as SettingsMain), and doing what they did
-// there: the same settings, the same screens. Two of them read differently:
-// "Missing games" is one choice over the two settings it was before
-// (verifyFiles and showMissingGames, nothing new saved), and three rows have
-// shorter names (Data sources, Gamepad layout, Mouse support).
+// there: the same settings, the same screens. "Missing games" is one choice
+// over the two settings it was before (verifyFiles and showMissingGames,
+// nothing new saved); Data sources has a shorter name. (Reload all games,
+// Gamepad layout and Mouse support are on the main list again.)
 FocusScope {
     id: root
 
@@ -34,7 +34,6 @@ FocusScope {
     signal openRootFolder
     signal openAndroidSafSettings
     signal openProviderSettings
-    signal openGamepadSettings
 
     width: parent.width
     height: parent.height
@@ -118,26 +117,6 @@ FocusScope {
             type: SettingsEntry.Type.Button
             section: "advanced"
             buttonAction: root.openProviderSettings
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Reload all games")
-            type: SettingsEntry.Type.Button
-            section: "advanced"
-            buttonAction: function() { Internal.settings.reloadAllGames(); }
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Gamepad layout...")
-            type: SettingsEntry.Type.Button
-            section: "advanced"
-            buttonAction: root.openGamepadSettings
-        },
-        SettingsEntry {
-            label: QT_TR_NOOP("Mouse support")
-            desc: QT_TR_NOOP("By default the cursor is visible if there are any pointer devices connected.")
-            type: SettingsEntry.Type.Bool
-            section: "advanced"
-            boolValue: Internal.settings.mouseSupport
-            boolSetter: (val) => Internal.settings.mouseSupport = val
         },
         SettingsEntry {
             label: QT_TR_NOOP("Fullscreen mode")

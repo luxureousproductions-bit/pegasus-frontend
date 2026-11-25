@@ -5,6 +5,58 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-24
 
+### Settings: three rows back on the main list; Gamepad layout's controller and icons
+
+- **Main list:** Reload all games (Games, below RetroAchievements), Gamepad
+  layout and Mouse support (Controls, each its own row below Change
+  controls) moved back from Advanced, with the same labels, descriptions
+  and actions (Reload: the main list's own reload, as before the regroup).
+  Main: Games (5 rows), Look (3), Controls (3), Pegasus X (3), Advanced...
+  Advanced keeps Pegasus X folder, Accessible Android directories, Scan
+  for games on launch, Missing games, Data sources, Fullscreen mode; its
+  row's description says so. Gamepad layout from the main list opens as
+  its own full screen with its bottom bar (as it did before the regroup),
+  and B comes back to its row.
+- **Gamepad layout's controller** (`assets/gamepad/preview.png`, source
+  `preview.svg` beside it): an Xbox Series controller in thin white
+  outlines, no fill, on a transparent background, 512 x 340: body and
+  grips, outlined bumpers on the top edge with the triggers above them,
+  sticks as double rings (left upper left, right lower right), the d-pad
+  as an outlined cross lower left, A B X Y as outlined circles with white
+  letters (Y top, X left, B right, A bottom), View and Menu as small
+  circles. Guide: the XBSX-Experience theme's sphere
+  (`assets/images/Xbox-logo2-tight.png`), embedded as it is, not redrawn.
+- **The dots on it:** checked on a render of each of the 21 inputs at
+  1280 x 720 and 1920 x 1080. The dots and the axis bars sit on their
+  inputs. LB and RB moved into the middle of the new bumpers (fieldPoints).
+  One more fix was needed in `GamepadPreview.qml`: the dots were placed on
+  the item's box, but the picture keeps its shape inside it (the item gets a
+  width; its height stays 340), so on a 1280 x 720 screen they sat about 12
+  px low and on 1920 x 1080 about 15-20 px to the side. They're placed on
+  the picture as drawn now (its painted size and offset).
+- **Gamepad layout's icons** (`assets/gamepad/x360/`, the names as they
+  were): Guide is the theme's sphere (`Xbox-logo2-tight.png`, copied as
+  it is; the old picture is the fallback in `stock/guide.png`). Left Press
+  is the theme's stick-press badge (`assets/images/kb_badge_l3.svg`, as it
+  is, `lsb.svg`); the theme has no R one, so Right Press is a copy of it
+  with its "L" drawn as an "R" (`rsb.svg`, same size, lines and colour).
+  The old `lsb.png` / `rsb.png` (the theme's 6.png / 9.png press arrows) are
+  gone; the stock ones stay the fallback. Only Gamepad layout uses these
+  three files. The other icons are as they were.
+- **Not changed:** any setting or saved value, the field list, its hint
+  bar, header, gamepad picker, navigation, mapping, the recorder,
+  sdl_controllers.txt, other screens, the theme.
+- **Tests:** test env: the main list (top, bottom), Advanced, the
+  updater's switch, Gamepad layout from the main list and back on its row.
+- **Files:** `src/frontend/menu/settings/SettingsMain.qml`,
+  `SettingsAdvanced.qml`, `SettingsScreen.qml` (a comment),
+  `gamepad/GamepadPreview.qml`, `gamepad/GamepadField.qml`,
+  `src/frontend/assets/gamepad/preview.png`, `preview.svg`,
+  `x360/guide.png`, `x360/lsb.svg`, `x360/rsb.svg` (new),
+  `x360/lsb.png`, `x360/rsb.png` (removed), `stock/guide.png` (the old
+  Guide), `src/frontend/frontend.qrc`, `tests/testenv/run.sh`.
+- **Commit:** "Settings: three rows back on the main list; Gamepad layout's controller and icons".
+
 ### Scraper part 2: the game, not its edition (LaunchBox, libretro)
 
 - **Where the wrong picks came from:** LaunchBox's matching compares plain

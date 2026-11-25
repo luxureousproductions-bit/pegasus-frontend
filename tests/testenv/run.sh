@@ -129,13 +129,6 @@ shot 02-settings-bottom
 keys Return
 sleep 1
 shot 02-settings-advanced
-# Gamepad layout (no pad here: its button pictures on the footer only)
-keys Down Down Down Down Down Down Return
-sleep 2
-shot 02-gamepad-layout
-keys Escape
-sleep 1
-shot 02-settings-advanced-back
 keys Escape
 sleep 1
 keys Up Up Up Return
@@ -143,6 +136,15 @@ sleep 2
 keys Up
 shot 02-settings-updater
 keys Escape
+sleep 1
+# Controls > Gamepad layout (2 rows above Check for updates), full screen with its
+# footer (no pad here: its button pictures on the footer only); B: back on its row
+keys Up Up Return
+sleep 2
+shot 02-gamepad-layout
+keys Escape
+sleep 1
+shot 02-settings-gamepad-back
 stop 02-settings
 # Missing games: the two settings there were, shown and set as one choice. Each
 # pair written into settings.txt, then what Advanced shows; then picked, then

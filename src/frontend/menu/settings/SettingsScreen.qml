@@ -134,7 +134,10 @@ FocusScope {
             modal.focus = true;
         }
         // Pegasus X: Settings > Advanced: its screens open on top of it (B
-        // comes back to it), as they did from the main list
+        // comes back to it), as they did from the main list. (Gamepad layout
+        // is on the main list again and opens as its own screen there; its
+        // line below stays for a screen that opens it on top: full screen,
+        // the screen under it hidden.)
         function onOpenRootFolder() { root.openedAt = Date.now(); modal.source = ""; modal.source = "RootFolderSetup.qml"; modal.focus = true; }
         function onOpenAndroidSafSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "AndroidSafEditor.qml"; modal.focus = true; }
         function onOpenProviderSettings() { root.openedAt = Date.now(); modal.source = ""; modal.source = "ProviderEditor.qml"; modal.focus = true; }

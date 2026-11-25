@@ -54,12 +54,17 @@ Item {
             height: parent.height
             width: height
 
-            // the XBSX-Experience theme's button art (x360/); if a picture
-            // can't be loaded, the stock one it replaced (stock/)
+            // the XBSX-Experience theme's button art (x360/; Left / Right
+            // Press: its stick-press badge, drawn: .svg); if a picture can't
+            // be loaded, the stock one it replaced (stock/, .png)
             Image {
                 property bool stock: false
-                source: root.icon ? "qrc:/frontend/assets/gamepad/" + (stock ? "stock/" : "x360/") + root.icon + ".png" : ""
+                readonly property bool drawn: !stock && (root.icon === "lsb" || root.icon === "rsb")
+                source: root.icon ? "qrc:/frontend/assets/gamepad/" + (stock ? "stock/" : "x360/") + root.icon + (drawn ? ".svg" : ".png") : ""
                 onStatusChanged: if (status === Image.Error && !stock) stock = true
+                // (a drawing made at twice the size it's shown: sharp; the pictures as they are)
+                sourceSize.width: drawn ? Math.round(width * 2) : 0
+                sourceSize.height: drawn ? Math.round(height * 2) : 0
 
                 anchors.fill: parent
                 anchors.margins: root.imagePadding

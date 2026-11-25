@@ -22,6 +22,7 @@
         <file>assets/keyboard/kb_shift.svg</file>
         <file>assets/keyboard/kb_space.svg</file>
         <file>assets/gamepad/stock/a.png</file>
+        <file>assets/gamepad/stock/guide.png</file>
         <file>assets/gamepad/stock/b.png</file>
         <file>assets/gamepad/stock/x.png</file>
         <file>assets/gamepad/stock/y.png</file>
@@ -41,12 +42,12 @@
         <file>assets/gamepad/x360/dpup.png</file>
         <file>assets/gamepad/x360/guide.png</file>
         <file>assets/gamepad/x360/lb.png</file>
-        <file>assets/gamepad/x360/lsb.png</file>
+        <file>assets/gamepad/x360/lsb.svg</file>
         <file>assets/gamepad/x360/lsx.png</file>
         <file>assets/gamepad/x360/lsy.png</file>
         <file>assets/gamepad/x360/lt.png</file>
         <file>assets/gamepad/x360/rb.png</file>
-        <file>assets/gamepad/x360/rsb.png</file>
+        <file>assets/gamepad/x360/rsb.svg</file>
         <file>assets/gamepad/x360/rsx.png</file>
         <file>assets/gamepad/x360/rsy.png</file>
         <file>assets/gamepad/x360/rt.png</file>

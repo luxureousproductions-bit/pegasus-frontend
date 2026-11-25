@@ -17,10 +17,11 @@
 
 import QtQuick 2.0
 
-// Pegasus X: assets/gamepad/preview.png is a flat drawing of an Xbox Series
-// style controller (offset sticks, d-pad lower left, A B X Y, View / Guide /
-// Menu, bumpers and triggers), 512 x 340 as the old one; fieldPoints are
-// where each button is on it (fractions of the width and height).
+// Pegasus X: assets/gamepad/preview.png is an Xbox Series controller in white
+// outlines (offset sticks, d-pad lower left, A B X Y, View / Guide / Menu,
+// bumpers and triggers; Guide: the XBSX-Experience theme's sphere), 512 x 340
+// as before, its source preview.svg beside it; fieldPoints are where each
+// button is on it (fractions of the picture's width and height).
 Image {
     property string currentField: ""
 
@@ -39,9 +40,9 @@ Image {
         'rsx': [0.6289, 0.6059],
         'rsy': [0.6289, 0.6059],
         'lt': [0.2734, 0.0588],
-        'lb': [0.2266, 0.1235],
+        'lb': [0.2930, 0.1118],
         'rt': [0.7266, 0.0588],
-        'rb': [0.7734, 0.1235],
+        'rb': [0.7070, 0.1118],
         'dpup': [0.3809, 0.5324],
         'dpdown': [0.3809, 0.6794],
         'dpleft': [0.3320, 0.6059],
@@ -50,8 +51,10 @@ Image {
     readonly property var verticalAxes: ['lsy', 'rsy']
     readonly property var horizontalAxes: ['lsx', 'rsx']
 
-    readonly property double currentPointX: currentField ? fieldPoints[currentField][0] * width : 0
-    readonly property double currentPointY: currentField ? fieldPoints[currentField][1] * height : 0
+    // (on the picture as drawn: it keeps its shape inside this item, which is
+    // only given a width, so it can be narrower or lower than the item)
+    readonly property double currentPointX: currentField ? (width - paintedWidth) / 2 + fieldPoints[currentField][0] * paintedWidth : 0
+    readonly property double currentPointY: currentField ? (height - paintedHeight) / 2 + fieldPoints[currentField][1] * paintedHeight : 0
     readonly property bool currentFieldIsAxis: currentField && (horizontalAxes.includes(currentField) || verticalAxes.includes(currentField))
 
 

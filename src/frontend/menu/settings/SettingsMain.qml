@@ -74,8 +74,9 @@ FocusScope {
     }
 
 
-    // Pegasus X: 12 rows (Games, Look, Controls, Pegasus X, Advanced...); the
-    // rest on the Advanced page (SettingsAdvanced.qml). The screens behind the
+    // Pegasus X: 15 rows (Games with Reload all games, Look, Controls with
+    // Gamepad layout and Mouse support, Pegasus X, Advanced...); the rest on
+    // the Advanced page (SettingsAdvanced.qml). The screens behind the
     // rows, and the settings themselves, are as they were.
     readonly property list<SettingsEntry> optionList: [
         SettingsEntry {
@@ -110,6 +111,12 @@ FocusScope {
             enabled: Internal.settings.esdeImportSupported
         },
         SettingsEntry {
+            label: QT_TR_NOOP("Reload all games")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.reloadRequested
+            section: "games"
+        },
+        SettingsEntry {
             label: QT_TR_NOOP("Theme")
             type: SettingsEntry.Type.Select
             selectBox: themeBox
@@ -134,6 +141,20 @@ FocusScope {
             label: QT_TR_NOOP("Change controls...")
             type: SettingsEntry.Type.Button
             buttonAction: root.openKeySettings
+            section: "controls"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Gamepad layout...")
+            type: SettingsEntry.Type.Button
+            buttonAction: root.openGamepadSettings
+            section: "controls"
+        },
+        SettingsEntry {
+            label: QT_TR_NOOP("Mouse support")
+            desc: QT_TR_NOOP("By default the cursor is visible if there are any pointer devices connected.")
+            type: SettingsEntry.Type.Bool
+            boolValue: Internal.settings.mouseSupport
+            boolSetter: (val) => Internal.settings.mouseSupport = val
             section: "controls"
         },
         SettingsEntry {
@@ -162,7 +183,7 @@ FocusScope {
         // gamepad layout, mouse, fullscreen) is on the Advanced page
         SettingsEntry {
             label: QT_TR_NOOP("Advanced...")
-            desc: QT_TR_NOOP("Pegasus X folder, Android directories, scanning, missing games, data sources, reloading, gamepad layout, mouse and fullscreen.")
+            desc: QT_TR_NOOP("Pegasus X folder, Android directories, scanning, missing games, data sources and fullscreen.")
             type: SettingsEntry.Type.Button
             buttonAction: root.openAdvanced
             section: "advanced"
