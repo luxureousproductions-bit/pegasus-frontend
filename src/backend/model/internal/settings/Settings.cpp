@@ -2978,6 +2978,8 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
     }
     job.has_players = game->playerCount() > 1;
     job.has_rating = game->rating() > 0.0f;
+    // (x-esrb: any value, one typed by hand too, is kept unless Overwrite)
+    job.has_esrb = !game->extraMap().value(QStringLiteral("esrb")).toStringList().join(QString()).trimmed().isEmpty();
     job.title_is_file_name = !path.startsWith(QLatin1String("android:"))
         && QFileInfo(path).completeBaseName().compare(game->title(), Qt::CaseInsensitive) == 0;
     const std::vector<std::pair<const char*, const QStringList*>> slot_lists {
@@ -3082,12 +3084,16 @@ QString Settings::startScraperWith(QObject* collections, bool offline, const QVa
             };
             const bool no_image = !real(assets.boxFrontList()) && assets.screenshotList().isEmpty();
             const bool no_video = assets.videoList().isEmpty();
+            // Pegasus X: a game with no x-esrb has a gap too (Details on), so a
+            // scrape of what's missing fills it in games scraped before
+            const bool no_esrb = settings.value(QStringLiteral("getDetails"), true).toBool()
+                && game->extraMap().value(QStringLiteral("esrb")).toStringList().join(QString()).trimmed().isEmpty();
             bool take = true;
             if (filter == QLatin1String("favorites")) take = game->isFavorite();
             else if (filter == QLatin1String("nometadata")) take = no_details;
             else if (filter == QLatin1String("noimage")) take = no_image;
             else if (filter == QLatin1String("novideo")) take = no_video;
-            else if (filter == QLatin1String("missing")) take = no_details || no_image || no_video || assets.logoList().isEmpty();
+            else if (filter == QLatin1String("missing")) take = no_details || no_image || no_video || assets.logoList().isEmpty() || no_esrb;
             if (!take)
                 continue;
             seen.insert(path);

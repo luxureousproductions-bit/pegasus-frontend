@@ -160,6 +160,7 @@ struct Build {
     int kept_images = 0;
     bool games_only = false;  // the first pass: games; the second (if needed): names and images
     bool extras_only = false;
+    QHash<QString, int> esrb_values;  // the ESRB values the kept games have, as written (for the log)
 };
 
 // one top-level element (Game, GameAlternateName, GameImage) with its children's text
@@ -188,6 +189,9 @@ void take_element(Build& b, const QString& element, const QHash<QString, QString
         game.players = fields.value(QStringLiteral("MaxPlayers")).toInt();
         const double rating = fields.value(QStringLiteral("CommunityRating")).toDouble();
         game.rating = rating > 0 ? static_cast<float>(std::min(1.0, rating / 5.0)) : 0.f;
+        // Pegasus X: as the database has it ("E - Everyone"); x-esrb is made from it when scraping
+        game.esrb = fields.value(QStringLiteral("ESRB")).trimmed();
+        b.esrb_values[game.esrb]++;
         b.games[game.id] = std::move(game);
         return;
     }
@@ -419,6 +423,8 @@ QVariantMap LaunchBoxDb::status() const
     out.insert(QStringLiteral("stage"), m_stage);
     out.insert(QStringLiteral("progress"), m_progress.load());
     out.insert(QStringLiteral("error"), m_error);
+    // read in before the indexes kept the ESRB: Update reads them in again
+    out.insert(QStringLiteral("lacksEsrb"), indexLacksEsrb());
     return out;
 }
 
@@ -426,6 +432,12 @@ bool LaunchBoxDb::hasSystem(const QString& esde_system) const
 {
     const QString platform = platform_for(esde_system);
     return !platform.isEmpty() && QFileInfo::exists(index_path(platform));
+}
+
+bool LaunchBoxDb::indexLacksEsrb()
+{
+    const QJsonObject saved = read_json(status_path());
+    return !saved.isEmpty() && saved.value(QStringLiteral("index")).toInt() < INDEX_VERSION;
 }
 
 bool LaunchBoxDb::ready() const
@@ -588,6 +600,7 @@ void LaunchBoxDb::build(const QStringList& esde_systems)
                 { QStringLiteral("pub"), QJsonArray::fromStringList(g.publishers) },
                 { QStringLiteral("gen"), QJsonArray::fromStringList(g.genres) },
                 { QStringLiteral("pl"), g.players }, { QStringLiteral("rt"), static_cast<double>(g.rating) },
+                { QStringLiteral("esrb"), g.esrb },
                 { QStringLiteral("img"), images },
             });
         }
@@ -601,6 +614,14 @@ void LaunchBoxDb::build(const QStringList& esde_systems)
             total += games.size();
             Log::info(LOG_TAG, LOGMSG("%1: %2 games").arg(platform).arg(games.size()));
         }
+        // the ESRB values as the database writes them (what x-esrb is made from)
+        {
+            QStringList values;
+            for (auto it = b.esrb_values.cbegin(); it != b.esrb_values.cend(); ++it)
+                values.append(QStringLiteral("\"%1\" %2").arg(it.key().isEmpty() ? QStringLiteral("(none)") : it.key()).arg(it.value()));
+            values.sort();
+            Log::info(LOG_TAG, LOGMSG("ESRB values in these games: %1").arg(values.join(QStringLiteral(", "))));
+        }
         QJsonObject all;
         for (auto it = b.platform_counts.cbegin(); it != b.platform_counts.cend(); ++it)
             all.insert(it.key(), it.value());
@@ -610,6 +631,8 @@ void LaunchBoxDb::build(const QStringList& esde_systems)
             { QStringLiteral("platforms"), counts },
             { QStringLiteral("games"), total },
             { QStringLiteral("images"), b.kept_images },
+            // (the indexes keep each game's ESRB: an older one doesn't)
+            { QStringLiteral("index"), static_cast<int>(scraper::LaunchBoxDb::INDEX_VERSION) },
         }));
         return {};
     }));
@@ -641,6 +664,7 @@ const std::vector<LaunchBoxDb::Game>& LaunchBoxDb::platform_games(const QString&
             for (const QJsonValue& a : o.value(QStringLiteral("gen")).toArray()) g.genres.append(a.toString());
             g.players = o.value(QStringLiteral("pl")).toInt();
             g.rating = static_cast<float>(o.value(QStringLiteral("rt")).toDouble());
+            g.esrb = o.value(QStringLiteral("esrb")).toString();
             for (const QJsonValue& a : o.value(QStringLiteral("img")).toArray()) {
                 const QJsonArray i = a.toArray();
                 g.images.push_back({ i.at(0).toString(), i.at(1).toString(), i.at(2).toString() });

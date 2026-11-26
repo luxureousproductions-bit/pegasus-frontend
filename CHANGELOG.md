@@ -5,6 +5,50 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-25
 
+### Scraper: the ESRB rating (x-esrb)
+
+- **What:** the scraper writes `x-esrb` (themes read it as `game.extra.esrb`:
+  XBSX's ESRB badge) with one of EC, E, E10+, T, M, AO or RP, from the
+  source's own ESRB value only: ScreenScraper's `classifications` entry of
+  type "ESRB" (its text: "E10+"), LaunchBox's `ESRB` element ("E10+ -
+  Everyone 10+": the code before " - "). KA, Not Rated, K-A, blank, PEGI,
+  ages, the review score or anything else: nothing written. Each game's
+  log says what the source had and what was written.
+- **How it's filled:** under Other metadata (Details), like the other
+  details: only when the game has no x-esrb line (one typed by hand is
+  kept) unless Overwrite is on; ScreenScraper first, LaunchBox for what's
+  still missing. Saved as the other scraped fields (save_game_metadata,
+  scraped): the same files, backups and recovery.
+- **Games scraped before:** "Missing anything" (Settings > Scraper > Games)
+  counts a game with no x-esrb as missing something (with Other metadata
+  on), so a scrape of what's missing fills it, nothing else changing (no
+  Overwrite: the art and details they have stay). The count on that row
+  matches.
+- **LaunchBox's indexes** keep each game's ESRB now (`esrb` in
+  launchbox/index/*.json; status.json `"index": 2`). Indexes read in before
+  don't have it: the scraper's log says so at each run (and status() has
+  `lacksEsrb`) until LaunchboxDB is updated once (Scraper > Accounts), which
+  reads them in again from the download. Reading them in logs the ESRB
+  values the database has.
+- **Not changed:** the review score (`rating`, Ratings), art, the other
+  fields and x- lines, the theme; no new setting or row.
+- **Tests:** test_Scraper: every ESRB value (ScreenScraper's and
+  LaunchBox's) to x-esrb or nothing; ScreenScraper answers: E10+ gives
+  x-esrb: E10+ (the review score as before), KA nothing, a PEGI entry only
+  nothing, no classifications nothing, a game's own x-esrb kept (replaced
+  with Overwrite), Details off nothing; LaunchBox games: "E - Everyone"
+  gives E, Not Rated / blank nothing, a game's own kept.
+  test_LaunchBoxDb: a sample Metadata.xml read into the index, ESRB kept
+  as written, the old-index flag. Test env: the real LaunchBox download's
+  ESRB values and Super Mario World's x-esrb line.
+- **Files:** `src/backend/Scraper.h`, `Scraper.cpp`, `src/backend/LaunchBoxDb.h`,
+  `LaunchBoxDb.cpp`, `src/backend/model/internal/settings/Settings.cpp`,
+  `src/frontend/menu/settings/ScraperScreen.qml`,
+  `tests/backend/scraper/test_Scraper.cpp`,
+  `tests/backend/launchboxdb/test_LaunchBoxDb.cpp`, `tests/testenv/run.sh`,
+  `CHANGELOG.md`.
+- **Commit:** "Scraper: the ESRB rating (x-esrb)".
+
 ### Gamepad layout: your controller picture; Look is Appearance
 
 - **What:** Settings > Gamepad layout shows your controller picture

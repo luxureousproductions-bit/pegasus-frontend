@@ -63,6 +63,7 @@ struct Job {
     bool has_release = false;
     bool has_players = false;
     bool has_rating = false;
+    bool has_esrb = false;       ///< an x-esrb line (any value, one typed by hand too)
     bool title_is_file_name = false;
     QVariantMap slot_files;       ///< metadata key ("assets.screenshot", "x-manual") -> its files now
     bool has_box2d = false;
@@ -120,6 +121,11 @@ public:
     static QSet<QString> neverScrape();
     /// libretro has free pictures for this system (ES-DE's name)
     static bool hasFreeArt(const QString& system);
+    /// Pegasus X: a source's own ESRB value as x-esrb has it (EC, E, E10+,
+    /// T, M, AO or RP), or "" for anything else (KA, Not Rated, blank, a
+    /// PEGI or age value...). ScreenScraper's are the codes ("E10+");
+    /// LaunchBox's have the name after them ("E10+ - Everyone 10+").
+    static QString esrbCode(const QString& value);
 
 signals:
     /// a match's picture arrived (url: a local file) or didn't (error)

@@ -21,6 +21,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QSignalSpy>
 
 
 // Pegasus X: LaunchBox matching with fallback platforms. A Nintendo Switch 2
@@ -66,7 +67,42 @@ private slots:
     void edition_in_the_file_name_gets_the_edition();
     void manual_pick_is_kept();
     void year_breaks_a_tie();
+    // Pegasus X: ESRB (last: it reads a download in, over the indexes above)
+    void esrb_read_from_metadata_xml();
 };
+
+namespace {
+// a zip with one file, stored (as ZipReader reads it: the central directory)
+QByteArray stored_zip(const QByteArray& name, const QByteArray& data)
+{
+    const auto u16 = [](QByteArray& b, quint16 v) { b.append(char(v & 0xff)); b.append(char(v >> 8)); };
+    const auto u32 = [&u16](QByteArray& b, quint32 v) { u16(b, quint16(v & 0xffff)); u16(b, quint16(v >> 16)); };
+    quint32 crc = 0xffffffffu;
+    for (const char ch : data) {
+        crc ^= static_cast<quint8>(ch);
+        for (int k = 0; k < 8; k++)
+            crc = (crc >> 1) ^ (0xedb88320u & (0u - (crc & 1u)));
+    }
+    crc = ~crc;
+    QByteArray out;
+    u32(out, 0x04034b50u); u16(out, 20); u16(out, 0); u16(out, 0); u16(out, 0); u16(out, 0x21);
+    u32(out, crc); u32(out, quint32(data.size())); u32(out, quint32(data.size()));
+    u16(out, quint16(name.size())); u16(out, 0);
+    out.append(name);
+    out.append(data);
+    const quint32 dir_at = quint32(out.size());
+    QByteArray dir;
+    u32(dir, 0x02014b50u); u16(dir, 20); u16(dir, 20); u16(dir, 0); u16(dir, 0); u16(dir, 0); u16(dir, 0x21);
+    u32(dir, crc); u32(dir, quint32(data.size())); u32(dir, quint32(data.size()));
+    u16(dir, quint16(name.size())); u16(dir, 0); u16(dir, 0); u16(dir, 0); u16(dir, 0);
+    u32(dir, 0); u32(dir, 0);
+    dir.append(name);
+    out.append(dir);
+    u32(out, 0x06054b50u); u16(out, 0); u16(out, 0); u16(out, 1); u16(out, 1);
+    u32(out, quint32(dir.size())); u32(out, dir_at); u16(out, 0);
+    return out;
+}
+} // namespace
 
 QJsonObject test_LaunchBoxDb::game(int id, const QString& name, const QStringList& alt, const QString& release)
 {
@@ -471,6 +507,70 @@ void test_LaunchBoxDb::year_breaks_a_tie()
     // a year neither has: none is guessed either
     QVERIFY(db.best(QStringLiteral("androidgames"), QStringLiteral("Need for Speed Most Wanted"), 60, QString(), 2019).tie);
 }
+
+// LaunchBox's Metadata.xml (a sample, as the real one writes its games): each
+// game's ESRB element kept in the index as written; status.json says the
+// indexes have it (an index read in before doesn't: indexLacksEsrb)
+void test_LaunchBoxDb::esrb_read_from_metadata_xml()
+{
+    // the indexes above: read in before (no "index" in status.json)
+    QVERIFY(Db::indexLacksEsrb());
+    const QByteArray xml = R"(<?xml version="1.0" standalone="yes"?>
+<LaunchBox>
+  <Game>
+    <Name>Super Mario World</Name>
+    <ReleaseYear>1991</ReleaseYear>
+    <Overview>Mario's off on his biggest adventure ever.</Overview>
+    <MaxPlayers>2</MaxPlayers>
+    <ReleaseType>Released</ReleaseType>
+    <Cooperative>false</Cooperative>
+    <DatabaseID>136</DatabaseID>
+    <CommunityRating>4.3</CommunityRating>
+    <Platform>Super Nintendo Entertainment System</Platform>
+    <ESRB>E - Everyone</ESRB>
+    <Genres>Platform</Genres>
+    <Developer>Nintendo</Developer>
+    <Publisher>Nintendo</Publisher>
+  </Game>
+  <Game>
+    <Name>Mortal Kombat II</Name>
+    <DatabaseID>4001</DatabaseID>
+    <Platform>Super Nintendo Entertainment System</Platform>
+    <ESRB>M - Mature</ESRB>
+  </Game>
+  <Game>
+    <Name>Kirby's Dream Course</Name>
+    <DatabaseID>4002</DatabaseID>
+    <Platform>Super Nintendo Entertainment System</Platform>
+    <ESRB>K-A - Kids to Adults</ESRB>
+  </Game>
+  <Game>
+    <Name>Some Homebrew</Name>
+    <DatabaseID>4003</DatabaseID>
+    <Platform>Super Nintendo Entertainment System</Platform>
+  </Game>
+</LaunchBox>
+)";
+    QDir().mkpath(Db::dir());
+    QFile zip(Db::zip_path());
+    QVERIFY(zip.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    zip.write(stored_zip("Metadata.xml", xml));
+    zip.close();
+
+    Db db;
+    QSignalSpy done(&db, &Db::finished);
+    db.update({ QStringLiteral("snes") }, false);
+    QVERIFY(done.wait(30000));
+    QVERIFY2(db.status().value(QStringLiteral("error")).toString().isEmpty(), qPrintable(db.status().value(QStringLiteral("error")).toString()));
+    QCOMPARE(db.game(QStringLiteral("snes"), 136).esrb, QStringLiteral("E - Everyone"));
+    QCOMPARE(db.game(QStringLiteral("snes"), 136).players, 2);
+    QCOMPARE(db.game(QStringLiteral("snes"), 4001).esrb, QStringLiteral("M - Mature"));
+    QCOMPARE(db.game(QStringLiteral("snes"), 4002).esrb, QStringLiteral("K-A - Kids to Adults"));
+    QCOMPARE(db.game(QStringLiteral("snes"), 4003).esrb, QString());
+    QVERIFY(!Db::indexLacksEsrb());
+    QCOMPARE(db.status().value(QStringLiteral("lacksEsrb")).toBool(), false);
+}
+
 
 QTEST_MAIN(test_LaunchBoxDb)
 #include "test_LaunchBoxDb.moc"

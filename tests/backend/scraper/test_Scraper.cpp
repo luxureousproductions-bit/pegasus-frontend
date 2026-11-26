@@ -189,7 +189,50 @@ private:
         *changes = s.m_changes;
     }
 
+    // Pegasus X: one game's answer read as the scraper reads it (no network): what it would save
+    static QVariantMap readScreenScraper(const QByteArray& json, bool has_esrb, bool overwrite, bool details = true) {
+        scraper::Scraper s;
+        scraper::Job job;
+        job.collection = QStringLiteral("Nintendo SNES");
+        job.system = QStringLiteral("snes");
+        job.title = QStringLiteral("Some Game");
+        job.path = QStringLiteral("/roms/snes/Some Game (USA).sfc");
+        job.has_esrb = has_esrb;
+        s.m_jobs = { job };
+        s.m_index = 0;
+        s.m_settings = QVariantMap {
+            { QStringLiteral("overwrite"), overwrite }, { QStringLiteral("getDetails"), details },
+            { QStringLiteral("region"), QStringLiteral("us") }, { QStringLiteral("language"), QStringLiteral("en") },
+        };
+        s.parseScreenScraper(QJsonDocument::fromJson(json).object());
+        return s.m_changes;
+    }
+    static QVariantMap readLaunchBox(const QString& esrb, bool has_esrb, bool overwrite) {
+        scraper::Scraper s;
+        scraper::Job job;
+        job.collection = QStringLiteral("Nintendo SNES");
+        job.system = QStringLiteral("snes");
+        job.title = QStringLiteral("Super Mario World");
+        job.path = QStringLiteral("/roms/snes/Super Mario World (USA).sfc");
+        job.has_esrb = has_esrb;
+        s.m_jobs = { job };
+        s.m_index = 0;
+        s.m_settings = QVariantMap { { QStringLiteral("overwrite"), overwrite } };
+        scraper::LaunchBoxDb::Game game;
+        game.id = 136;
+        game.name = QStringLiteral("Super Mario World");
+        game.platform = QStringLiteral("Super Nintendo Entertainment System");
+        game.esrb = esrb;
+        game.rating = 0.86f;
+        s.parseLaunchBox(game, false);
+        return s.m_changes;
+    }
+
 private slots:
+    void esrb_codes_data();
+    void esrb_codes();
+    void screenscraper_esrb();
+    void launchbox_esrb();
     void lookup_with_no_answer_gives_up();
     void download_with_no_answer_is_skipped();
     void slow_download_keeps_going();
@@ -344,6 +387,90 @@ void test_Scraper::stop_during_downloads()
     QVERIFY(t.elapsed() < 3000);
     QVERIFY(changes.isEmpty());
     QCOMPARE(server.requests.size(), 4);  // the first four only: nothing new started after Stop
+}
+
+
+// Pegasus X: a source's own ESRB value -> x-esrb (only the seven it takes)
+void test_Scraper::esrb_codes_data()
+{
+    QTest::addColumn<QString>("value");
+    QTest::addColumn<QString>("code");
+    // ScreenScraper's (classificationsListe: EC, E, E10+, T, M, AO, KA, NOT RATED)
+    QTest::newRow("ss EC") << QStringLiteral("EC") << QStringLiteral("EC");
+    QTest::newRow("ss E") << QStringLiteral("E") << QStringLiteral("E");
+    QTest::newRow("ss E10+") << QStringLiteral("E10+") << QStringLiteral("E10+");
+    QTest::newRow("ss T") << QStringLiteral("T") << QStringLiteral("T");
+    QTest::newRow("ss M") << QStringLiteral("M") << QStringLiteral("M");
+    QTest::newRow("ss AO") << QStringLiteral("AO") << QStringLiteral("AO");
+    QTest::newRow("ss KA") << QStringLiteral("KA") << QString();
+    QTest::newRow("ss NOT RATED") << QStringLiteral("NOT RATED") << QString();
+    // LaunchBox's (the code, " - ", the name)
+    QTest::newRow("lb E") << QStringLiteral("E - Everyone") << QStringLiteral("E");
+    QTest::newRow("lb E10+") << QStringLiteral("E10+ - Everyone 10+") << QStringLiteral("E10+");
+    QTest::newRow("lb T") << QStringLiteral("T - Teen") << QStringLiteral("T");
+    QTest::newRow("lb M") << QStringLiteral("M - Mature") << QStringLiteral("M");
+    QTest::newRow("lb AO") << QStringLiteral("AO - Adults Only") << QStringLiteral("AO");
+    QTest::newRow("lb EC") << QStringLiteral("EC - Early Childhood") << QStringLiteral("EC");
+    QTest::newRow("lb RP") << QStringLiteral("RP - Rating Pending") << QStringLiteral("RP");
+    QTest::newRow("lb K-A") << QStringLiteral("K-A - Kids to Adults") << QString();
+    QTest::newRow("lb Not Rated") << QStringLiteral("Not Rated") << QString();
+    // nothing else: blank, PEGI, ages, a score, a name alone
+    QTest::newRow("blank") << QString() << QString();
+    QTest::newRow("spaces") << QStringLiteral("   ") << QString();
+    QTest::newRow("pegi") << QStringLiteral("PEGI 12") << QString();
+    QTest::newRow("age") << QStringLiteral("12") << QString();
+    QTest::newRow("age plus") << QStringLiteral("10+") << QString();
+    QTest::newRow("name alone") << QStringLiteral("Everyone") << QString();
+    QTest::newRow("score") << QStringLiteral("0.85") << QString();
+}
+
+void test_Scraper::esrb_codes()
+{
+    QFETCH(QString, value);
+    QFETCH(QString, code);
+    QCOMPARE(scraper::Scraper::esrbCode(value), code);
+}
+
+// ScreenScraper's jeuInfos answer (jeu.classifications: [{ type, text }])
+void test_Scraper::screenscraper_esrb()
+{
+    const QByteArray e10 = R"({ "id": "3456", "noms": [ { "region": "ss", "text": "Some Game" } ], "note": { "text": "16" },
+        "classifications": [ { "type": "PEGI", "text": "7" }, { "type": "ESRB", "text": "E10+" } ], "medias": [] })";
+    // E10+ -> x-esrb: E10+; the review score as before (16/20 -> 80%)
+    QVariantMap c = readScreenScraper(e10, false, false);
+    QCOMPARE(c.value(QStringLiteral("x-esrb")).toString(), QStringLiteral("E10+"));
+    QCOMPARE(c.value(QStringLiteral("rating")).toString(), QStringLiteral("80%"));
+    // KA -> nothing
+    c = readScreenScraper(R"({ "id": "1", "classifications": [ { "type": "ESRB", "text": "KA" } ], "medias": [] })", false, false);
+    QVERIFY(!c.contains(QStringLiteral("x-esrb")));
+    // no ESRB entry (a PEGI one only) -> nothing, never from PEGI
+    c = readScreenScraper(R"({ "id": "1", "classifications": [ { "type": "PEGI", "text": "18" } ], "medias": [] })", false, false);
+    QVERIFY(!c.contains(QStringLiteral("x-esrb")));
+    // no classifications at all, and a score: nothing from the score
+    c = readScreenScraper(R"({ "id": "1", "note": { "text": "19" }, "medias": [] })", false, false);
+    QVERIFY(!c.contains(QStringLiteral("x-esrb")));
+    QCOMPARE(c.value(QStringLiteral("rating")).toString(), QStringLiteral("95%"));
+    // an x-esrb the game has (typed by hand) is kept...
+    c = readScreenScraper(e10, true, false);
+    QVERIFY(!c.contains(QStringLiteral("x-esrb")));
+    // ...unless Overwrite
+    c = readScreenScraper(e10, true, true);
+    QCOMPARE(c.value(QStringLiteral("x-esrb")).toString(), QStringLiteral("E10+"));
+    // Details off: nothing
+    c = readScreenScraper(e10, false, false, false);
+    QVERIFY(!c.contains(QStringLiteral("x-esrb")));
+}
+
+// LaunchBox's Metadata.xml ESRB element, from its index
+void test_Scraper::launchbox_esrb()
+{
+    QVariantMap c = readLaunchBox(QStringLiteral("E - Everyone"), false, false);
+    QCOMPARE(c.value(QStringLiteral("x-esrb")).toString(), QStringLiteral("E"));
+    QCOMPARE(c.value(QStringLiteral("rating")).toString(), QStringLiteral("86%"));  // (as before)
+    QVERIFY(!readLaunchBox(QStringLiteral("Not Rated"), false, false).contains(QStringLiteral("x-esrb")));
+    QVERIFY(!readLaunchBox(QString(), false, false).contains(QStringLiteral("x-esrb")));
+    QVERIFY(!readLaunchBox(QStringLiteral("M - Mature"), true, false).contains(QStringLiteral("x-esrb")));
+    QCOMPARE(readLaunchBox(QStringLiteral("M - Mature"), true, true).value(QStringLiteral("x-esrb")).toString(), QStringLiteral("M"));
 }
 
 

@@ -67,6 +67,7 @@ public:
         QStringList genres;
         int players = 0;
         float rating = 0.f;   ///< 0..1
+        QString esrb;         ///< its ESRB element as the database has it ("E - Everyone"), or ""
         std::vector<Image> images;
         int score = 0;        ///< how sure the match is, 0..100 (candidates())
     };
@@ -112,6 +113,12 @@ public:
     bool hasSystem(const QString& esde_system) const;
     /// any index at all
     bool ready() const;
+    /// Pegasus X: the indexes were read in before they kept the games' ESRB
+    /// (build 2278 and before: status.json has no "index" 2): Update
+    /// LaunchboxDB once reads them in again from the download, with it
+    static bool indexLacksEsrb();
+    /// what status.json's "index" is for indexes with the ESRB
+    enum : int { INDEX_VERSION = 2 };
 
     /// Downloads the database when it's missing or older than a week (or
     /// `force`), then reads it into the indexes of `esde_systems` (and of

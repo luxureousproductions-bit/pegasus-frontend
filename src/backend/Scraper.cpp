@@ -713,6 +713,11 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
         .arg(m_settings.value(QStringLiteral("overwrite")).toBool() ? QStringLiteral("yes") : QStringLiteral("no"))
         .arg(m_dev_id.isEmpty() ? QStringLiteral("missing") : QStringLiteral("yes"))
         .arg(lbReady() ? QStringLiteral("yes") : QStringLiteral("missing")));
+    // LaunchBox's indexes read in before they kept the games' ESRB: x-esrb
+    // comes from ScreenScraper only, until LaunchboxDB is updated once
+    if (lbReady() && LaunchBoxDb::indexLacksEsrb())
+        note(LOGMSG("LaunchBox: its indexes were read in before they kept the games' ESRB rating: "
+                    "Update LaunchboxDB once (Scraper > Accounts) for x-esrb from LaunchBox"));
     // which system each collection is looked up as
     QMap<QString, QString> systems;
     for (const Job& job : m_jobs)
@@ -1500,6 +1505,20 @@ void Scraper::setNeverScrape(const QString& path, const QString& title, bool nev
     write_review(root);
 }
 
+QString Scraper::esrbCode(const QString& value)
+{
+    // the code before a " - " and the name (LaunchBox: "E10+ - Everyone 10+"),
+    // or the value itself (ScreenScraper: "E10+"); only the seven x-esrb keeps
+    QString code = value.section(QStringLiteral(" - "), 0, 0).trimmed().toUpper();
+    if (code.startsWith(QLatin1String("ESRB")))
+        code = code.mid(4).remove(QLatin1Char(':')).trimmed();   // ("ESRB: T", "ESRB T")
+    static const QStringList codes {
+        QStringLiteral("EC"), QStringLiteral("E"), QStringLiteral("E10+"), QStringLiteral("T"),
+        QStringLiteral("M"), QStringLiteral("AO"), QStringLiteral("RP"),
+    };
+    return codes.contains(code) ? code : QString();
+}
+
 bool Scraper::hasFreeArt(const QString& system)
 {
     return !libretro_system(system).isEmpty();
@@ -1741,6 +1760,25 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
             if (!genres.isEmpty())
                 m_changes.insert(QStringLiteral("genre"), genres);
         }
+        // Pegasus X: the ESRB rating (classifications: [{ type, text }]), its
+        // "ESRB" entry only (never the PEGI one, an age or the review score)
+        if (overwrite || !job.has_esrb) {
+            QString value;
+            bool listed = false;
+            for (const QJsonValue& c : game.value(QStringLiteral("classifications")).toArray()) {
+                const QJsonObject o = c.toObject();
+                if (o.value(QStringLiteral("type")).toString().trimmed().compare(QLatin1String("ESRB"), Qt::CaseInsensitive) == 0) {
+                    value = o.value(QStringLiteral("text")).toString().trimmed();
+                    listed = true;
+                    break;
+                }
+            }
+            const QString code = esrbCode(value);
+            if (!code.isEmpty())
+                m_changes.insert(QStringLiteral("x-esrb"), code);
+            note(listed ? LOGMSG("ScreenScraper: ESRB \"%1\"%2").arg(value, code.isEmpty() ? QStringLiteral(": not one x-esrb takes") : QStringLiteral(" -> x-esrb: ") + code)
+                        : LOGMSG("ScreenScraper: no ESRB rating for this game"));
+        }
     }
 
     // the art: ScreenScraper's media types -> Pegasus' slots (the folders are ES-DE's names)
@@ -1949,6 +1987,13 @@ void Scraper::parseLaunchBox(const LaunchBoxDb::Game& game, bool after_other)
             m_changes.insert(QStringLiteral("release"), game.release.toString(Qt::ISODate));
         if (!game.genres.isEmpty() && open_key("genre", job.has_genre))
             m_changes.insert(QStringLiteral("genre"), game.genres);
+        // Pegasus X: its ESRB element ("E10+ - Everyone 10+"): the code, if it's one x-esrb takes
+        if (open_key("x-esrb", job.has_esrb) && !game.esrb.isEmpty()) {
+            const QString code = esrbCode(game.esrb);
+            if (!code.isEmpty())
+                m_changes.insert(QStringLiteral("x-esrb"), code);
+            note(LOGMSG("LaunchBox: ESRB \"%1\"%2").arg(game.esrb, code.isEmpty() ? QStringLiteral(": not one x-esrb takes") : QStringLiteral(" -> x-esrb: ") + code));
+        }
     }
 
     // the art: one picture per kind, the region you prefer first

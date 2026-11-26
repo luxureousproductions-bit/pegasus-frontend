@@ -551,6 +551,16 @@ d = json.load(open(sys.argv[1]))
 for k in sorted(d): print("%6d  %s" % (d[k], k))
 PY
     ls "$CFG/launchbox/index" > "$R/scraped-launchbox/index.txt" 2>/dev/null || true
+    # the x-esrb lines the scrape wrote (Super Mario World's), and an index's ESRB values
+    grep -rn "^x-esrb:" "$CFG/gamedirectory" 2>/dev/null | sed "s|$CFG/||" > "$R/scraped-launchbox/esrb-lines.txt" || true
+    python3 - "$CFG/launchbox/index" > "$R/scraped-launchbox/esrb-index.txt" 2>/dev/null <<'PY' || true
+import json, os, sys, collections
+d = sys.argv[1]
+for f in sorted(os.listdir(d)):
+    games = json.load(open(os.path.join(d, f)))
+    c = collections.Counter(g.get("esrb", "<no key>") for g in games)
+    print("%s: %s" % (f, ", ".join('"%s" %d' % (k, v) for k, v in c.most_common())))
+PY
     # a Nintendo Switch 2 game (MyGames/switch2, a .nup) scraped from LaunchBox's database
     start 13b-scrape-switch2 "" 8 "PEGASUSX_TEST_SCRAPE=Donkey Kong Bananza" "PEGASUSX_TEST_LAUNCHBOX=1"
     wait_log "Scraper: Done\|no sure match\|no platform for\|no game called" 300 "$R/logs/13b-scrape-switch2.stdout"
@@ -1099,6 +1109,11 @@ PY
         echo "## Scrape from the LaunchBox database (no login)"
         grep -E "LaunchBox|Downloaded|Saving|not found|no sure|Done:" "$R/scraped-launchbox/scraper.log" 2>/dev/null | head -n 16 | sed 's/^/    /'
         sed 's/^/    file: /' "$R/scraped-launchbox/files.txt" 2>/dev/null | head -n 10
+        echo "    ESRB (x-esrb):"
+        grep -E "ESRB" "$R/scraped-launchbox/scraper.log" 2>/dev/null | head -n 6 | cut -c1-600 | sed 's/^/        /'
+        sed 's/^/        written: /' "$R/scraped-launchbox/esrb-lines.txt" 2>/dev/null
+        if grep -q "Super Mario World\|snes" "$R/scraped-launchbox/esrb-lines.txt" 2>/dev/null; then echo "        OK: an x-esrb line written by the scrape"; else echo "        FAILED: no x-esrb line written"; fi
+        sed 's/^/        index: /' "$R/scraped-launchbox/esrb-index.txt" 2>/dev/null | cut -c1-400
         echo
         echo "## Nintendo Switch 2 from the LaunchBox database"
         grep "Nintendo Switch 2$" "$R/scraped-launchbox/platforms.txt" 2>/dev/null | sed 's/^/    platform in the download: /'

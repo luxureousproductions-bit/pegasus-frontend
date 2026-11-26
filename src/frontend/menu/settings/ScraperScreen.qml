@@ -225,12 +225,15 @@ FocusScope {
         var noDetails = !g.description && !g.summary && !g.developer;
         var noImage = a.boxFrontList.length === 0 && a.screenshotList.length === 0;
         var noVideo = a.videoList.length === 0;
+        // (no x-esrb is a gap too, with Details on: as the scraper counts it)
+        var esrb = g.extra ? g.extra["esrb"] : undefined;
+        var noEsrb = s.getDetails !== false && (!esrb || String(esrb).trim() === "");
         switch (s.games) {
             case "favorites": return g.favorite;
             case "nometadata": return noDetails;
             case "noimage": return noImage;
             case "novideo": return noVideo;
-            case "missing": return noDetails || noImage || noVideo || a.logoList.length === 0;
+            case "missing": return noDetails || noImage || noVideo || a.logoList.length === 0 || noEsrb;
         }
         return true;
     }
