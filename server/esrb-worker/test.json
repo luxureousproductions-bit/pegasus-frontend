@@ -1,0 +1,8 @@
+{
+  "games": [
+    { "name": "The Last of Us Part II", "platform": "ps4", "year": 2020, "esrb": "M" },
+    { "name": "GoldenEye 007", "platform": "n64", "year": 1997, "esrb": "T" },
+    { "name": "Super Mario World", "platform": "snes", "year": 1991, "esrb": "E" },
+    { "name": "Call of Duty: Black Ops 6", "platform": "ps5", "year": 2024, "esrb": "M" }
+  ]
+}

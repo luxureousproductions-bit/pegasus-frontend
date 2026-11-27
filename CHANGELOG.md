@@ -3,6 +3,53 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-26
+
+### Server: ESRB content descriptors from IGDB (server/esrb-worker)
+
+- **What:** a new folder, `server/esrb-worker`: a Cloudflare Worker plus a D1
+  database (free tier) with one endpoint, `POST /v1/esrb`. It takes up to 10
+  games (an IGDB id, or name + platform + year; plus the ESRB letter the game
+  has) and gives each one's ESRB content descriptors, with ESRB interactive
+  elements in a separate list only when IGDB lists them on the ESRB rating.
+  IGDB's current age-rating fields only (`age_ratings.organization`,
+  `rating_category`, `rating_content_descriptions` ->
+  `age_rating_content_descriptions_v2`), ESRB's organization only.
+- **Matching:** the IGDB id first; otherwise exactly one game with that name
+  (IGDB's case-insensitive exact match), on that platform, released that year
+  on it. None or several: `none`. Descriptors only when IGDB's ESRB letter is
+  the one sent (`mismatch` otherwise). Never a guess.
+- **Keys:** read from the Worker secrets `TWITCH_CLIENT_ID` and
+  `TWITCH_CLIENT_SECRET`; the app access token is fetched and renewed by the
+  Worker (kept in D1), with one retry when IGDB says it ran out. No key in
+  the repo, the tests or GitHub secrets.
+- **Cache:** every answer in D1, "checked, none found" and "several" too, so
+  a repeat lookup never asks IGDB. "Try again later" answers aren't kept.
+- **Limits:** IGDB's 4 requests a second and 8 open, counted in D1 across
+  every copy of the Worker (over them: `later` with `retryAfter`); 10 games a
+  request, 16 KB a body, 30 requests a minute per address (429). D1 or
+  free-tier errors: 503 "later". Not a proxy: one path, fixed queries, names
+  with quotes or backslashes refused, only ESRB descriptions go out.
+- **Platforms:** the ES-DE -> IGDB platform map from the IGDB scraper removed
+  on Oct 28 (its token request and name matching too), plus ps5, xboxseries,
+  switch2. The old scraper isn't restored.
+- **Why:** XBSX's ESRB badge can show descriptors next to the letter x-esrb
+  gives; ScreenScraper and LaunchBox don't have them.
+- **Not changed:** the Pegasus X app and the XBSX theme (nothing calls the
+  Worker yet). The Android build number still moves with this push (every
+  push builds), with the same app.
+- **Tests:** `server/esrb-worker/test/test.mjs` (Node 22, run here, 16
+  passing): D1 as an in-memory SQLite, Twitch and IGDB faked (made-up
+  data): the four test games, D1 cache (none found kept), letter mismatch,
+  several of one name, token expiry and one retry, IGDB 429, 4/s and 8-open
+  limits, per-address limit, wrong path/method/size/JSON, injection-shaped
+  names, missing keys/binding, D1 failing. Not run against Cloudflare or the
+  real IGDB: `README.md` has the deploy steps and the four-game test
+  (`test.json`).
+- **Files:** server/esrb-worker/{worker.js, schema.sql, README.md, test.json,
+  test/test.mjs}, CHANGELOG.md.
+- **Commit:** "Server: ESRB content descriptors from IGDB (esrb-worker)".
+
 ## 2026-11-25
 
 ### Scraper: the ESRB rating (x-esrb)
