@@ -49,6 +49,7 @@
 #include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "Scraper.h"
+#include "EsrbDescriptors.h"
 #include "ThemeStore.h"
 #include "Updater.h"
 #include "model/gaming/Assets.h"
@@ -2719,6 +2720,10 @@ QVariantMap scraper_defaults()
         { QStringLiteral("getLogos"), true },
         { QStringLiteral("getMiximages"), true },
         { QStringLiteral("getManuals"), true },
+        // Pegasus X: ESRB content descriptors from IGDB, through the Pegasus X
+        // server (no key, no login): off unless turned on
+        { QStringLiteral("getEsrbDescriptors"), false },
+        { QStringLiteral("esrbServer"), scraper::esrb::default_server() },
         // miximages, made on the device: their options
         { QStringLiteral("mixOverwrite"), true },
         { QStringLiteral("mixResolution"), QStringLiteral("1280x960") },
@@ -2979,7 +2984,11 @@ scraper::Job make_scraper_job(const model::Collection& coll, model::Game* game, 
     job.has_players = game->playerCount() > 1;
     job.has_rating = game->rating() > 0.0f;
     // (x-esrb: any value, one typed by hand too, is kept unless Overwrite)
-    job.has_esrb = !game->extraMap().value(QStringLiteral("esrb")).toStringList().join(QString()).trimmed().isEmpty();
+    job.esrb = game->extraMap().value(QStringLiteral("esrb")).toStringList().join(QString()).trimmed();
+    job.has_esrb = !job.esrb.isEmpty();
+    // (the ESRB descriptors step: lines it has, one typed by hand too, are kept unless Overwrite)
+    job.has_esrb_descriptors = !game->extraMap().value(QStringLiteral("esrb-descriptors")).toStringList().join(QString()).trimmed().isEmpty();
+    job.has_esrb_interactive = !game->extraMap().value(QStringLiteral("esrb-interactive")).toStringList().join(QString()).trimmed().isEmpty();
     job.title_is_file_name = !path.startsWith(QLatin1String("android:"))
         && QFileInfo(path).completeBaseName().compare(game->title(), Qt::CaseInsensitive) == 0;
     const std::vector<std::pair<const char*, const QStringList*>> slot_lists {
@@ -3020,6 +3029,59 @@ QString Settings::startScraper(QObject* collections)
 QString Settings::startMiximageGenerator(QObject* collections)
 {
     return startScraperWith(collections, true);
+}
+
+// Pegasus X: only the ESRB descriptors step (Content > Get ESRB descriptors
+// now), for the games of the systems picked that have an x-esrb letter and
+// no x-esrb-descriptors line (Overwrite: every one with a letter). Nothing
+// else is scraped.
+QString Settings::startEsrbDescriptors(QObject* collections)
+{
+    if (m_scraper && m_scraper->running())
+        return tr("The scraper is already running.");
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    if (!list)
+        return tr("No library to scrape.");
+    QVariantMap settings = scraperSettings();
+    if (!settings.value(QStringLiteral("getEsrbDescriptors")).toBool())
+        return tr("Turn on ESRB descriptors first.");
+    if (!scraper::esrb::endpoint(settings.value(QStringLiteral("esrbServer")).toString()).isValid())
+        return tr("The ESRB server address isn't one it can use (https://...).");
+    const QStringList systems = settings.value(QStringLiteral("systems")).toStringList();
+    if (systems.isEmpty())
+        return tr("Pick the systems first.");
+    settings.insert(QStringLiteral("esrbOnly"), true);
+    settings.insert(QStringLiteral("interactive"), false);
+    const bool overwrite = settings.value(QStringLiteral("overwrite")).toBool();
+    std::vector<scraper::Job> jobs;
+    QSet<QString> seen;
+    const QSet<QString> never = scraper::Scraper::neverScrape();
+    for (int i = 0; i < list->count(); i++) {
+        auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+        if (!coll || !systems.contains(coll->name()))
+            continue;
+        const QString system = scraper::Scraper::system_of(coll->name(), coll->shortName());
+        for (model::Game* const game : coll->gameList()->entries()) {
+            const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+            if (files.empty())
+                continue;
+            const QString path = files.front()->path();
+            if (seen.contains(path) || never.contains(path))
+                continue;
+            const QVariantMap& extra = game->extraMap();
+            if (extra.value(QStringLiteral("esrb")).toStringList().join(QString()).trimmed().isEmpty())
+                continue;
+            if (!overwrite && !extra.value(QStringLiteral("esrb-descriptors")).toStringList().join(QString()).trimmed().isEmpty())
+                continue;
+            seen.insert(path);
+            jobs.push_back(make_scraper_job(*coll, game, system, path));
+            m_scrape_games.insert(path, game);
+        }
+    }
+    if (jobs.empty())
+        return tr("No games to ask: they need an ESRB letter (x-esrb) and no descriptors yet.");
+    m_single_game.clear();
+    return runScraper(std::move(jobs), settings);
 }
 
 QString Settings::scrapeCollection(QObject* collections, const QString& collection_name, const QString& filter)

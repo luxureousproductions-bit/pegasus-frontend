@@ -5,6 +5,68 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-26
 
+### Scraper: ESRB descriptors from the Pegasus X server (optional, off)
+
+- **What:** an optional scraper step, **off by default** (Settings > Scraper >
+  Content settings > ESRB descriptors). For games that already have an
+  `x-esrb` letter, it asks the Pegasus X ESRB server (server/esrb-worker; no
+  key, no login) and writes `x-esrb-descriptors` ("Blood and Gore, Strong
+  Language", joined with ", ") only on status `ok` with a non-empty list, and
+  `x-esrb-interactive` only when the server gives a non-empty interactive
+  list. `none`, `mismatch`, `invalid` (and `ok` with nothing in it): nothing
+  written, the reason in the log. Never the letter, the star score, art or
+  anything else; a line the game has (typed by hand too) is kept unless
+  Overwrite is on.
+- **How it runs:** with the step on, after a scrape's games (for the games of
+  that run, a letter written in it too), or alone with **Get ESRB
+  descriptors now** (the picked systems' games with a letter and no
+  descriptors line; Overwrite: every one with a letter; nothing else is
+  scraped). 10 games a request, one request at a time, 2.2 s apart at least
+  (under the server's 30 a minute per address). `later` results are asked
+  again after the server's wait, longer each try (6 tries, then left for the
+  next run); a 429, 503, Cloudflare error or no answer waits (5 s, 10 s,
+  20 s... or the server's Retry-After) and asks again; 6 in a row without a
+  usable answer end the step with "what's left is asked next time". A 400 /
+  404-type answer ends it with "check the address". None of it fails the run.
+- **Server address:** Content settings > Server address, by default
+  `https://pegasusx-esrb.pegasusx.workers.dev/v1/esrb` (https only; a bare
+  address gets /v1/esrb).
+- **What's sent:** IGDB's id when known, else name + IGDB platform id + year,
+  and the letter (as the server takes it: "T - Teen" -> T). The platform id
+  comes from a copy of worker.js's PLATFORMS table (a test compares the two,
+  name for name). The IGDB id is Hasheous': when a scrape already asks
+  Hasheous for a game (by checksum) and it has IGDB mapped, the id is kept
+  in metadata/library-index.json (`ids.igdb`) and used from then on. Not
+  asked: no letter, a letter that isn't one of the seven, no IGDB platform
+  for the system, no year, a name with a quote or backslash (the log counts
+  each reason, with examples).
+- **Saving:** a collection's games of a request at once
+  (save_games_metadata, as RetroAchievements' matches and Library's edits),
+  backed up once a run when Overwrite is on, as a scrape. The loaded games
+  take the lines at once (game.extra["esrb-descriptors"],
+  game.extra["esrb-interactive"]).
+- **Progress and log:** the scraping page as for games ("ESRB descriptors ·
+  <game>", n of total, Last games); each game's result in the Log
+  ("ESRB descriptors: "GoldenEye 007": ok (IGDB 1638), T -> ...: saved").
+  The end message has the step's counts.
+- **Why:** the XBSX ESRB badge can show the descriptors with the letter.
+- **Not changed:** the server, the XBSX theme, the x-esrb step, "Missing
+  anything" (a game without descriptors isn't "missing": the step has its
+  own button), the other scraper steps.
+- **Tests (in compile-check):** test_Scraper: the platform table against
+  worker.js; the address rules; what's asked (by id / by name, what isn't);
+  every status (ok, ok with interactive, ok empty, none, mismatch, invalid,
+  later, unknown), typed lines kept / Overwrite, lines cleaned; the step
+  against a server on the machine (11 of 15 games asked, 10 a request,
+  spacing, a 429 then the same games, "later" asked again and saved, only
+  the two keys saved, the counts and log); a server always busy (gives up
+  after 6, waits growing, run not failed); Stop while waiting (ends at once).
+- **Files:** src/backend/EsrbDescriptors.{h,cpp} (new), Scraper.{h,cpp},
+  backend.pro, CMakeLists.txt, model/internal/settings/Settings.{h,cpp},
+  src/frontend/menu/settings/ScraperScreen.qml,
+  tests/backend/scraper/{test_Scraper.cpp, scraper.pro}, CHANGELOG.md.
+- **Commit:** "Scraper: ESRB descriptors from the Pegasus X server (optional, off)".
+
 ### Server: ESRB content descriptors from IGDB (server/esrb-worker)
 
 - **What:** a new folder, `server/esrb-worker`: a Cloudflare Worker plus a D1

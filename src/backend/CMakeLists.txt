@@ -40,6 +40,8 @@ add_library(pegasus-backend
     SafeFile.h
     Scraper.cpp
     Scraper.h
+    EsrbDescriptors.cpp
+    EsrbDescriptors.h
     LaunchBoxDb.cpp
     LaunchBoxDb.h
     RetroAchievements.cpp

@@ -400,6 +400,9 @@ public:
     /// returns an error, or empty when it started (scraperProgress, scraperFinished)
     Q_INVOKABLE QString startScraper(QObject* collections);
     Q_INVOKABLE QString startMiximageGenerator(QObject* collections);
+    /// Pegasus X: only the ESRB descriptors step, for the picked systems'
+    /// games with an x-esrb letter and no x-esrb-descriptors line
+    Q_INVOKABLE QString startEsrbDescriptors(QObject* collections);
     Q_INVOKABLE void stopScraper();
     /// Interactive mode: the match picked (index in the choice's candidates),
     /// a new search name, or this game skipped

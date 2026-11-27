@@ -83,7 +83,14 @@ FocusScope {
             root.run = state;
             root.message = state.stopReason
                 ? state.stopReason + " · " + qsTr("%1 saved").arg(state.saved) + api.tr
+                : state.esrbOnly
+                ? qsTr("ESRB descriptors: %1 saved, %2 with nothing to write, %3 left for next time.").arg(state.saved).arg(state.notFound).arg(state.failed) + api.tr
                 : qsTr("Done: %1 saved, %2 not found, %3 failed.").arg(state.saved).arg(state.notFound).arg(state.failed) + api.tr;
+            // the ESRB descriptors step after the games: its own counts
+            if (!state.esrbOnly && (state.esrbTotal || 0) > 0)
+                root.message += " · " + qsTr("ESRB descriptors: %1 saved, %2 left").arg(state.esrbSaved || 0).arg(state.esrbLeft || 0) + api.tr;
+            if (state.esrbMessage)
+                root.message += " · " + state.esrbMessage;
         }
     }
 
@@ -269,6 +276,50 @@ FocusScope {
         list.currentIndex = 0;
     }
 
+    // Pegasus X: the ESRB descriptors step alone (Content settings): the picked
+    // systems' games with an ESRB letter and no descriptors line (Overwrite:
+    // every one with a letter), as Settings.startEsrbDescriptors takes them
+    function esrbText(v) {
+        return v === undefined || v === null ? "" : String(v).trim();
+    }
+    readonly property int esrbGameCount: {
+        if (page !== "content" || !s.getEsrbDescriptors)
+            return 0;
+        var n = 0;
+        var picked = s.systems || [];
+        for (var i = 0; i < api.collections.count; i++) {
+            var c = api.collections.get(i);
+            if (picked.indexOf(c.name) < 0)
+                continue;
+            for (var j = 0; j < c.games.count; j++) {
+                var x = c.games.get(j).extra || ({});
+                if (esrbText(x["esrb"]) !== "" && (s.overwrite || esrbText(x["esrb-descriptors"]) === ""))
+                    n++;
+            }
+        }
+        return n;
+    }
+    // 10 games a request, 2.2 s apart at least (the server takes 30 a minute)
+    function esrbMinutes(games) {
+        return Math.max(1, Math.ceil(Math.ceil(games / 10) * 2.2 / 60));
+    }
+    function startEsrb() {
+        if ((s.systems || []).length === 0) {
+            message = qsTr("Pick the systems to scrape first.") + api.tr;
+            return;
+        }
+        var error = Internal.settings.startEsrbDescriptors(api.collections);
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        results = [];
+        run = Internal.settings.scraperState();
+        message = "";
+        page = "running";
+        list.currentIndex = 0;
+    }
+
     function startGenerator() {
         if ((s.systems || []).length === 0) {
             message = qsTr("Pick the systems on the Scraper page first.") + api.tr;
@@ -395,6 +446,15 @@ FocusScope {
         if (page === "content") {
             for (i = 0; i < contentToggles.length; i++)
                 out.push({ "kind": "toggle", "key": contentToggles[i][0], "text": contentToggles[i][1] });
+            // Pegasus X: ESRB content descriptors (IGDB, through the Pegasus X server)
+            out.push({ "kind": "section", "text": qsTr("ESRB descriptors") + api.tr });
+            out.push({ "kind": "toggle", "key": "getEsrbDescriptors", "text": qsTr("ESRB descriptors (after scraping)") + api.tr });
+            out.push({ "kind": "text", "key": "esrbServer", "text": qsTr("Server address") + api.tr,
+                       "value": esrbText(s.esrbServer) !== "" ? esrbText(s.esrbServer) : qsTr("the Pegasus X server") + api.tr });
+            if (s.getEsrbDescriptors)
+                out.push({ "kind": "esrbrun", "text": qsTr("Get ESRB descriptors now · %1 games").arg(esrbGameCount) + api.tr,
+                           "value": esrbGameCount > 0 ? qsTr("about %1 min").arg(esrbMinutes(esrbGameCount)) + api.tr : "" });
+            out.push({ "kind": "info", "text": qsTr("For games that have an ESRB letter: what the rating is for (Blood and Gore, Strong Language...), from IGDB. Nothing else changes. No login.") + api.tr, "value": "" });
             return out;
         }
         if (page === "miximage") {
@@ -580,6 +640,7 @@ FocusScope {
             lb = Internal.settings.launchBoxStatus();
         }
         else if (row.kind === "offline") startGenerator();
+        else if (row.kind === "esrbrun") startEsrb();
         else if (row.kind === "lbplatform") {
             var list2 = (s.androidExtra || []).slice();
             var at = list2.indexOf(row.text);

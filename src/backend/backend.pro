@@ -30,6 +30,7 @@ SOURCES += \
     SetupState.cpp \
     SafeFile.cpp \
     Scraper.cpp \
+    EsrbDescriptors.cpp \
     LaunchBoxDb.cpp \
     RetroAchievements.cpp \
     AudioSpectrum.cpp \
@@ -54,6 +55,7 @@ HEADERS += \
     SetupState.h \
     SafeFile.h \
     Scraper.h \
+    EsrbDescriptors.h \
     LaunchBoxDb.h \
     RetroAchievements.h \
     AudioSpectrum.h \

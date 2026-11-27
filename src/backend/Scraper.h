@@ -33,6 +33,8 @@
 #include <QHash>
 #include <QSet>
 
+class QTimer;
+
 class QJsonObject;
 class QNetworkAccessManager;
 class QNetworkReply;
@@ -64,6 +66,10 @@ struct Job {
     bool has_players = false;
     bool has_rating = false;
     bool has_esrb = false;       ///< an x-esrb line (any value, one typed by hand too)
+    QString esrb;                ///< ...its value (the ESRB descriptors step: a letter this run wrote too)
+    bool has_esrb_descriptors = false;  ///< an x-esrb-descriptors line (one typed by hand too)
+    bool has_esrb_interactive = false;  ///< an x-esrb-interactive line
+    int igdb_id = 0;             ///< IGDB's id for it, when Hasheous gave one (library-index.json, or this run)
     bool title_is_file_name = false;
     QVariantMap slot_files;       ///< metadata key ("assets.screenshot", "x-manual") -> its files now
     bool has_box2d = false;
@@ -72,6 +78,13 @@ struct Job {
     int launchbox_id = 0;    ///< the LaunchBox game you picked (Needs your check)
     int year = 0;            ///< the year the file's name says ("(2005)"), else the game's release year; 0: none
     QString launchbox_platform;  ///< ...on this LaunchBox platform (picked in a system search), else the system's
+};
+
+/// One game's ESRB descriptors as saved (the ESRB descriptors step)
+struct EsrbEdit {
+    QString path;
+    QString title;
+    QVariantMap changes;
 };
 
 /// What a source gave for one game
@@ -130,7 +143,8 @@ public:
 signals:
     /// a match's picture arrived (url: a local file) or didn't (error)
     void thumbReady(int index, QString url, int error);
-    /// { running, done, total, current, title, result, ok, saved, notFound, failed }
+    /// { running, done, total, current, title, result, ok, saved, notFound, failed,
+    /// phase ("games" / "esrb"), esrbTotal, esrbSaved, esrbNone, esrbLeft, esrbMessage }
     void progress(QVariantMap state);
     void finished(QVariantMap state);
     /// a game was saved: what changed (the loaded game takes it in place)
@@ -213,6 +227,43 @@ private:
 
     /// after the first source: LaunchBox for what's missing, then libretro's pictures
     void fillMore();
+
+    // Pegasus X: the ESRB descriptors step (EsrbDescriptors.h): after the
+    // games (Content > ESRB descriptors on), or alone (esrbOnly: Get ESRB
+    // descriptors now). Batches of 10, one request at a time, 2.2 s apart at
+    // least (the server takes 30 a minute from an address); "later" and a
+    // busy server wait and ask again, they never fail the run.
+    struct EsrbItem {
+        size_t job = 0;
+        int tries = 0;           ///< "later" answers so far
+        qint64 ready_at = 0;     ///< not asked before this (m_esrb_clock ms)
+    };
+    bool wantsEsrb() const;
+    bool esrbOnly() const;
+    void esrbBegin();
+    void esrbNext();
+    void esrbSend(const std::vector<size_t>& items);
+    void esrbAnswer(const std::vector<size_t>& items, int status, const QByteArray& body, const QByteArray& retry_header);
+    void esrbRetry(const std::vector<size_t>& items, int wait_s);
+    void esrbEnd(const QString& message = QString());
+    QString esrbSave(const QString& collection, const std::vector<EsrbEdit>& edits);
+    bool m_esrb_phase = false;     ///< asking now
+    bool m_esrb_over = false;      ///< asked this run (or nothing to ask)
+    std::vector<EsrbItem> m_esrb_items;
+    std::vector<size_t> m_esrb_waiting;   ///< items still to ask, in order
+    QElapsedTimer m_esrb_clock;
+    qint64 m_esrb_last = -1;       ///< the last request's start
+    QTimer* m_esrb_timer = nullptr;
+    QNetworkReply* m_esrb_reply = nullptr;
+    QUrl m_esrb_url;
+    int m_esrb_total = 0, m_esrb_done = 0, m_esrb_saved = 0, m_esrb_none = 0, m_esrb_left = 0;
+    int m_esrb_failures = 0;       ///< requests in a row with no usable answer
+    QString m_esrb_message;
+    QString m_hash_igdb;           ///< IGDB's id for the game, from Hasheous (this game)
+    // (tests: shorter waits, saving captured)
+    int m_esrb_spacing_ms = 2200;
+    int m_esrb_second_ms = 1000;   ///< a second of the server's retryAfter
+    std::function<QString(const QString&, const std::vector<EsrbEdit>&)> m_esrb_save_hook;
 
     // miximages made here (as ES-DE), after the downloads; the offline
     // generator makes only these, from the art the games have
