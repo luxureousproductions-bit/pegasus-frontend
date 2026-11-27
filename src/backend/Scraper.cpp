@@ -725,6 +725,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_esrb_total = m_esrb_done = m_esrb_saved = m_esrb_none = m_esrb_left = 0;
     m_esrb_failures = 0;
     m_esrb_last = -1;
+    m_esrb_hold = 0;
     m_esrb_message.clear();
     m_esrb_reply = nullptr;
     if (m_esrb_timer)
@@ -2795,6 +2796,11 @@ void Scraper::esrbNext()
         return;
     }
     const qint64 now = m_esrb_clock.elapsed();
+    // the server was busy (429, 503, no answer): no request at all until its wait is over
+    if (now < m_esrb_hold) {
+        m_esrb_timer->start(static_cast<int>(m_esrb_hold - now));
+        return;
+    }
     // the games that may be asked now (a "later" one waits its time), in order
     std::vector<size_t> batch;
     qint64 soonest = -1;
@@ -2977,6 +2983,7 @@ void Scraper::esrbAnswer(const std::vector<size_t>& items, int status, const QBy
          .arg(m_esrb_url.host(), status == 0 ? QStringLiteral("didn't answer") : QStringLiteral("answered %1").arg(status))
          .arg(wait));
     esrbRetry(items, wait);
+    m_esrb_hold = m_esrb_clock.elapsed() + static_cast<qint64>(wait) * m_esrb_second_ms;
     esrbNext();
 }
 

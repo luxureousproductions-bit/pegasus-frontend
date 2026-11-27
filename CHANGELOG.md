@@ -25,7 +25,8 @@ rolled back on its own with `git revert <commit>`.
   (under the server's 30 a minute per address). `later` results are asked
   again after the server's wait, longer each try (6 tries, then left for the
   next run); a 429, 503, Cloudflare error or no answer waits (5 s, 10 s,
-  20 s... or the server's Retry-After) and asks again; 6 in a row without a
+  20 s... or the server's Retry-After) and asks again, nothing else asked
+  meanwhile; 6 in a row without a
   usable answer end the step with "what's left is asked next time". A 400 /
   404-type answer ends it with "check the address". None of it fails the run.
 - **Server address:** Content settings > Server address, by default
@@ -65,7 +66,11 @@ rolled back on its own with `git revert <commit>`.
   backend.pro, CMakeLists.txt, model/internal/settings/Settings.{h,cpp},
   src/frontend/menu/settings/ScraperScreen.qml,
   tests/backend/scraper/{test_Scraper.cpp, scraper.pro}, CHANGELOG.md.
-- **Commit:** "Scraper: ESRB descriptors from the Pegasus X server (optional, off)".
+- **Fix found by the tests (compile check, before any install):** after a
+  busy answer the next waiting games were sent at once; now every request
+  waits for the busy wait.
+- **Commits:** "Scraper: ESRB descriptors from the Pegasus X server (optional,
+  off)" and "ESRB descriptors: a busy server holds every request".
 
 ### Server: ESRB content descriptors from IGDB (server/esrb-worker)
 

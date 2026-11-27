@@ -253,6 +253,7 @@ private:
     std::vector<size_t> m_esrb_waiting;   ///< items still to ask, in order
     QElapsedTimer m_esrb_clock;
     qint64 m_esrb_last = -1;       ///< the last request's start
+    qint64 m_esrb_hold = 0;        ///< no request before this (the server was busy: it waits for everyone)
     QTimer* m_esrb_timer = nullptr;
     QNetworkReply* m_esrb_reply = nullptr;
     QUrl m_esrb_url;

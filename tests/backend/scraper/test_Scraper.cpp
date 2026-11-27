@@ -808,8 +808,10 @@ void test_Scraper::esrb_step_against_a_server()
     for (const QJsonArray& b : server.batches)
         QVERIFY(b.size() <= 10);
     QCOMPARE(server.batches.first().size(), 10);
-    // the 429 first, then the same games again; never two requests closer than the spacing
+    // the 429 first, then nothing until its wait was over (the same games
+    // again first); never two requests closer than the spacing
     QCOMPARE(server.statuses.first(), 429);
+    QVERIFY2(server.when.at(1) - server.when.at(0) >= 480, qPrintable(QString::number(server.when.at(1) - server.when.at(0))));
     for (int i = 1; i < server.when.size(); i++)
         QVERIFY2(server.when.at(i) - server.when.at(i - 1) >= 280, qPrintable(QString::number(server.when.at(i) - server.when.at(i - 1))));
     // the letter as the server takes it ("T - Teen" -> T), by name + IGDB platform + year
