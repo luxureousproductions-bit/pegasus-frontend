@@ -55,10 +55,19 @@ enum : int {
 int igdb_platform(const QString& system);
 const QHash<QString, int>& platforms();
 
+/// A name for matching (the server's stays exact: this only evens out how
+/// files and scrapers write it): tags in () and [] gone, a trailing article
+/// moved back, " - " / " : " before a subtitle as ": ", look-alike
+/// apostrophes, dashes and spaces evened, quotes and (TM)(R)(C) signs gone.
+/// "Legend of Zelda, The - A Link to the Past (USA)" ->
+/// "The Legend of Zelda: A Link to the Past". The name as it was (spaces
+/// evened) when nothing would be left.
+QString clean_name(const QString& name);
+
 /// One game as it's asked
 struct Game {
     QString title;            ///< for the log
-    QString name;             ///< the name sent (no IGDB id)
+    QString name;             ///< the name sent (no IGDB id): clean_name()
     QString letter;           ///< its x-esrb, as a letter the server takes
     int igdb_id = 0;
     int platform = 0;         ///< IGDB's platform id
@@ -70,6 +79,19 @@ struct Game {
 QString why_not(const Game& game);
 /// its entry in a request: { igdbId, esrb } or { name, platform, year, esrb }
 QJsonObject request_entry(const Game& game);
+/// what it's asked with: its IGDB id, or its name, platform and year; and its
+/// letter. A "nothing found" answer is remembered for this: a game asked
+/// with something else (a new letter, name, IGDB id) is asked again.
+QString ask_key(const Game& game);
+
+/// Games the server had nothing for (none, another letter, no descriptors),
+/// not asked again (Content settings > Retry games with nothing found, or
+/// Overwrite: asked again): metadata/esrb-nothing.json in the Pegasus X
+/// folder, { version, games: { path: { status, ask, title, at } } }
+QString nothing_path();
+/// (missing or damaged: nothing remembered)
+QHash<QString, QJsonObject> load_nothing(const QString& path);
+bool save_nothing(const QString& path, const QHash<QString, QJsonObject>& games);
 
 /// What one result means for its game
 struct Outcome {
@@ -77,6 +99,7 @@ struct Outcome {
     int kind = Nothing;
     QVariantMap changes;      ///< Write: x-esrb-descriptors / x-esrb-interactive
     int retry_after = 0;      ///< Later: seconds
+    QString remember;         ///< "none", "mismatch", "empty" (ok, nothing in it): remembered; "" not
     QString log;              ///< the log line (without the game's name)
     QString result;           ///< for the Last games list
 };

@@ -31,6 +31,7 @@
 #include <atomic>
 #include <QPointer>
 #include <QHash>
+#include <QJsonObject>
 #include <QSet>
 
 class QTimer;
@@ -144,7 +145,7 @@ signals:
     /// a match's picture arrived (url: a local file) or didn't (error)
     void thumbReady(int index, QString url, int error);
     /// { running, done, total, current, title, result, ok, saved, notFound, failed,
-    /// phase ("games" / "esrb"), esrbTotal, esrbSaved, esrbNone, esrbLeft, esrbMessage }
+    /// phase ("games" / "esrb"), esrbTotal, esrbSaved, esrbNone, esrbLeft, esrbRemembered, esrbMessage }
     void progress(QVariantMap state);
     void finished(QVariantMap state);
     /// a game was saved: what changed (the loaded game takes it in place)
@@ -260,6 +261,13 @@ private:
     int m_esrb_total = 0, m_esrb_done = 0, m_esrb_saved = 0, m_esrb_none = 0, m_esrb_left = 0;
     int m_esrb_failures = 0;       ///< requests in a row with no usable answer
     QString m_esrb_message;
+    // games with nothing found before (esrb::load_nothing): not asked again
+    void esrbSaveNothing();
+    QHash<QString, QJsonObject> m_esrb_nothing;
+    bool m_esrb_nothing_dirty = false;
+    int m_esrb_remembered = 0;     ///< skipped this run: nothing found before
+    int m_esrb_batches = 0;
+    QString m_esrb_nothing_path;   ///< (tests; empty: esrb::nothing_path())
     QString m_hash_igdb;           ///< IGDB's id for the game, from Hasheous (this game)
     // (tests: shorter waits, saving captured)
     int m_esrb_spacing_ms = 2200;

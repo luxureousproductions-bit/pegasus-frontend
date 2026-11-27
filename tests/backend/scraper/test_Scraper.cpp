@@ -30,6 +30,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QSet>
 #include <QSignalSpy>
 #include <QNetworkAccessManager>
 #include <QPointer>
@@ -148,6 +149,7 @@ public:
     int busy_first = 0;
     int always = 0;
     QHash<QString, int> asked;       // name -> times asked
+    QSet<QString> now_ok;            // names answered "ok" (Mild Violence) whatever else they'd get
 
     FakeEsrbServer() {
         clock.start();
@@ -214,6 +216,8 @@ private:
             else if (name == QLatin1String("Later Game") && asked.value(name) == 1)
                 r = QJsonObject { { QStringLiteral("status"), QStringLiteral("later") }, { QStringLiteral("retryAfter"), 1 },
                                   { QStringLiteral("reason"), QStringLiteral("IGDB: 4 requests this second") } };
+            else if (now_ok.contains(name))
+                ;
             else if (name == QLatin1String("No Such Game"))
                 r = QJsonObject { { QStringLiteral("status"), QStringLiteral("none") } };
             else if (name == QLatin1String("Wrong Letter"))
@@ -362,6 +366,8 @@ private slots:
     void esrb_step_against_a_server();
     void esrb_step_busy_server_gives_up();
     void esrb_step_stop_while_waiting();
+    void esrb_clean_names();
+    void esrb_step_remembers_nothing_found();
     void lookup_with_no_answer_gives_up();
     void download_with_no_answer_is_skipped();
     void slow_download_keeps_going();
@@ -703,18 +709,23 @@ void test_Scraper::esrb_results()
     o = read(R"({"status":"ok","igdbId":1,"descriptors":["Violence"],"interactive":["In-Game Purchases","Users Interact"]})", false);
     QCOMPARE(o.changes.value(QStringLiteral("x-esrb-interactive")).toString(), QStringLiteral("In-Game Purchases, Users Interact"));
     // ok with nothing in it: nothing written
+    QCOMPARE(o.remember, QString());   // found: nothing to remember
     o = read(R"({"status":"ok","igdbId":1070,"descriptors":[],"interactive":[]})", false);
     QCOMPARE(o.kind, int(Outcome::Nothing));
     QVERIFY(o.changes.isEmpty());
+    QCOMPARE(o.remember, QStringLiteral("empty"));
     // none, mismatch, invalid, something unknown: nothing, the reason in the log
     o = read(R"({"status":"none"})", false);
     QCOMPARE(o.kind, int(Outcome::Nothing));
     QVERIFY(o.changes.isEmpty() && o.log.startsWith(QLatin1String("none")));
+    QCOMPARE(o.remember, QStringLiteral("none"));
     o = read(R"({"status":"mismatch","igdbId":5,"igdbEsrb":"T","descriptors":["Blood"]})", false);
     QCOMPARE(o.kind, int(Outcome::Nothing));
     QVERIFY(o.changes.isEmpty() && o.log.contains(QLatin1String("T")) && o.log.contains(QLatin1String("M")));
+    QCOMPARE(o.remember, QStringLiteral("mismatch"));
     o = read(R"({"status":"invalid","reason":"year"})", false);
     QVERIFY(o.changes.isEmpty() && o.log.contains(QLatin1String("year")));
+    QCOMPARE(o.remember, QString());   // (ours to fix: asked again)
     o = read(R"({"status":"maybe","descriptors":["Blood"]})", false);
     QVERIFY(o.changes.isEmpty() && o.kind == Outcome::Nothing);
     // later: asked again, after the wait it says
@@ -722,6 +733,7 @@ void test_Scraper::esrb_results()
     QCOMPARE(o.kind, int(Outcome::Later));
     QCOMPARE(o.retry_after, 7);
     QVERIFY(o.changes.isEmpty());
+    QCOMPARE(o.remember, QString());
     o = read(R"({"status":"later","retryAfter":9999})", false);
     QCOMPARE(o.retry_after, int(MAX_WAIT_S));
     // a line the game has (typed by hand): kept...
@@ -759,7 +771,9 @@ void test_Scraper::esrb_step_against_a_server()
     FakeEsrbServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     server.busy_first = 1;
+    QTemporaryDir dir;
     scraper::Scraper s;
+    s.m_esrb_nothing_path = dir.filePath(QStringLiteral("esrb-nothing.json"));
     s.m_esrb_spacing_ms = 300;
     s.m_esrb_second_ms = 100;
     QHash<QString, QVariantMap> saved;
@@ -868,7 +882,9 @@ void test_Scraper::esrb_step_busy_server_gives_up()
     FakeEsrbServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     server.always = 503;
+    QTemporaryDir dir;
     scraper::Scraper s;
+    s.m_esrb_nothing_path = dir.filePath(QStringLiteral("esrb-nothing.json"));
     s.m_esrb_spacing_ms = 50;
     s.m_esrb_second_ms = 10;
     bool saved = false;
@@ -896,7 +912,9 @@ void test_Scraper::esrb_step_stop_while_waiting()
     FakeEsrbServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost));
     server.always = 429;
+    QTemporaryDir dir;
     scraper::Scraper s;
+    s.m_esrb_nothing_path = dir.filePath(QStringLiteral("esrb-nothing.json"));
     s.m_esrb_spacing_ms = 50;   // (a second of the server's: a real one, 60 s waits)
     std::vector<scraper::Job> jobs { esrb_job(QStringLiteral("Game"), QStringLiteral("n64"), 1998, QStringLiteral("T")) };
     s.start(jobs, QVariantMap { { QStringLiteral("esrbOnly"), true }, { QStringLiteral("esrbServer"), server.url() } },
@@ -910,6 +928,155 @@ void test_Scraper::esrb_step_stop_while_waiting()
     QVERIFY(t.elapsed() < 2000);
     QCOMPARE(server.statuses.size(), 1);
     QCOMPARE(s.state().value(QStringLiteral("failed")).toInt(), 1);
+}
+
+
+// names as IGDB writes them, nothing guessed: the server matches them exactly
+void test_Scraper::esrb_clean_names()
+{
+    using scraper::esrb::clean_name;
+    const QList<QPair<QString, QString>> cases {
+        { QStringLiteral("Legend of Zelda, The - A Link to the Past (USA)"), QStringLiteral("The Legend of Zelda: A Link to the Past") },
+        { QStringLiteral("Legend of Zelda, The"), QStringLiteral("The Legend of Zelda") },
+        { QStringLiteral("Legend of Zelda, The: Ocarina of Time"), QStringLiteral("The Legend of Zelda: Ocarina of Time") },
+        { QStringLiteral("legend of zelda, the - ocarina of time"), QStringLiteral("The legend of zelda: ocarina of time") },
+        { QStringLiteral("Bug's Life, A (USA)"), QStringLiteral("A Bug's Life") },
+        { QStringLiteral("American Tail, An - Fievel Goes West"), QStringLiteral("An American Tail: Fievel Goes West") },
+        { QStringLiteral("The Legend of Zelda : A Link to the Past"), QStringLiteral("The Legend of Zelda: A Link to the Past") },
+        { QStringLiteral("Super Mario World (USA) [!]"), QStringLiteral("Super Mario World") },
+        { QStringLiteral("Super Mario World (USA, Europe) (Rev 1)"), QStringLiteral("Super Mario World") },
+        { QStringLiteral("  GoldenEye   007  "), QStringLiteral("GoldenEye 007") },
+        { QStringLiteral("Tony Hawk’s Pro Skater 2"), QStringLiteral("Tony Hawk's Pro Skater 2") },
+        { QStringLiteral("Call of Duty®: Black Ops 6"), QStringLiteral("Call of Duty: Black Ops 6") },
+        { QStringLiteral("Pokémon™ Yellow"), QStringLiteral("Pokémon Yellow") },
+        { QStringLiteral("Mega Man X – Command Mission"), QStringLiteral("Mega Man X: Command Mission") },
+        { QStringLiteral("Say \"Hello\" Again"), QStringLiteral("Say Hello Again") },
+        { QStringLiteral("Wait… What"), QStringLiteral("Wait... What") },
+        // left as they are
+        { QStringLiteral("Spider-Man"), QStringLiteral("Spider-Man") },
+        { QStringLiteral("Sonic & Knuckles"), QStringLiteral("Sonic & Knuckles") },
+        { QStringLiteral("Hello, A Story"), QStringLiteral("Hello, A Story") },          // not a trailing article
+        { QStringLiteral("Call of Duty: Black Ops 6"), QStringLiteral("Call of Duty: Black Ops 6") },
+        { QStringLiteral("Star Wars: Episode I - Racer"), QStringLiteral("Star Wars: Episode I - Racer") },  // a colon already
+        { QStringLiteral("(Beta)"), QStringLiteral("(Beta)") },                            // nothing would be left
+    };
+    for (const auto& c : cases)
+        QCOMPARE(clean_name(c.first), c.second);
+    // what a game is asked with: a new letter, name or id is another question
+    scraper::esrb::Game g;
+    g.name = QStringLiteral("GoldenEye 007");
+    g.platform = 4;
+    g.year = 1997;
+    g.letter = QStringLiteral("T");
+    const QString key = scraper::esrb::ask_key(g);
+    scraper::esrb::Game other = g;
+    other.letter = QStringLiteral("M");
+    QVERIFY(scraper::esrb::ask_key(other) != key);
+    other = g;
+    other.name = QStringLiteral("GoldenEye");
+    QVERIFY(scraper::esrb::ask_key(other) != key);
+    other = g;
+    other.igdb_id = 1638;
+    QVERIFY(scraper::esrb::ask_key(other) != key);
+    other = g;
+    other.name = QStringLiteral("goldeneye  007");
+    QCOMPARE(scraper::esrb::ask_key(other), key);   // (the server's match ignores case and spaces too)
+}
+
+// none, another letter, ok with nothing in it: remembered (metadata/esrb-nothing.json),
+// not asked the next run; Retry games with nothing found, Overwrite, a new
+// letter: asked again; a game found later: forgotten. The cleaned name is sent.
+void test_Scraper::esrb_step_remembers_nothing_found()
+{
+    FakeEsrbServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    QTemporaryDir dir;
+    const QString memory = dir.filePath(QStringLiteral("metadata/esrb-nothing.json"));
+    QHash<QString, QVariantMap> saved;
+    QString last_log;
+    const auto job_list = [](const QString& no_such_letter) {
+        return std::vector<scraper::Job> {
+            esrb_job(QStringLiteral("No Such Game"), QStringLiteral("snes"), 1993, no_such_letter),
+            esrb_job(QStringLiteral("Wrong Letter"), QStringLiteral("snes"), 1993, QStringLiteral("T")),
+            esrb_job(QStringLiteral("Super Mario World"), QStringLiteral("snes"), 1991, QStringLiteral("E")),
+            esrb_job(QStringLiteral("Legend of Zelda, The - A Link to the Past (USA)"), QStringLiteral("snes"), 1992, QStringLiteral("E")),
+        };
+    };
+    const auto run = [&](const std::vector<scraper::Job>& jobs, const QVariantMap& more) {
+        scraper::Scraper s;
+        s.m_esrb_nothing_path = memory;
+        s.m_esrb_spacing_ms = 50;
+        s.m_esrb_second_ms = 10;
+        s.m_esrb_save_hook = [&](const QString&, const std::vector<scraper::EsrbEdit>& edits) {
+            for (const scraper::EsrbEdit& e : edits)
+                saved.insert(e.title, e.changes);
+            return QString();
+        };
+        QVariantMap settings { { QStringLiteral("esrbOnly"), true }, { QStringLiteral("esrbServer"), server.url() } };
+        for (auto it = more.cbegin(); it != more.cend(); ++it)
+            settings.insert(it.key(), it.value());
+        s.start(jobs, settings, QString(), QString(), QDir::tempPath());
+        [&]{ QTRY_VERIFY_WITH_TIMEOUT(!s.running(), 20000); }();
+        last_log = s.log().join(QLatin1Char('\n'));
+        return s.state();
+    };
+    const auto remembered = [&memory]() {
+        QStringList titles;
+        for (const QJsonObject& e : scraper::esrb::load_nothing(memory))
+            titles.append(e.value(QStringLiteral("title")).toString() + QLatin1Char('=') + e.value(QStringLiteral("status")).toString());
+        titles.sort();
+        return titles;
+    };
+
+    // 1: all four asked; the three with nothing remembered, the found one not
+    QVariantMap state = run(job_list(QStringLiteral("E")), {});
+    QCOMPARE(server.asked.value(QStringLiteral("No Such Game")), 1);
+    QCOMPARE(server.asked.value(QStringLiteral("The Legend of Zelda: A Link to the Past")), 1);   // the cleaned name
+    QVERIFY(!server.asked.contains(QStringLiteral("Legend of Zelda, The - A Link to the Past (USA)")));
+    QCOMPARE(saved.value(QStringLiteral("Legend of Zelda, The - A Link to the Past (USA)")).value(QStringLiteral("x-esrb-descriptors")).toString(),
+             QStringLiteral("Mild Violence"));
+    QCOMPARE(remembered(), (QStringList { QStringLiteral("No Such Game=none"), QStringLiteral("Super Mario World=empty"),
+                                          QStringLiteral("Wrong Letter=mismatch") }));
+    QCOMPARE(state.value(QStringLiteral("esrbRemembered")).toInt(), 0);
+
+    // 2: the three skipped (the found one is asked again here only because
+    // these test games don't take the line it saved)
+    state = run(job_list(QStringLiteral("E")), {});
+    QCOMPARE(server.asked.value(QStringLiteral("No Such Game")), 1);
+    QCOMPARE(server.asked.value(QStringLiteral("Wrong Letter")), 1);
+    QCOMPARE(server.asked.value(QStringLiteral("Super Mario World")), 1);
+    QCOMPARE(state.value(QStringLiteral("esrbRemembered")).toInt(), 3);
+    QCOMPARE(state.value(QStringLiteral("total")).toInt(), 1);
+    QVERIFY(last_log.contains(QLatin1String("3 games skipped, nothing found for them before")));
+
+    // 3: a new letter for one: that one asked again
+    run(job_list(QStringLiteral("T")), {});
+    QCOMPARE(server.asked.value(QStringLiteral("No Such Game")), 2);
+    QCOMPARE(server.asked.value(QStringLiteral("Wrong Letter")), 1);
+
+    // 4: Retry games with nothing found: all asked; one found now: forgotten
+    server.now_ok.insert(QStringLiteral("Wrong Letter"));
+    state = run(job_list(QStringLiteral("T")), QVariantMap { { QStringLiteral("esrbRetryNothing"), true } });
+    QCOMPARE(server.asked.value(QStringLiteral("Wrong Letter")), 2);
+    QCOMPARE(server.asked.value(QStringLiteral("Super Mario World")), 2);
+    QCOMPARE(state.value(QStringLiteral("esrbRemembered")).toInt(), 0);
+    QCOMPARE(saved.value(QStringLiteral("Wrong Letter")).value(QStringLiteral("x-esrb-descriptors")).toString(), QStringLiteral("Mild Violence"));
+    QCOMPARE(remembered(), (QStringList { QStringLiteral("No Such Game=none"), QStringLiteral("Super Mario World=empty") }));
+
+    // 5: Overwrite asks them again too
+    run(job_list(QStringLiteral("T")), QVariantMap { { QStringLiteral("overwrite"), true } });
+    QCOMPARE(server.asked.value(QStringLiteral("Super Mario World")), 3);
+
+    // a damaged file: nothing remembered, everything asked
+    {
+        QFile file(memory);
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write("{ not json");
+    }
+    QVERIFY(scraper::esrb::load_nothing(memory).isEmpty());
+    state = run(job_list(QStringLiteral("T")), {});
+    QCOMPARE(server.asked.value(QStringLiteral("Super Mario World")), 4);
+    QCOMPARE(state.value(QStringLiteral("esrbRemembered")).toInt(), 0);
 }
 
 

@@ -282,22 +282,41 @@ FocusScope {
     function esrbText(v) {
         return v === undefined || v === null ? "" : String(v).trim();
     }
-    readonly property int esrbGameCount: {
+    // the games remembered as "nothing found" (skipped unless Retry / Overwrite)
+    readonly property var esrbRemembered: {
+        var out = {};
         if (page !== "content" || !s.getEsrbDescriptors)
-            return 0;
-        var n = 0;
+            return out;
+        var paths = Internal.settings.esrbNothingPaths();
+        for (var i = 0; i < paths.length; i++)
+            out[paths[i]] = true;
+        return out;
+    }
+    readonly property int esrbGameCount: esrbCounts.ask
+    readonly property int esrbSkipCount: esrbCounts.skip
+    readonly property var esrbCounts: {
+        if (page !== "content" || !s.getEsrbDescriptors)
+            return { "ask": 0, "skip": 0 };
+        var n = 0, skip = 0;
+        var retry = s.overwrite || s.esrbRetryNothing;
         var picked = s.systems || [];
         for (var i = 0; i < api.collections.count; i++) {
             var c = api.collections.get(i);
             if (picked.indexOf(c.name) < 0)
                 continue;
             for (var j = 0; j < c.games.count; j++) {
-                var x = c.games.get(j).extra || ({});
-                if (esrbText(x["esrb"]) !== "" && (s.overwrite || esrbText(x["esrb-descriptors"]) === ""))
+                var g = c.games.get(j);
+                var x = g.extra || ({});
+                if (esrbText(x["esrb"]) === "" || (!s.overwrite && esrbText(x["esrb-descriptors"]) !== ""))
+                    continue;
+                var path = g.files.count > 0 ? g.files.get(0).path : "";
+                if (!retry && esrbRemembered[path])
+                    skip++;
+                else
                     n++;
             }
         }
-        return n;
+        return { "ask": n, "skip": skip };
     }
     // 10 games a request, 2.2 s apart at least (the server takes 30 a minute)
     function esrbMinutes(games) {
@@ -449,10 +468,13 @@ FocusScope {
             // Pegasus X: ESRB content descriptors (IGDB, through the Pegasus X server)
             out.push({ "kind": "section", "text": qsTr("ESRB descriptors") + api.tr });
             out.push({ "kind": "toggle", "key": "getEsrbDescriptors", "text": qsTr("ESRB descriptors (after scraping)") + api.tr });
+            if (s.getEsrbDescriptors)
+                out.push({ "kind": "toggle", "key": "esrbRetryNothing", "text": qsTr("Retry games with nothing found") + api.tr });
             out.push({ "kind": "text", "key": "esrbServer", "text": qsTr("Server address") + api.tr,
                        "value": esrbText(s.esrbServer) !== "" ? esrbText(s.esrbServer) : qsTr("the Pegasus X server") + api.tr });
             if (s.getEsrbDescriptors)
-                out.push({ "kind": "esrbrun", "text": qsTr("Get ESRB descriptors now · %1 games").arg(esrbGameCount) + api.tr,
+                out.push({ "kind": "esrbrun", "text": qsTr("Get ESRB descriptors now · %1 games").arg(esrbGameCount) + api.tr
+                               + (esrbSkipCount > 0 ? " · " + qsTr("%1 skipped (nothing found before)").arg(esrbSkipCount) + api.tr : ""),
                            "value": esrbGameCount > 0 ? qsTr("about %1 min").arg(esrbMinutes(esrbGameCount)) + api.tr : "" });
             out.push({ "kind": "info", "text": qsTr("For games that have an ESRB letter: what the rating is for (Blood and Gore, Strong Language...), from IGDB. Nothing else changes. No login.") + api.tr, "value": "" });
             return out;

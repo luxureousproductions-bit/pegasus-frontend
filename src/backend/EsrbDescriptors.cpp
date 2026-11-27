@@ -17,8 +17,17 @@
 
 #include "EsrbDescriptors.h"
 
+#include "Paths.h"
+
+#include <QDateTime>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QJsonValue>
+#include <QRegularExpression>
+#include <QSaveFile>
 #include <QStringList>
 
 
@@ -89,6 +98,52 @@ int igdb_platform(const QString& system)
     return platforms().value(system.trimmed().toLower(), 0);
 }
 
+QString clean_name(const QString& name)
+{
+    QString s = name;
+    // letters that look alike, as IGDB writes them
+    for (QChar& c : s) {
+        const ushort u = c.unicode();
+        if (u == 0x2018 || u == 0x2019 || u == 0x201B || u == 0x02BC || u == 0x0060 || u == 0x00B4 || u == 0x2032)
+            c = QLatin1Char('\'');
+        else if (u == 0x2010 || u == 0x2011 || u == 0x2012 || u == 0x2013 || u == 0x2014 || u == 0x2212)
+            c = QLatin1Char('-');
+        else if (c.isSpace() || u == 0x3000)
+            c = QLatin1Char(' ');
+    }
+    s.replace(QChar(0x2026), QLatin1String("..."));
+    // quotes, backslashes and trademark signs: not in IGDB's names (and quotes
+    // and backslashes can't be sent)
+    static const QRegularExpression rx_drop(QStringLiteral("[\"\\\\\u201C\u201D\u201E\u2033\u2122\u00AE\u00A9]"));
+    s.remove(rx_drop);
+    // tags: (USA), (Rev 1), [!], [T+Eng]...
+    static const QRegularExpression rx_tags(QStringLiteral("\\s*[\\(\\[][^\\)\\]]*[\\)\\]]"));
+    s.remove(rx_tags);
+    s = s.simplified();
+    // "Legend of Zelda, The", "..., The - A Link to the Past", "..., The: ..."
+    static const QRegularExpression rx_article(QStringLiteral("^(.+?),\\s*(The|A|An)((?:\\s*:|\\s+-)\\s.*)?$"),
+                                               QRegularExpression::CaseInsensitiveOption);
+    const QRegularExpressionMatch m = rx_article.match(s);
+    if (m.hasMatch()) {
+        QString article = m.captured(2).toLower();
+        article[0] = article[0].toUpper();
+        s = article + QLatin1Char(' ') + m.captured(1).trimmed() + m.captured(3);
+    }
+    // a subtitle: "Zelda : A Link", "Zelda - A Link" -> "Zelda: A Link" (the first one)
+    static const QRegularExpression rx_colon(QStringLiteral("\\s+:"));
+    s.replace(rx_colon, QStringLiteral(":"));
+    if (!s.contains(QLatin1Char(':'))) {
+        const int dash = s.indexOf(QLatin1String(" - "));
+        if (dash > 0)
+            s.replace(dash, 3, QStringLiteral(": "));
+    }
+    // nothing left hanging at the ends
+    static const QRegularExpression rx_ends(QStringLiteral("^[\\s:\\-,]+|[\\s:\\-,]+$"));
+    s.remove(rx_ends);
+    s = s.simplified();
+    return s.isEmpty() ? name.simplified() : s;
+}
+
 QString why_not(const Game& game)
 {
     if (game.letter.isEmpty())
@@ -117,6 +172,49 @@ QJsonObject request_entry(const Game& game)
         { QStringLiteral("year"), game.year },
         { QStringLiteral("esrb"), game.letter },
     };
+}
+
+QString ask_key(const Game& game)
+{
+    if (game.igdb_id > 0)
+        return QStringLiteral("id %1 %2").arg(game.igdb_id).arg(game.letter);
+    return QStringLiteral("%1|%2|%3 %4").arg(game.name.simplified().toLower()).arg(game.platform).arg(game.year).arg(game.letter);
+}
+
+QString nothing_path()
+{
+    return paths::writableConfigDir() + QStringLiteral("/metadata/esrb-nothing.json");
+}
+
+QHash<QString, QJsonObject> load_nothing(const QString& path)
+{
+    QHash<QString, QJsonObject> out;
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+        return out;
+    const QJsonObject games = QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("games")).toObject();
+    for (auto it = games.constBegin(); it != games.constEnd(); ++it) {
+        const QJsonObject entry = it.value().toObject();
+        if (!entry.value(QStringLiteral("ask")).toString().isEmpty())
+            out.insert(it.key(), entry);
+    }
+    return out;
+}
+
+bool save_nothing(const QString& path, const QHash<QString, QJsonObject>& games)
+{
+    QJsonObject list;
+    for (auto it = games.cbegin(); it != games.cend(); ++it)
+        list.insert(it.key(), it.value());
+    const QJsonObject root {
+        { QStringLiteral("version"), 1 },
+        { QStringLiteral("games"), list },
+    };
+    QDir().mkpath(QFileInfo(path).absolutePath());
+    QSaveFile file(path);
+    return file.open(QIODevice::WriteOnly)
+        && file.write(QJsonDocument(root).toJson(QJsonDocument::Indented)) >= 0
+        && file.commit();
 }
 
 namespace {
@@ -170,6 +268,7 @@ Outcome read_result(const QJsonObject& result, const Game& game, bool overwrite)
             }
         }
         if (descriptors.isEmpty() && interactive.isEmpty()) {
+            out.remember = QStringLiteral("empty");
             out.log = QStringLiteral("ok%1, %2, but no descriptors on IGDB: nothing written").arg(on_igdb, game.letter);
             out.result = QStringLiteral("ESRB descriptors: none on IGDB");
             return out;
@@ -181,11 +280,13 @@ Outcome read_result(const QJsonObject& result, const Game& game, bool overwrite)
         return out;
     }
     if (status == QLatin1String("none")) {
+        out.remember = QStringLiteral("none");
         out.log = QStringLiteral("none%1: no ESRB rating on IGDB, or no single game with this name, platform and year: nothing written").arg(on_igdb);
         out.result = QStringLiteral("ESRB descriptors: not found");
         return out;
     }
     if (status == QLatin1String("mismatch")) {
+        out.remember = QStringLiteral("mismatch");
         out.log = QStringLiteral("mismatch%1: IGDB's ESRB letter is %2, the game's %3: nothing written")
             .arg(on_igdb, result.value(QStringLiteral("igdbEsrb")).toString(), game.letter);
         out.result = QStringLiteral("ESRB descriptors: another letter on IGDB");

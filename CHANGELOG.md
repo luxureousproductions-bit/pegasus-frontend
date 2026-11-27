@@ -3,6 +3,49 @@
 Newest first. Each entry is one commit on `pegasus-x`, so any of them can be
 rolled back on its own with `git revert <commit>`.
 
+## 2026-11-27
+
+### ESRB descriptors: "nothing found" remembered, cleaned-up names
+
+- **What (1), nothing found remembered:** a game the ESRB server answered
+  `none` or `mismatch` for, or `ok` with no descriptors in it, is remembered in
+  metadata/esrb-nothing.json in the Pegasus X folder (path, how it was asked,
+  the answer, when) and skipped on later runs. It's asked again when it's
+  asked another way (a new x-esrb letter, a new name, an IGDB id), with
+  Overwrite on, or with the new **Retry games with nothing found** toggle
+  (Content settings > ESRB descriptors, off). A game found later is taken out
+  of the file. `later`, `invalid` and failed saves aren't remembered. The
+  file is written every 10 requests and at the end; a missing or damaged one
+  means nothing is remembered (everything asked). The Get ESRB descriptors
+  now row shows "N games · M skipped (nothing found before)"; the log counts
+  them.
+- **What (2), cleaned-up names:** the name sent (no IGDB id) is cleaned:
+  tags in () and [] removed, a trailing ", The / A / An" moved to the front,
+  " : " and the first " - " before a subtitle (when there's no colon yet) as
+  ": ", look-alike apostrophes and dashes made plain, quotes and TM/R/C signs
+  removed, spaces evened ("Legend of Zelda, The - A Link to the Past (USA)"
+  -> "The Legend of Zelda: A Link to the Past"). The server still matches
+  exactly (name, platform, year), nothing fuzzy. The log says "asked as"
+  when the name sent isn't the title.
+- **Why:** later runs on a ~4,000-game library shouldn't re-ask the games
+  the server had nothing for, and file/scraper spellings shouldn't miss
+  exact IGDB names.
+- **Not changed:** the server, the XBSX theme, what's written (only
+  x-esrb-descriptors / x-esrb-interactive, on ok with a list), Overwrite and
+  typed lines, ROM checksums (not added, as asked).
+- **Tests (in compile-check):** test_Scraper: 22 name cases (moved
+  articles, tags, subtitles, look-alikes, ones left alone, nothing left);
+  the ask key (letter, name, id); which answers are remembered; five runs
+  against a server on the machine: remembered after run 1, skipped in run 2,
+  a new letter asked again, Retry asks all and forgets one found now,
+  Overwrite asks again, a damaged file remembers nothing. The other ESRB
+  step tests use a temporary file for it.
+- **Files:** src/backend/EsrbDescriptors.{h,cpp}, Scraper.{h,cpp},
+  model/internal/settings/Settings.{h,cpp},
+  src/frontend/menu/settings/ScraperScreen.qml,
+  tests/backend/scraper/test_Scraper.cpp, CHANGELOG.md.
+- **Commit:** "ESRB descriptors: remember nothing found, send cleaned-up names".
+
 ## 2026-11-26
 
 ### Scraper: ESRB descriptors from the Pegasus X server (optional, off)

@@ -403,6 +403,9 @@ public:
     /// Pegasus X: only the ESRB descriptors step, for the picked systems'
     /// games with an x-esrb letter and no x-esrb-descriptors line
     Q_INVOKABLE QString startEsrbDescriptors(QObject* collections);
+    /// the games the ESRB server had nothing for, remembered (skipped unless
+    /// Retry games with nothing found / Overwrite): their paths
+    Q_INVOKABLE QStringList esrbNothingPaths() const;
     Q_INVOKABLE void stopScraper();
     /// Interactive mode: the match picked (index in the choice's candidates),
     /// a new search name, or this game skipped

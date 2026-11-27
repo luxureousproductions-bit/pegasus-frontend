@@ -683,6 +683,7 @@ QVariantMap Scraper::state() const
         { QStringLiteral("esrbSaved"), m_esrb_saved },
         { QStringLiteral("esrbNone"), m_esrb_none },
         { QStringLiteral("esrbLeft"), m_esrb_left },
+        { QStringLiteral("esrbRemembered"), m_esrb_remembered },
         { QStringLiteral("esrbMessage"), m_esrb_message },
         { QStringLiteral("stopReason"), m_stop_reason },
         { QStringLiteral("changes"), m_last_changes },
@@ -727,6 +728,10 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_esrb_last = -1;
     m_esrb_hold = 0;
     m_esrb_message.clear();
+    m_esrb_nothing.clear();
+    m_esrb_nothing_dirty = false;
+    m_esrb_remembered = 0;
+    m_esrb_batches = 0;
     m_esrb_reply = nullptr;
     if (m_esrb_timer)
         m_esrb_timer->stop();
@@ -2690,7 +2695,7 @@ esrb::Game esrb_game_of(const Job& job)
 {
     esrb::Game game;
     game.title = job.title;
-    game.name = job.title_is_file_name ? job.search_name : job.title;
+    game.name = esrb::clean_name(job.title_is_file_name ? job.search_name : job.title);
     game.letter = Scraper::esrbCode(job.esrb);
     game.igdb_id = job.igdb_id;
     game.platform = esrb::igdb_platform(job.system);
@@ -2740,6 +2745,11 @@ void Scraper::esrbBegin()
             index_games = QJsonDocument::fromJson(file.readAll()).object().value(QStringLiteral("games")).toObject();
     }
     const bool overwrite = m_settings.value(QStringLiteral("overwrite")).toBool();
+    // games with nothing found before, asked the same way: skipped (Overwrite,
+    // Retry games with nothing found: asked again)
+    m_esrb_nothing = esrb::load_nothing(m_esrb_nothing_path.isEmpty() ? esrb::nothing_path() : m_esrb_nothing_path);
+    const bool retry_nothing = overwrite || m_settings.value(QStringLiteral("esrbRetryNothing")).toBool();
+    QMap<QString, int> remembered;
     QMap<QString, int> skipped;
     QMap<QString, QStringList> examples;
     int kept = 0;
@@ -2757,12 +2767,21 @@ void Scraper::esrbBegin()
                 .value(QStringLiteral("igdb")).toObject().value(QStringLiteral("id")).toVariant().toString();
             job.igdb_id = qMax(0, id.toInt());
         }
-        const QString why = esrb::why_not(esrb_game_of(job));
+        const esrb::Game game = esrb_game_of(job);
+        const QString why = esrb::why_not(game);
         if (!why.isEmpty()) {
             skipped[why]++;
             if (examples[why].size() < 3)
                 examples[why].append(job.title);
             continue;
+        }
+        if (!retry_nothing) {
+            const QJsonObject seen = m_esrb_nothing.value(job.path);
+            if (!seen.isEmpty() && seen.value(QStringLiteral("ask")).toString() == esrb::ask_key(game)) {
+                remembered[seen.value(QStringLiteral("status")).toString()]++;
+                m_esrb_remembered++;
+                continue;
+            }
         }
         EsrbItem item;
         item.job = i;
@@ -2774,9 +2793,17 @@ void Scraper::esrbBegin()
         note(LOGMSG("ESRB descriptors: %1 games not asked, %2 (eg. %3)").arg(it.value()).arg(it.key(), examples.value(it.key()).join(QStringLiteral(", "))));
     if (kept > 0)
         note(LOGMSG("ESRB descriptors: %1 games have an x-esrb-descriptors line already: kept (Overwrite is off)").arg(kept));
+    if (m_esrb_remembered > 0) {
+        QStringList parts;
+        for (auto it = remembered.cbegin(); it != remembered.cend(); ++it)
+            parts.append(QStringLiteral("%1 %2").arg(it.value()).arg(it.key()));
+        note(LOGMSG("ESRB descriptors: %1 games skipped, nothing found for them before (%2); Retry games with nothing found asks them again")
+             .arg(m_esrb_remembered).arg(parts.join(QStringLiteral(", "))));
+    }
     if (m_esrb_items.empty()) {
-        esrbEnd(m_jobs.empty() || esrbOnly() ? tr("ESRB descriptors: no game to ask (a game needs an x-esrb letter and no x-esrb-descriptors line).")
-                                             : QString());
+        esrbEnd(!(m_jobs.empty() || esrbOnly()) ? QString()
+                : m_esrb_remembered > 0 ? tr("ESRB descriptors: no game to ask (%n skipped: nothing found for them before).", "", m_esrb_remembered)
+                : tr("ESRB descriptors: no game to ask (a game needs an x-esrb letter and no x-esrb-descriptors line)."));
         return;
     }
     const int requests = (m_esrb_total + esrb::BATCH - 1) / esrb::BATCH;
@@ -2923,6 +2950,19 @@ void Scraper::esrbAnswer(const std::vector<size_t>& items, int status, const QBy
             const esrb::Outcome& outcome = outcomes[i];
             QString result = outcome.result;
             bool ok = false;
+            const esrb::Game asked = esrb_game_of(job);
+            const QString as_name = asked.igdb_id <= 0 && asked.name != job.title
+                ? QStringLiteral(" (asked as \"%1\")").arg(asked.name) : QString();
+            // nothing found: remembered for the way it was asked
+            if (!outcome.remember.isEmpty()) {
+                m_esrb_nothing.insert(job.path, QJsonObject {
+                    { QStringLiteral("status"), outcome.remember },
+                    { QStringLiteral("ask"), esrb::ask_key(asked) },
+                    { QStringLiteral("title"), job.title },
+                    { QStringLiteral("at"), QDateTime::currentDateTimeUtc().toString(Qt::ISODate) },
+                });
+                m_esrb_nothing_dirty = true;
+            }
             if (outcome.kind == esrb::Outcome::Write) {
                 const QString error = errors.value(job.collection);
                 if (error.isEmpty()) {
@@ -2932,7 +2972,9 @@ void Scraper::esrbAnswer(const std::vector<size_t>& items, int status, const QBy
                         job.has_esrb_descriptors = true;
                     if (outcome.changes.contains(QStringLiteral("x-esrb-interactive")))
                         job.has_esrb_interactive = true;
-                    note(LOGMSG("ESRB descriptors: \"%1\": %2: saved").arg(job.title, outcome.log));
+                    note(LOGMSG("ESRB descriptors: \"%1\"%2: %3: saved").arg(job.title, as_name, outcome.log));
+                    if (m_esrb_nothing.remove(job.path) > 0)
+                        m_esrb_nothing_dirty = true;
                     emit gameSaved(job.path, outcome.changes);
                 }
                 else {
@@ -2943,11 +2985,11 @@ void Scraper::esrbAnswer(const std::vector<size_t>& items, int status, const QBy
             }
             else if (outcome.kind == esrb::Outcome::Later) {
                 m_esrb_left++;
-                note(LOGMSG("ESRB descriptors: \"%1\": %2").arg(job.title, outcome.log));
+                note(LOGMSG("ESRB descriptors: \"%1\"%2: %3").arg(job.title, as_name, outcome.log));
             }
             else {
                 m_esrb_none++;
-                note(LOGMSG("ESRB descriptors: \"%1\": %2").arg(job.title, outcome.log));
+                note(LOGMSG("ESRB descriptors: \"%1\"%2: %3").arg(job.title, as_name, outcome.log));
             }
             m_esrb_done++;
             m_last_title = job.title;
@@ -2955,6 +2997,9 @@ void Scraper::esrbAnswer(const std::vector<size_t>& items, int status, const QBy
             m_last_ok = ok;
             report();
         }
+        // what's remembered, now and then (all of it at the end)
+        if (++m_esrb_batches % 10 == 0)
+            esrbSaveNothing();
         esrbNext();
         return;
     }
@@ -3022,6 +3067,17 @@ QString Scraper::esrbSave(const QString& collection, const std::vector<EsrbEdit>
 #endif
 }
 
+void Scraper::esrbSaveNothing()
+{
+    if (!m_esrb_nothing_dirty)
+        return;
+    const QString path = m_esrb_nothing_path.isEmpty() ? esrb::nothing_path() : m_esrb_nothing_path;
+    if (esrb::save_nothing(path, m_esrb_nothing))
+        m_esrb_nothing_dirty = false;
+    else
+        note(LOGMSG("ESRB descriptors: couldn't write `%1`").arg(path));
+}
+
 void Scraper::esrbEnd(const QString& message)
 {
     if (!m_esrb_phase)
@@ -3032,11 +3088,12 @@ void Scraper::esrbEnd(const QString& message)
         m_esrb_timer->stop();
     m_esrb_left += static_cast<int>(m_esrb_waiting.size());
     m_esrb_waiting.clear();
+    esrbSaveNothing();
     if (!message.isEmpty())
         m_esrb_message = message;
-    if (m_esrb_total > 0)
-        note(LOGMSG("ESRB descriptors: %1 saved, %2 with nothing to write, %3 left for the next run")
-             .arg(m_esrb_saved).arg(m_esrb_none).arg(m_esrb_left));
+    if (m_esrb_total > 0 || m_esrb_remembered > 0)
+        note(LOGMSG("ESRB descriptors: %1 saved, %2 with nothing to write, %3 left for the next run, %4 skipped (nothing found before)")
+             .arg(m_esrb_saved).arg(m_esrb_none).arg(m_esrb_left).arg(m_esrb_remembered));
     m_current.clear();
     next();
 }

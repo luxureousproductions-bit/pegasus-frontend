@@ -2724,6 +2724,8 @@ QVariantMap scraper_defaults()
         // server (no key, no login): off unless turned on
         { QStringLiteral("getEsrbDescriptors"), false },
         { QStringLiteral("esrbServer"), scraper::esrb::default_server() },
+        // (games the server had nothing for are remembered and skipped; on: asked again)
+        { QStringLiteral("esrbRetryNothing"), false },
         // miximages, made on the device: their options
         { QStringLiteral("mixOverwrite"), true },
         { QStringLiteral("mixResolution"), QStringLiteral("1280x960") },
@@ -3082,6 +3084,11 @@ QString Settings::startEsrbDescriptors(QObject* collections)
         return tr("No games to ask: they need an ESRB letter (x-esrb) and no descriptors yet.");
     m_single_game.clear();
     return runScraper(std::move(jobs), settings);
+}
+
+QStringList Settings::esrbNothingPaths() const
+{
+    return scraper::esrb::load_nothing(scraper::esrb::nothing_path()).keys();
 }
 
 QString Settings::scrapeCollection(QObject* collections, const QString& collection_name, const QString& filter)
