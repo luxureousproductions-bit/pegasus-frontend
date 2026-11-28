@@ -406,6 +406,13 @@ public:
     /// the games the ESRB server had nothing for, remembered (skipped unless
     /// Retry games with nothing found / Overwrite): their paths
     Q_INVOKABLE QStringList esrbNothingPaths() const;
+    /// Pegasus X: Find solid-colour art: the scraped art looked through
+    /// (solidArtProgress, then solidArtScanned with what's placeholder art);
+    /// "" when it started
+    Q_INVOKABLE QString scanSolidArt();
+    /// ...the ones listed deleted (each checked again first); { deleted,
+    /// skipped, games (metadata updated), error }
+    Q_INVOKABLE QVariantMap deleteSolidArt(QObject* collections, const QStringList& paths);
     Q_INVOKABLE void stopScraper();
     /// Interactive mode: the match picked (index in the choice's candidates),
     /// a new search name, or this game skipped
@@ -583,6 +590,9 @@ signals:
     /// totalFiles, file (the one now), stage ("copying", "paths": fixing the
     /// paths in the copied files) }
     void rootDirProgress(QVariantMap progress);
+    void solidArtProgress(int done, int total);
+    /// [{ path, rel, why, colour, share, bytes }]
+    void solidArtScanned(QVariantList found);
     // Pegasus X: Backup & reset
     void backupArtSize(double mb);
     void backupProgress(int percent);
@@ -650,6 +660,7 @@ private:
     QNetworkAccessManager* m_netman = nullptr;
     std::atomic<bool> m_backup_cancel { false };
     bool m_backup_busy = false;
+    bool m_solid_scanning = false;   ///< Find solid-colour art looking
     bool m_setup_active = false;
     bool m_restarting = false;
     scraper::Scraper* m_scraper = nullptr;

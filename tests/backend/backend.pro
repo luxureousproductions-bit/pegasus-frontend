@@ -7,6 +7,7 @@ SUBDIRS += \
     metadataaliases \
     recovery \
     setupstate \
+    solidart \
     safefile \
     scraper \
     configfile \

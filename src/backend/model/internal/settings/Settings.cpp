@@ -50,6 +50,7 @@
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "Scraper.h"
 #include "FolderCopy.h"
+#include "SolidArt.h"
 #include "EsrbDescriptors.h"
 #include "ThemeStore.h"
 #include "Updater.h"
@@ -3076,6 +3077,140 @@ QString Settings::startEsrbDescriptors(QObject* collections)
         return tr("No games to ask: they need an ESRB letter (x-esrb) and no descriptors yet.");
     m_single_game.clear();
     return runScraper(std::move(jobs), settings);
+}
+
+// Pegasus X: Scraper > Other settings > Find solid-colour art: the art
+// scraped before (Pegasus X's downloaded_media only) looked through, off the
+// UI thread; what's placeholder art listed (solidArtScanned), nothing deleted
+QString Settings::scanSolidArt()
+{
+    if (m_solid_scanning)
+        return tr("Already looking.");
+    const QString art = dataDir();
+    if (!QFileInfo(art).isDir())
+        return tr("There's no scraped art yet (%1).").arg(art);
+    m_solid_scanning = true;
+    QtConcurrent::run([this, art]{
+        QElapsedTimer since;
+        since.start();
+        const QVariantList found = solid_art::scan(art, [this, &since](int done, int total) {
+            if (since.elapsed() < 200 && done < total)
+                return;
+            since.restart();
+            QMetaObject::invokeMethod(this, [this, done, total]{ emit solidArtProgress(done, total); }, Qt::QueuedConnection);
+        });
+        QMetaObject::invokeMethod(this, [this, found, art]{
+            m_solid_scanning = false;
+            Log::info(LOGMSG("Find solid-colour art: %1 placeholder pictures in `%2`").arg(found.size()).arg(art));
+            emit solidArtScanned(found);
+        }, Qt::QueuedConnection);
+    });
+    return QString();
+}
+
+// ...the ones picked deleted, after you said so: each one only if it's a
+// picture inside the art folder and still placeholder art when it's deleted;
+// the games' metadata lines that name it lose it (backed up first)
+QVariantMap Settings::deleteSolidArt(QObject* collections, const QStringList& paths)
+{
+    QVariantMap out;
+    if (m_scraper && m_scraper->running()) {
+        out.insert(QStringLiteral("error"), tr("The scraper is running: try again when it's done."));
+        return out;
+    }
+    const QString art = dataDir();
+    QSet<QString> deleted;
+    int skipped = 0;
+    int removed = 0;
+    for (const QString& path : paths) {
+        if (!solid_art::inside(art, path) || !solid_art::check_file(path).reject) {
+            skipped++;
+            Log::info(LOGMSG("Find solid-colour art: kept `%1` (not a placeholder picture in the art folder now)").arg(path));
+            continue;
+        }
+        const QString real = QFileInfo(path).canonicalFilePath();
+        if (QFile::remove(path)) {
+            removed++;
+            deleted.insert(QFileInfo(path).absoluteFilePath());
+            deleted.insert(real);
+            Log::info(LOGMSG("Find solid-colour art: deleted `%1`").arg(path));
+        }
+        else {
+            skipped++;
+        }
+    }
+    // the games' art lines without them
+    int games = 0;
+    QStringList errors;
+#ifdef WITH_COMPAT_ESDE
+    const auto* const list = qobject_cast<model::ObjectListModel*>(collections);
+    if (list && !deleted.isEmpty()) {
+        const auto local = [](const QString& url) {
+            return QFileInfo(url.startsWith(QLatin1String("file:")) ? QUrl(url).toLocalFile() : url).absoluteFilePath();
+        };
+        for (int i = 0; i < list->count(); i++) {
+            auto* const coll = qobject_cast<model::Collection*>(list->get(i));
+            if (!coll)
+                continue;
+            std::vector<providers::esde::GameEdit> edits;
+            std::vector<std::pair<model::Game*, QVariantMap>> loaded;
+            for (model::Game* const game : coll->gameList()->entries()) {
+                const std::vector<model::GameFile*>& files = game->filesModel()->entries();
+                if (files.empty())
+                    continue;
+                const model::Assets& assets = game->assets();
+                const std::vector<std::pair<const char*, const QStringList*>> art_lists {
+                    { "assets.box_front", &assets.boxFrontList() }, { "assets.box_back", &assets.boxBackList() },
+                    { "assets.cartridge", &assets.cartridgeList() }, { "assets.screenshot", &assets.screenshotList() },
+                    { "assets.titlescreen", &assets.titlescreenList() }, { "assets.background", &assets.backgroundList() },
+                    { "assets.logo", &assets.logoList() }, { "assets.steam", &assets.steamList() },
+                    { "assets.banner", &assets.bannerList() },
+                };
+                QVariantMap changes;
+                for (const auto& slot : art_lists) {
+                    QStringList kept;
+                    bool changed = false;
+                    for (const QString& f : *slot.second) {
+                        if (!f.startsWith(QLatin1String("image://")) && deleted.contains(local(f)))
+                            changed = true;
+                        else
+                            kept.append(f);
+                    }
+                    if (changed)
+                        changes.insert(QLatin1String(slot.first), kept);
+                }
+                if (changes.isEmpty())
+                    continue;
+                providers::esde::GameEdit edit;
+                edit.path = files.front()->path();
+                edit.title = game->title();
+                edit.changes = changes;
+                edits.push_back(edit);
+                loaded.emplace_back(game, changes);
+            }
+            if (edits.empty())
+                continue;
+            const QString error = providers::esde::save_games_metadata(coll->name(), edits, true, QStringLiteral("solid-colour art"));
+            if (!error.isEmpty()) {
+                errors.append(error);
+                continue;
+            }
+            games += static_cast<int>(edits.size());
+            for (const auto& entry : loaded)
+                apply_scraped(*entry.first, entry.second);
+        }
+    }
+#else
+    Q_UNUSED(collections);
+#endif
+    out.insert(QStringLiteral("deleted"), removed);
+    out.insert(QStringLiteral("skipped"), skipped);
+    out.insert(QStringLiteral("games"), games);
+    out.insert(QStringLiteral("error"), errors.join(QStringLiteral("; ")));
+    Log::info(LOGMSG("Find solid-colour art: %1 deleted, %2 kept, %3 games' metadata updated%4")
+              .arg(removed).arg(skipped).arg(games)
+              .arg(errors.isEmpty() ? QString() : QStringLiteral(": ") + errors.join(QStringLiteral("; "))));
+    return out;
 }
 
 QStringList Settings::esrbNothingPaths() const

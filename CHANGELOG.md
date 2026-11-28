@@ -5,6 +5,61 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-27
 
+### Scraper: placeholder art rejected (solid colour), and a cleanup for what's there
+
+- **What (1), checked before saving:** every scraped picture, whatever its
+  source (ScreenScraper, LaunchBox, libretro) and kind, is checked before
+  it's written. It's rejected when it's effectively one colour (99.5% of its
+  pixels, at 96 px a side at most, within 20 of one colour per channel),
+  fully transparent, or 2 px or less a side. Quick: a picture the scraper
+  resizes anyway is decoded once and checked on that; the others are only
+  decoded when the file is small for its pixels (under 64 KB, or under 1.5
+  bytes a pixel), JPEGs at the small size straight away. Size alone never
+  rejects anything.
+- **What (2), when one's rejected:** not written, logged ("Rejected: solid
+  colour #00FF00 image from ScreenScraper (backcovers, 2 KB): ...; trying
+  LaunchBox next"), and the slot's next picture is tried: ScreenScraper's
+  other regions and types for that kind first (another file only: not one
+  with the same md5; 3 at most), then LaunchBox's when LaunchBox fills
+  after ScreenScraper. Nothing else to try: the slot stays as it was, so
+  art a game has is never written over by a rejected picture (Overwrite on
+  too). The run's count is in the log's Done line.
+- **What (3), cleanup:** Scraper > Other settings > Find solid-colour art.
+  "Look through the scraped art" checks every picture in Pegasus X's
+  scraped-art folder (downloaded_media; videos and manuals left out; with
+  progress), then lists the placeholder ones (path, colour, size) with a
+  count. Nothing is deleted until "Delete these N pictures..." and Delete
+  in its confirmation (Cancel is picked first). Each file is checked again
+  when it's deleted (still placeholder art, a picture inside the art folder,
+  not a link); the games' metadata lines that name a deleted file lose it
+  (backed up first, as Library's edits).
+- **Why:** ScreenScraper stores a pure green image as the PC box-2D-back of
+  Grand Theft Auto III (gameid 302894) and GTA III Definitive Edition
+  (502145), and the scraper saved it as it came.
+- **Not changed:** the XBSX theme, the server, videos and manuals (not
+  pictures), the offline miximage generator, what a failed download does
+  (still no next source: only a rejected picture tries one). libretro isn't
+  asked again for a rejected slot (it only fills what nobody had).
+- **Test data:** test_Scraper's made-up download pictures were solid colours
+  (they'd be rejected now): each has a square of another colour.
+- **Tests (in compile-check):** new test_SolidArt: solid green (the GTA
+  case), solid black (JPEG), near-solid with noise (PNG and JPEG, two
+  amounts), real art kept (a cover, a dark title screen with a logo and a
+  line, a sky over a strip of land, a logo on transparency), a 16 px icon
+  and a 4 px one kept, 1x1 / 2 px / fully transparent rejected, not a
+  picture, detailed art passed without decoding, speed, the folder scan
+  (videos and non-pictures left out, nothing deleted, progress), and only
+  inside the art folder (no "..", no link, no other folder). test_Scraper:
+  a green back cover replaced by the next source's, a green screenshot with
+  nothing else to try not saved and the game's own kept with Overwrite on,
+  the cover saved as ever, the log lines.
+- **Files:** src/backend/SolidArt.{h,cpp} (new), Scraper.{h,cpp},
+  backend.pro, CMakeLists.txt, model/internal/settings/Settings.{h,cpp},
+  src/frontend/menu/settings/ScraperScreen.qml, tests/backend/solidart/*
+  (new), tests/backend/scraper/test_Scraper.cpp, tests/backend/backend.pro,
+  tests/CMakeLists.txt, CHANGELOG.md.
+- **Commit:** "Scraper: reject solid-colour placeholder art, Find solid-colour art cleanup".
+
 ### Pegasus X folder: where it is now, and a progress bar for moving the data
 
 - **What:** Settings > Advanced > Pegasus X folder... now shows where the

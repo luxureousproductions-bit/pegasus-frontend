@@ -48,6 +48,41 @@ FocusScope {
         checking = true;
         Internal.settings.checkScraperAccounts();
     }
+    // Pegasus X: Find solid-colour art (Other settings > Pictures): the
+    // scraped art looked through, the placeholder pictures listed with a
+    // count, deleted only after you say so
+    property string solidState: ""        // "", "scanning", "found"
+    property var solidFound: []
+    property var solidProgress: ({ "done": 0, "total": 0 })
+    function solidSize(bytes) {
+        return bytes >= 1048576 ? (bytes / 1048576).toFixed(1) + " MB" : (bytes / 1024).toFixed(1) + " KB";
+    }
+    function startSolidScan() {
+        var error = Internal.settings.scanSolidArt();
+        if (error !== "") {
+            message = error;
+            return;
+        }
+        solidFound = [];
+        solidProgress = { "done": 0, "total": 0 };
+        solidState = "scanning";
+        message = "";
+    }
+    Connections {
+        target: Internal.settings
+        function onSolidArtProgress(done, total) {
+            root.solidProgress = { "done": done, "total": total };
+        }
+        function onSolidArtScanned(found) {
+            root.solidFound = found;
+            root.solidState = "found";
+            if (root.page === "solidart")
+                root.message = found.length > 0
+                    ? qsTr("%1 solid-colour pictures found. Nothing is deleted until you say so.").arg(found.length) + api.tr
+                    : qsTr("No solid-colour pictures among the scraped art.") + api.tr;
+        }
+    }
+
     Connections {
         target: Internal.settings
         function onScraperAccountsChecked(result) {
@@ -566,6 +601,33 @@ FocusScope {
                 { "v": "all", "t": qsTr("All pictures") + api.tr },
             ] });
             out.push({ "kind": "info", "text": qsTr("Logos are kept at 1000×600 at most. Smaller pictures load faster in themes.") + api.tr, "value": "" });
+            out.push({ "kind": "page", "to": "solidart", "text": qsTr("Find solid-colour art") + api.tr,
+                       "value": qsTr("placeholders scraped before") + api.tr });
+            out.push({ "kind": "info", "text": qsTr("Pictures that are one solid colour (or empty) are never saved now: the next source's is tried. This finds the ones scraped before.") + api.tr, "value": "" });
+            return out;
+        }
+        if (page === "solidart") {
+            if (solidState === "scanning") {
+                out.push({ "kind": "info", "text": solidProgress.total > 0
+                    ? qsTr("Looking... %1 of %2 pictures").arg(solidProgress.done).arg(solidProgress.total) + api.tr
+                    : qsTr("Looking...") + api.tr, "value": "" });
+                return out;
+            }
+            out.push({ "kind": "solidscan", "text": solidState === "found" ? qsTr("Look again") + api.tr : qsTr("Look through the scraped art") + api.tr,
+                       "value": "" });
+            if (solidState === "found" && solidFound.length > 0) {
+                out.push({ "kind": "soliddelete", "text": qsTr("Delete these %1 pictures...").arg(solidFound.length) + api.tr, "value": "" });
+                out.push({ "kind": "section", "text": qsTr("%1 solid-colour pictures").arg(solidFound.length) + api.tr });
+                for (i = 0; i < solidFound.length; i++) {
+                    var f = solidFound[i];
+                    out.push({ "kind": "solidfile", "text": f.rel,
+                               "value": (f.colour === "transparent" ? qsTr("transparent") + api.tr : (f.colour || f.why)) + " · " + solidSize(f.bytes) });
+                }
+            }
+            else if (solidState === "found") {
+                out.push({ "kind": "info", "text": qsTr("None found.") + api.tr, "value": "" });
+            }
+            out.push({ "kind": "info", "text": qsTr("Only Pegasus X's scraped art is looked through: %1").arg(Internal.settings.dataDir) + api.tr, "value": "" });
             return out;
         }
         return out;
@@ -584,6 +646,7 @@ FocusScope {
         "miximage": qsTr("Scraper > Miximages"), "other": qsTr("Scraper > Other settings"),
         "running": qsTr("Scraper > Scraping"), "log": qsTr("Scraper > Log"),
         "android": qsTr("Scraper > Accounts > Extra systems for Android"),
+        "solidart": qsTr("Scraper > Other settings > Find solid-colour art"),
     })
 
     // -- Doing things ------------------------------------------------------------
@@ -604,6 +667,15 @@ FocusScope {
         // scraping goes on in the background: back from its page leaves it running
         if (page === "main" || page === "running") {
             root.close();
+            return;
+        }
+        // Find solid-colour art: back to Other settings, on its row
+        if (page === "solidart") {
+            openPage("other");
+            for (var o = 0; o < rows.length; o++) {
+                if (rows[o].to === "solidart")
+                    list.currentIndex = o;
+            }
             return;
         }
         // Extra systems for Android: back to Account settings, on its row
@@ -663,6 +735,11 @@ FocusScope {
         }
         else if (row.kind === "offline") startGenerator();
         else if (row.kind === "esrbrun") startEsrb();
+        else if (row.kind === "solidscan") startSolidScan();
+        else if (row.kind === "soliddelete") {
+            solidConfirm.choice = 1;   // (Cancel first)
+            solidConfirm.focus = true;
+        }
         else if (row.kind === "lbplatform") {
             var list2 = (s.androidExtra || []).slice();
             var at = list2.indexOf(row.text);
@@ -1148,6 +1225,34 @@ FocusScope {
                 }
             }
         }
+    }
+
+
+    // -- Find solid-colour art: deleting, after you said so ---------------------------
+
+    PegasusDialog {
+        id: solidConfirm
+        title: qsTr("Delete %1 pictures?").arg(root.solidFound.length) + api.tr
+        text: qsTr("These %1 solid-colour pictures will be deleted from %2, and their games' art lines updated (the metadata is backed up first). This can't be undone.")
+                .arg(root.solidFound.length).arg(Internal.settings.dataDir) + api.tr
+        buttons: [ qsTr("Delete") + api.tr, qsTr("Cancel") + api.tr ]
+        onPicked: {
+            list.focus = true;
+            if (index !== 0)
+                return;
+            var paths = [];
+            for (var i = 0; i < root.solidFound.length; i++)
+                paths.push(root.solidFound[i].path);
+            var r = Internal.settings.deleteSolidArt(api.collections, paths);
+            root.solidFound = [];
+            root.solidState = "";
+            list.currentIndex = 0;
+            root.message = r.error
+                ? r.error
+                : qsTr("%1 deleted, %2 kept (no longer solid colour or not in the art folder), %3 games' metadata updated.")
+                    .arg(r.deleted || 0).arg(r.skipped || 0).arg(r.games || 0) + api.tr;
+        }
+        onCancelled: list.focus = true
     }
 
 

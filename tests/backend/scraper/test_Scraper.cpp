@@ -19,12 +19,14 @@
 
 #include "Scraper.h"
 #include "EsrbDescriptors.h"
+#include "SolidArt.h"
 
 #include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QElapsedTimer>
 #include <QHash>
+#include <QDirIterator>
 #include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -45,12 +47,17 @@
 //   /never/...      takes the request and never answers
 //   /slow/...       answers a picture a little at a time (a piece every 4 s, 28 s in all)
 //   /img/<n>?d=<ms> answers picture n after d ms
+//   /green/...      answers a solid green PNG (ScreenScraper's GTA III back cover)
 // It counts the requests per path and the most answered at once.
 namespace {
 QByteArray png(int n)
 {
+    // (a picture, not one solid colour: those are placeholder art now, never saved)
     QImage image(64, 64, QImage::Format_RGB32);
     image.fill(QColor::fromHsv((n * 37) % 360, 200, 220));
+    for (int y = 8; y < 40; y++)
+        for (int x = 8; x < 40; x++)
+            image.setPixel(x, y, QColor::fromHsv((n * 37 + 180) % 360, 200, 120).rgb());
     QByteArray out;
     QBuffer buffer(&out);
     buffer.open(QIODevice::WriteOnly);
@@ -110,6 +117,18 @@ private:
                         socket->disconnectFromHost();
                 });
             }
+            return;
+        }
+        if (path.startsWith(QLatin1String("/green/"))) {
+            QImage green(300, 400, QImage::Format_RGB32);
+            green.fill(QColor(0, 255, 0));
+            QByteArray body;
+            QBuffer buffer(&body);
+            buffer.open(QIODevice::WriteOnly);
+            green.save(&buffer, "PNG");
+            socket->write("HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nConnection: close\r\nContent-Length: "
+                          + QByteArray::number(body.size()) + "\r\n\r\n" + body);
+            socket->disconnectFromHost();
             return;
         }
         if (path.startsWith(QLatin1String("/img/"))) {
@@ -370,6 +389,7 @@ private slots:
     void esrb_step_remembers_nothing_found();
     void lookup_with_no_answer_gives_up();
     void download_with_no_answer_is_skipped();
+    void placeholder_art_rejected();
     void slow_download_keeps_going();
     void nine_pictures_at_most_four_at_once();
     void stop_during_downloads();
@@ -421,6 +441,91 @@ void test_Scraper::download_with_no_answer_is_skipped()
 }
 
 // a picture that keeps coming, slowly (28 s in all, never 20 s with nothing): not cut
+// Pegasus X: placeholder art (a solid green back cover, as ScreenScraper has
+// for GTA III's PC box): not saved; the slot's next picture (another
+// source's) is tried; with nothing else to try the slot stays as it was, and
+// art it had already is never written over (Overwrite on too)
+void test_Scraper::placeholder_art_rejected()
+{
+    FakeServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost));
+    QTemporaryDir dir;
+    // a screenshot the game has already (a good one)
+    const QString old_shot = dir.path() + QStringLiteral("/windows/screenshots/Grand Theft Auto III.png");
+    QDir().mkpath(QFileInfo(old_shot).absolutePath());
+    {
+        QFile file(old_shot);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(png(3));
+    }
+    scraper::Scraper s;
+    prepare(s);
+    scraper::Job job;
+    job.collection = QStringLiteral("Windows");
+    job.system = QStringLiteral("windows");
+    job.title = QStringLiteral("Grand Theft Auto III");
+    job.path = QStringLiteral("/roms/windows/Grand Theft Auto III.lnk");
+    job.slot_files.insert(QStringLiteral("assets.screenshot"), QStringList { old_shot });
+    s.m_jobs = { job };
+    s.m_index = 0;
+    s.m_data_dir = dir.path();
+    s.m_settings = QVariantMap {
+        { QStringLiteral("imageMaxSize"), QStringLiteral("640") },
+        { QStringLiteral("trimBorders"), QStringLiteral("none") },
+        { QStringLiteral("overwrite"), true },
+    };
+    const auto media = [&server](const char* slot, const char* folder, const QString& path) {
+        scraper::Media m;
+        m.setting = QStringLiteral("getBackcovers");
+        m.slot = QLatin1String(slot);
+        m.folder = QLatin1String(folder);
+        m.url = QUrl(server.base() + path);
+        m.ext = QStringLiteral("png");
+        return m;
+    };
+    // the back cover: green first, then another source's (a real picture)
+    s.m_media = { media("assets.box_back", "backcovers", QStringLiteral("/green/back")),
+                  media("assets.screenshot", "screenshots", QStringLiteral("/green/shot")),
+                  media("assets.box_front", "covers", QStringLiteral("/img/5")) };
+    s.m_media[2].kind = QStringLiteral("2d");
+    s.m_fallbacks = { media("assets.box_back", "backcovers", QStringLiteral("/img/7")) };
+    s.m_changes.clear();
+    s.m_downloads.clear();
+    s.m_dl_begun = false;
+    s.m_dl_gen++;
+    bool done = false;
+    s.m_downloads_done_hook = [&done]{ done = true; };
+    s.downloadNext();
+    QTRY_VERIFY_WITH_TIMEOUT(done, 30000);
+    const QString log = s.log().join(QLatin1Char('\n'));
+    qInfo().noquote() << log;
+
+    // the back cover: the next source's, not the green one
+    const QString back = dir.path() + QStringLiteral("/windows/backcovers/Grand Theft Auto III.png");
+    QCOMPARE(s.m_changes.value(QStringLiteral("assets.box_back")).toStringList(), QStringList { back });
+    QFile file(back);
+    QVERIFY(file.open(QIODevice::ReadOnly));
+    QCOMPARE(QImage::fromData(file.readAll()).pixel(20, 20), QImage::fromData(png(7)).pixel(20, 20));
+    QCOMPARE(server.requests.value(QStringLiteral("/green/back")), 1);
+    QCOMPARE(server.requests.value(QStringLiteral("/img/7")), 1);
+    // the screenshot: nothing else to try, so nothing saved; the one it had stays as it was
+    QVERIFY(!s.m_changes.contains(QStringLiteral("assets.screenshot")));
+    QFile shot(old_shot);
+    QVERIFY(shot.open(QIODevice::ReadOnly));
+    QCOMPARE(shot.readAll(), png(3));
+    // the cover: saved as ever
+    QVERIFY(s.m_changes.contains(QStringLiteral("assets.box_front")));
+    // the log says why, and which source
+    QVERIFY(log.contains(QLatin1String("Rejected: solid colour #00FF00 image from 127.0.0.1 (backcovers")));
+    QVERIFY(log.contains(QLatin1String("trying 127.0.0.1 next")));
+    QVERIFY(log.contains(QLatin1String("(screenshots")) && log.contains(QLatin1String("nothing else to try")));
+    QCOMPARE(s.m_art_rejected, 2);
+    // nothing green anywhere in the art folder
+    QDirIterator it(dir.path(), QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+        QVERIFY2(!solid_art::check_file(it.next()).reject, qPrintable(it.filePath()));
+}
+
 void test_Scraper::slow_download_keeps_going()
 {
     FakeServer server;

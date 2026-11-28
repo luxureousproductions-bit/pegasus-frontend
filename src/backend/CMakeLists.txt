@@ -44,6 +44,8 @@ add_library(pegasus-backend
     EsrbDescriptors.h
     FolderCopy.cpp
     FolderCopy.h
+    SolidArt.cpp
+    SolidArt.h
     LaunchBoxDb.cpp
     LaunchBoxDb.h
     RetroAchievements.cpp

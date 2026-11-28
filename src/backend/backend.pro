@@ -32,6 +32,7 @@ SOURCES += \
     Scraper.cpp \
     EsrbDescriptors.cpp \
     FolderCopy.cpp \
+    SolidArt.cpp \
     LaunchBoxDb.cpp \
     RetroAchievements.cpp \
     AudioSpectrum.cpp \
@@ -58,6 +59,7 @@ HEADERS += \
     Scraper.h \
     EsrbDescriptors.h \
     FolderCopy.h \
+    SolidArt.h \
     LaunchBoxDb.h \
     RetroAchievements.h \
     AudioSpectrum.h \

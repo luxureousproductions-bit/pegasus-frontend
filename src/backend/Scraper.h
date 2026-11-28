@@ -285,6 +285,13 @@ private:
     // the game being scraped
     QVariantMap m_changes;
     std::vector<Media> m_media;
+    /// Pegasus X: the next pictures for a slot (another region or type of the
+    /// same source, then another source's), tried when a download is
+    /// placeholder art (solid_art), in order; this game's
+    std::vector<Media> m_fallbacks;
+    /// the next of `media`'s slot and kind (taken out of the list), or none
+    bool takeFallback(const Media& media, Media& next);
+    int m_art_rejected = 0;       ///< placeholder pictures not saved (this run)
     QStringList m_got;
     QElapsedTimer m_game_timer;   ///< since the game started (the log's "Game done in")
 

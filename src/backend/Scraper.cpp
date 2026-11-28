@@ -19,6 +19,7 @@
 
 #include "EsrbDescriptors.h"
 #include "Log.h"
+#include "SolidArt.h"
 #include "Paths.h"
 #include "Miximage.h"
 #ifdef WITH_COMPAT_ESDE
@@ -532,10 +533,10 @@ QImage fit_16_9(const QImage& src)
 }
 
 // fanart_mode: 0 as downloaded, 1 cropped to 16:9, 2 stretched to 16:9
-QPair<QByteArray, QString> process_image(const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim, int fanart_mode)
+// a downloaded picture (`data`, decoded: `img`) at the Scraper settings' size and shape
+QPair<QByteArray, QString> process_loaded(QImage img, const QByteArray& data, const QString& ext, int max_w, int max_h, bool trim, int fanart_mode)
 {
-    QImage img;
-    if (!img.loadFromData(data))
+    if (img.isNull())
         return { data, ext };
     bool changed = false;
     if (fanart_mode > 0) {
@@ -587,6 +588,27 @@ QString size_text(qint64 bytes)
 {
     return bytes >= 1024 * 1024 ? QString::number(static_cast<double>(bytes) / (1024.0 * 1024.0), 'f', 1) + QStringLiteral(" MB")
                                 : QString::number(bytes / 1024) + QStringLiteral(" KB");
+}
+
+// Pegasus X: a picture as it's checked (placeholder art) and resized, off the main thread
+struct Checked {
+    solid_art::Verdict verdict;
+    QByteArray body;
+    QString ext;
+    int bytes = 0;
+};
+
+// the source a download is from, for the log
+QString source_name(const QUrl& url)
+{
+    const QString host = url.host().toLower();
+    if (host.contains(QLatin1String("screenscraper")))
+        return QStringLiteral("ScreenScraper");
+    if (host.contains(QLatin1String("launchbox")))
+        return QStringLiteral("LaunchBox");
+    if (host.contains(QLatin1String("libretro")))
+        return QStringLiteral("libretro");
+    return host;
 }
 
 QString safe_file_name(QString name)
@@ -707,6 +729,7 @@ void Scraper::start(std::vector<Job> jobs, const QVariantMap& settings,
     m_data_dir = data_dir;
     m_index = 0;
     m_saved = m_not_found = m_failed = 0;
+    m_art_rejected = 0;
     m_last_title.clear();
     m_last_result.clear();
     m_last_changes.clear();
@@ -1105,7 +1128,8 @@ void Scraper::next()
         m_current.clear();
         if (m_stop && m_stop_reason.isEmpty())
             m_stop_reason = tr("Stopped");
-        Log::info(LOG_TAG, LOGMSG("Done: %1 saved, %2 not found, %3 failed").arg(m_saved).arg(m_not_found).arg(m_failed));
+        Log::info(LOG_TAG, LOGMSG("Done: %1 saved, %2 not found, %3 failed, %4 placeholder pictures not saved")
+                  .arg(m_saved).arg(m_not_found).arg(m_failed).arg(m_art_rejected));
         report();
         emit finished(state());
         return;
@@ -1114,6 +1138,7 @@ void Scraper::next()
     m_current = job.title;
     m_changes.clear();
     m_media.clear();
+    m_fallbacks.clear();
     m_match.clear();
     m_md5.clear();
     m_hash_name.clear();
@@ -1874,7 +1899,7 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
         { "manuel", "getManuals", "x-manual", "manuals", "" },
     };
     // pictures asked for at the size the Scraper settings keep (the server
-    // sends a smaller file; process_image still makes the final size):
+    // sends a smaller file; process_loaded still makes the final size):
     // Image size, logos at most 1000 x 600, nothing for Original
     const QString size = m_settings.value(QStringLiteral("imageMaxSize")).toString();
     const int max_w = size == QLatin1String("1920") ? 1920 : size == QLatin1String("1280") ? 1280
@@ -1885,23 +1910,15 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
         const QString setting = QLatin1String(kind.setting);
         if (!wants(setting))
             continue;
-        const QStringList types = QString::fromLatin1(kind.types).split(QLatin1Char(','));
-        for (const QString& type : types) {
-            QJsonArray of_type;
-            for (const QJsonValue& m : medias) {
-                if (m.toObject().value(QStringLiteral("type")).toString() == type)
-                    of_type.append(m);
-            }
-            if (of_type.isEmpty())
-                continue;
-            const QJsonObject chosen = pick(of_type, QStringLiteral("region"), region);
+        // one of ScreenScraper's media entries as a download
+        const auto make = [&](const QJsonObject& entry) -> Media {
             Media media;
             media.setting = setting;
             media.slot = QLatin1String(kind.slot);
             media.folder = QLatin1String(kind.folder);
             media.kind = QLatin1String(kind.box);
-            media.url = QUrl(chosen.value(QStringLiteral("url")).toString());
-            media.ext = chosen.value(QStringLiteral("format")).toString();
+            media.url = QUrl(entry.value(QStringLiteral("url")).toString());
+            media.ext = entry.value(QStringLiteral("format")).toString();
             const bool picture = media.folder != QLatin1String("videos") && media.folder != QLatin1String("manuals");
             if (picture && max_w > 0 && media.url.isValid()) {
                 const bool logo = media.folder == QLatin1String("marquees");
@@ -1914,8 +1931,44 @@ void Scraper::parseScreenScraper(const QJsonObject& game)
                     .arg(logo ? qMin(max_w, 1000) : max_w).arg(logo ? qMin(max_h, 600) : max_h);
                 media.url.setQuery(query);
             }
-            if (media.url.isValid() && slotFree(job, media))
+            return media;
+        };
+        const QStringList types = QString::fromLatin1(kind.types).split(QLatin1Char(','));
+        for (const QString& type : types) {
+            QJsonArray of_type;
+            for (const QJsonValue& m : medias) {
+                if (m.toObject().value(QStringLiteral("type")).toString() == type)
+                    of_type.append(m);
+            }
+            if (of_type.isEmpty())
+                continue;
+            const QJsonObject chosen = pick(of_type, QStringLiteral("region"), region);
+            const Media media = make(chosen);
+            if (media.url.isValid() && slotFree(job, media)) {
                 m_media.push_back(media);
+                // Pegasus X: the next ones if it's placeholder art (solid_art):
+                // its other regions, then the kind's other types; another
+                // file each (not the same md5), 3 at most
+                QStringList md5s { chosen.value(QStringLiteral("md5")).toString() };
+                int alternatives = 0;
+                for (int t = types.indexOf(type); t < types.size() && alternatives < 3; t++) {
+                    for (const QJsonValue& m : medias) {
+                        const QJsonObject o = m.toObject();
+                        if (o.value(QStringLiteral("type")).toString() != types.at(t) || o == chosen)
+                            continue;
+                        const QString md5 = o.value(QStringLiteral("md5")).toString();
+                        if (!md5.isEmpty() && md5s.contains(md5))
+                            continue;
+                        const Media other = make(o);
+                        if (!other.url.isValid() || other.url == media.url)
+                            continue;
+                        md5s.append(md5);
+                        m_fallbacks.push_back(other);
+                        if (++alternatives >= 3)
+                            break;
+                    }
+                }
+            }
             break;
         }
     }
@@ -2113,8 +2166,13 @@ void Scraper::parseLaunchBox(const LaunchBoxDb::Game& game, bool after_other)
         media.url = QUrl(url);
         media.ext = QFileInfo(media.url.path()).suffix().isEmpty() ? QStringLiteral("jpg") : QFileInfo(media.url.path()).suffix();
         for (const Media& m : m_media) {
-            if (m.slot == media.slot && m.kind == media.kind)
-                return;  // the first source had it
+            if (m.slot == media.slot && m.kind == media.kind) {
+                // the first source had it: LaunchBox's is tried if that one's
+                // placeholder art (solid_art)
+                if (slotFree(job, media))
+                    m_fallbacks.push_back(media);
+                return;
+            }
         }
         if (slotFree(job, media))
             m_media.push_back(media);
@@ -2302,20 +2360,62 @@ void Scraper::startDownload(size_t index)
         const QString fit = m_settings.value(QStringLiteral("fanartFit"), QStringLiteral("original")).toString();
         const int fanart_mode = media.folder != QLatin1String("fanart") ? 0
             : fit == QLatin1String("16:9") ? 1 : fit == QLatin1String("stretch") ? 2 : 0;
-        if (picture && (max_w > 0 || trim || fanart_mode > 0)) {
-            auto* const watcher = new QFutureWatcher<QPair<QByteArray, QString>>(this);
-            connect(watcher, &QFutureWatcher<QPair<QByteArray, QString>>::finished, this, [this, watcher, index, gen]{
-                const QPair<QByteArray, QString> result = watcher->result();
+        // Pegasus X: every picture checked first, whatever its source:
+        // placeholder art (one solid colour, fully transparent, a pixel or
+        // two) is never saved; the slot's next picture is tried instead
+        // (another region or type, then another source), else it stays as it
+        // was. A quick size test first: most real art isn't even decoded.
+        if (!is_video && !is_manual) {
+            const bool process = picture && (max_w > 0 || trim || fanart_mode > 0);
+            auto* const watcher = new QFutureWatcher<Checked>(this);
+            connect(watcher, &QFutureWatcher<Checked>::finished, this, [this, watcher, index, gen]{
+                const Checked result = watcher->result();
                 watcher->deleteLater();
                 if (gen != m_dl_gen)
                     return;
-                m_downloads[index].body = result.first;
-                m_downloads[index].ext = result.second;
+                if (result.verdict.reject) {
+                    m_art_rejected++;
+                    const Media was = m_downloads[index].media;
+                    Media next;
+                    if (takeFallback(was, next)) {
+                        note(LOGMSG("Rejected: %1 image from %2 (%3, %4): %5; trying %6 next")
+                             .arg(result.verdict.why, source_name(was.url), was.folder, size_text(result.bytes), safe_url(was.url), source_name(next.url)));
+                        m_downloads[index].media = next;
+                        m_downloads[index].state = 0;
+                    }
+                    else {
+                        note(LOGMSG("Rejected: %1 image from %2 (%3, %4): %5; not saved, nothing else to try")
+                             .arg(result.verdict.why, source_name(was.url), was.folder, size_text(result.bytes), safe_url(was.url)));
+                        m_downloads[index].state = 3;
+                    }
+                    downloadNext();
+                    return;
+                }
+                m_downloads[index].body = result.body;
+                m_downloads[index].ext = result.ext;
                 m_downloads[index].state = 2;
                 downloadNext();
             });
-            watcher->setFuture(QtConcurrent::run([body, ext, max_w, max_h, trim, fanart_mode]{
-                return process_image(body, ext, max_w, max_h, trim, fanart_mode);
+            watcher->setFuture(QtConcurrent::run([body, ext, process, max_w, max_h, trim, fanart_mode]() -> Checked {
+                Checked out;
+                out.bytes = body.size();
+                if (!process) {
+                    // (only checked: decoded small, when its size says it could be one colour)
+                    out.verdict = solid_art::check(body);
+                    out.body = body;
+                    out.ext = ext;
+                    return out;
+                }
+                // resized anyway: decoded once, checked, then resized
+                QImage img;
+                if (img.loadFromData(body))
+                    out.verdict = solid_art::check_image(img);
+                if (out.verdict.reject)
+                    return out;
+                const QPair<QByteArray, QString> done = process_loaded(img, body, ext, max_w, max_h, trim, fanart_mode);
+                out.body = done.first;
+                out.ext = done.second;
+                return out;
             }));
             return;
         }
@@ -2324,6 +2424,18 @@ void Scraper::startDownload(size_t index)
         m_downloads[index].state = 2;
         downloadNext();
     }, Fetch::Download);
+}
+
+bool Scraper::takeFallback(const Media& media, Media& next)
+{
+    for (auto it = m_fallbacks.begin(); it != m_fallbacks.end(); ++it) {
+        if (it->slot == media.slot && it->kind == media.kind && it->url != media.url) {
+            next = *it;
+            m_fallbacks.erase(it);
+            return true;
+        }
+    }
+    return false;
 }
 
 // all the game's files are in (or Stop): the miximage made from them, then saving
