@@ -58,7 +58,13 @@ rolled back on its own with `git revert <commit>`.
   src/frontend/menu/settings/ScraperScreen.qml, tests/backend/solidart/*
   (new), tests/backend/scraper/test_Scraper.cpp, tests/backend/backend.pro,
   tests/CMakeLists.txt, CHANGELOG.md.
-- **Commit:** "Scraper: reject solid-colour placeholder art, Find solid-colour art cleanup".
+- **Fix found by the tests (compile check, Linux, before any install):** a
+  PNG read at a small size gave no picture with Linux's Qt, so a solid PNG
+  not being resized passed unchecked. Now only a JPEG is read small; other
+  pictures are decoded whole and made small after, and a read that gives
+  nothing is tried again whole.
+- **Commits:** "Scraper: reject solid-colour placeholder art, Find
+  solid-colour art cleanup" and "Solid-colour check: PNGs decoded whole".
 
 ### Pegasus X folder: where it is now, and a progress bar for moving the data
 

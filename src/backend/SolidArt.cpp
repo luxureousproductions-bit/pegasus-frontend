@@ -51,7 +51,8 @@ QString hex(QRgb c)
         .arg(qRed(c), 2, 16, QLatin1Char('0')).arg(qGreen(c), 2, 16, QLatin1Char('0')).arg(qBlue(c), 2, 16, QLatin1Char('0')).toUpper();
 }
 
-Verdict read(QImageReader& reader, qint64 bytes)
+// `whole`: the picture decoded as it is (when a small read gives nothing)
+Verdict read(QImageReader& reader, qint64 bytes, const std::function<QImage()>& whole)
 {
     Verdict out;
     const QSize size = reader.size();
@@ -64,10 +65,16 @@ Verdict read(QImageReader& reader, qint64 bytes)
     }
     if (!worth_a_look(bytes, size))
         return out;
-    // small: a JPEG is decoded at that size straight away, others scaled after
-    if (size.isValid() && (size.width() > SAMPLE || size.height() > SAMPLE))
+    // a JPEG is decoded small straight away (libjpeg scales while it
+    // decodes); the others whole, then made small (some builds' PNG reader
+    // gives nothing for a small read)
+    const QByteArray format = reader.format().toLower();
+    const bool jpeg = format == "jpeg" || format == "jpg";
+    if (jpeg && size.isValid() && (size.width() > SAMPLE || size.height() > SAMPLE))
         reader.setScaledSize(size.scaled(SAMPLE, SAMPLE, Qt::KeepAspectRatio).expandedTo(QSize(1, 1)));
     QImage image = reader.read();
+    if (image.isNull() && whole)
+        image = whole();
     if (image.isNull())
         return out;
     return check_image(image);
@@ -154,13 +161,13 @@ Verdict check(const QByteArray& data)
     buffer.setData(data);
     buffer.open(QIODevice::ReadOnly);
     QImageReader reader(&buffer);
-    return read(reader, data.size());
+    return read(reader, data.size(), [&data]{ return QImage::fromData(data); });
 }
 
 Verdict check_file(const QString& path)
 {
     QImageReader reader(path);
-    return read(reader, QFileInfo(path).size());
+    return read(reader, QFileInfo(path).size(), [&path]{ return QImage(path); });
 }
 
 bool inside(const QString& art_dir, const QString& path)
