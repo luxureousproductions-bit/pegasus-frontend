@@ -31,7 +31,9 @@
 // Pegasus X: placeholder art (solid_art): rejected, and real art (a cover, a
 // dark title screen, a logo on transparency, a 16 px icon) kept
 namespace {
-QByteArray encode(const QImage& image, const char* format, int quality = 90)
+// (quality -1: Qt's default. A PNG's "quality" is its compression: 90 would
+// save it nearly uncompressed, not what any server sends)
+QByteArray encode(const QImage& image, const char* format, int quality = -1)
 {
     QByteArray out;
     QBuffer buffer(&out);
