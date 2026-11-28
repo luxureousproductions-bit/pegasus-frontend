@@ -26,6 +26,8 @@ QtObject {
 
     required property string label
     property string desc: ""
+    // Pegasus X: a line under the description, as it is (eg. a folder's path)
+    property string note: ""
     required property string section
     required property int type
 

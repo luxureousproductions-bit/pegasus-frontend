@@ -49,6 +49,7 @@
 #include "providers/pegasus_metadata/PegasusFilter.h"
 #include "providers/pegasus_metadata/PegasusMetadata.h"
 #include "Scraper.h"
+#include "FolderCopy.h"
 #include "EsrbDescriptors.h"
 #include "ThemeStore.h"
 #include "Updater.h"
@@ -315,36 +316,6 @@ void Settings::restartApp()
 }
 
 namespace {
-// the files and folders of one folder into another (what's already there is
-// kept when the copy fails); returns how many files were copied, -1 on error
-int copy_tree(const QString& from, const QString& to, const QStringList& skip, QString& error)
-{
-    int copied = 0;
-    QDirIterator it(from, QDir::Files | QDir::Dirs | QDir::NoDotAndDotDot | QDir::Hidden, QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        const QString path = it.next();
-        const QString rel = path.mid(from.length() + 1);
-        const QString top = rel.section(QLatin1Char('/'), 0, 0);
-        if (skip.contains(top))
-            continue;
-        const QFileInfo info = it.fileInfo();
-        const QString target = to + QLatin1Char('/') + rel;
-        if (info.isDir()) {
-            QDir().mkpath(target);
-            continue;
-        }
-        QDir().mkpath(QFileInfo(target).absolutePath());
-        if (QFileInfo::exists(target))
-            QFile::remove(target);
-        if (!QFile::copy(path, target)) {
-            error = QStringLiteral("Couldn't copy %1").arg(rel);
-            return -1;
-        }
-        copied++;
-    }
-    return copied;
-}
-
 // a text file with the old folder's paths in it: the new folder's
 void rewrite_paths_in(const QString& file_path, const QString& from, const QString& to)
 {
@@ -541,12 +512,33 @@ QString Settings::setRootDir(const QString& dir_in, bool move_data)
         if (move_data) {
             // the Pegasus X folder setting itself and the caches stay out
             // (nor setup's step and the private folder's own: they belong there)
-            const int copied = copy_tree(now, dir, { QStringLiteral("pegasusx-root.txt"), QStringLiteral("pegasusx-root-asked"),
-                                                      QStringLiteral(".pegasusx-write-test"), QStringLiteral("pegasusx-wizard"),
-                                                      QStringLiteral("pegasusx-root.txt.pxgood"),
-                                                      QStringLiteral("pegasusx-root.txt.pxsave"),
-                                                      QStringLiteral("pegasusx-root.txt.pxold") }, error);
+            const QStringList skip { QStringLiteral("pegasusx-root.txt"), QStringLiteral("pegasusx-root-asked"),
+                                     QStringLiteral(".pegasusx-write-test"), QStringLiteral("pegasusx-wizard"),
+                                     QStringLiteral("pegasusx-root.txt.pxgood"),
+                                     QStringLiteral("pegasusx-root.txt.pxsave"),
+                                     QStringLiteral("pegasusx-root.txt.pxold") };
+            // Pegasus X: the progress (what there is first, then as it's copied;
+            // to the screen 5 times a second at most, and at the end)
+            const folder_copy::Size total = folder_copy::size_of(now, skip);
+            const auto tell = [this, total](qint64 bytes, int files, const QString& file, const QString& stage) {
+                const QVariantMap p {
+                    { QStringLiteral("bytes"), bytes }, { QStringLiteral("totalBytes"), total.bytes },
+                    { QStringLiteral("files"), files }, { QStringLiteral("totalFiles"), total.files },
+                    { QStringLiteral("file"), file }, { QStringLiteral("stage"), stage },
+                };
+                QMetaObject::invokeMethod(this, [this, p]{ emit rootDirProgress(p); }, Qt::QueuedConnection);
+            };
+            tell(0, 0, QString(), QStringLiteral("copying"));
+            QElapsedTimer since;
+            since.start();
+            const int copied = folder_copy::copy(now, dir, skip, error, [&](qint64 bytes, int files, const QString& file) {
+                if (since.elapsed() < 200 && files < total.files)
+                    return;
+                since.restart();
+                tell(bytes, files, file, QStringLiteral("copying"));
+            });
             if (copied >= 0) {
+                tell(total.bytes, copied, QString(), QStringLiteral("paths"));
                 Log::info(LOGMSG("Pegasus X folder: %1 files copied from `%2` to `%3`").arg(copied).arg(now, dir));
                 fix_moved_root(now, dir, old_media);
             }

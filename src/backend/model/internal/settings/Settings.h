@@ -579,6 +579,10 @@ signals:
     void pegasusxSettingsChanged();
     /// setRootDir finished: `error` is empty when the folder is set
     void rootDirChanged(QString error);
+    /// Pegasus X: setRootDir's copy as it goes: { bytes, totalBytes, files,
+    /// totalFiles, file (the one now), stage ("copying", "paths": fixing the
+    /// paths in the copied files) }
+    void rootDirProgress(QVariantMap progress);
     // Pegasus X: Backup & reset
     void backupArtSize(double mb);
     void backupProgress(int percent);

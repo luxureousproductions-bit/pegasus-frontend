@@ -36,6 +36,22 @@ FocusScope {
     property string chosen: ""
     property string error: ""
     property var contents: ({})
+    // the copy as it goes (Settings.rootDirProgress): { bytes, totalBytes, files, totalFiles, file, stage }
+    property var progress: ({})
+    readonly property bool copying: step === "moving" && progress.totalBytes !== undefined
+    readonly property real fraction: {
+        var p = progress;
+        if (p.stage === "paths")
+            return 1;
+        if ((p.totalBytes || 0) > 0)
+            return Math.min(1, (p.bytes || 0) / p.totalBytes);
+        if ((p.totalFiles || 0) > 0)
+            return Math.min(1, (p.files || 0) / p.totalFiles);
+        return 0;
+    }
+    function mb(bytes) {
+        return ((bytes || 0) / 1048576).toFixed(1);
+    }
 
     anchors.fill: parent
     enabled: focus
@@ -45,6 +61,10 @@ FocusScope {
 
     Connections {
         target: Internal.settings
+        function onRootDirProgress(p) {
+            if (root.step === "moving")
+                root.progress = p;
+        }
         function onRootDirChanged(error) {
             if (root.step !== "moving")
                 return;
@@ -63,6 +83,7 @@ FocusScope {
         filePicker.focus = true;
     }
     function apply(move) {
+        progress = {};
         step = "moving";
         error = Internal.settings.setRootDir(chosen, move);
         if (error !== "")
@@ -97,14 +118,18 @@ FocusScope {
             switch (root.step) {
                 case "intro":
                     return (root.firstRun ? qsTr("Welcome to Pegasus X.") + api.tr + "\n\n" : "")
-                        + qsTr("Everything Pegasus X keeps (settings, themes, game metadata, scraped art, logs) lives in one folder. Right now that's %1 (%2), inside the app, which goes when the app is uninstalled and is awkward to reach. You can pick a folder of your own instead, like PegasusX on the internal storage or an SD card: scraped art goes to downloaded_media/<system>/<kind> in it, themes to themes/.")
-                            .arg(Internal.settings.rootChosen ? now : qsTr("the app's own storage") + api.tr).arg(what) + api.tr;
+                        + (Internal.settings.rootChosen
+                           ? qsTr("Everything Pegasus X keeps (settings, themes, game metadata, scraped art, logs) lives in one folder. Right now that's:\n%1\n(%2). You can pick another folder and move your data there: scraped art goes to downloaded_media/<system>/<kind> in it, themes to themes/.")
+                           : qsTr("Everything Pegasus X keeps (settings, themes, game metadata, scraped art, logs) lives in one folder. Right now that's the app's own storage:\n%1\n(%2), which goes when the app is uninstalled and is awkward to reach. You can pick a folder of your own instead, like PegasusX on the internal storage or an SD card: scraped art goes to downloaded_media/<system>/<kind> in it, themes to themes/."))
+                            .arg(now).arg(what) + api.tr;
                 case "picked":
                     return (root.error !== "" ? root.error + "\n\n" : "")
                         + qsTr("Pegasus X folder: %1\n\n\"Move my data\" copies what's in %2 (%3) there: your settings, themes, metadata and art, so nothing changes but the place. \"Start fresh\" leaves it behind.")
                             .arg(root.chosen).arg(now).arg(what) + api.tr;
                 case "moving":
-                    return qsTr("Copying your settings, themes, metadata and art to %1...\n\nThis can take a while; Pegasus X keeps running.").arg(root.chosen) + api.tr;
+                    if (!root.copying)
+                        return qsTr("Setting up %1...").arg(root.chosen) + api.tr;
+                    return qsTr("Copying your settings, themes, metadata and art\nfrom %1\nto %2\n\nThis can take a while; Pegasus X keeps running.").arg(now).arg(root.chosen) + api.tr;
                 case "done":
                     return (root.firstRun
                         ? qsTr("Done. Pegasus X starts again now with %1, and setup goes on from step 2.")
@@ -133,6 +158,49 @@ FocusScope {
                 Internal.settings.restartApp();
             else if (root.step !== "moving")
                 root.leave();
+        }
+
+        // Pegasus X: the copy's progress bar (moving the data)
+        Column {
+            width: parent.width
+            spacing: dialog.textSize * 0.4
+            visible: root.copying
+
+            Rectangle {
+                width: parent.width
+                height: dialog.textSize * 0.7
+                radius: height / 2
+                color: "#333"
+                Rectangle {
+                    width: parent.width * root.fraction
+                    height: parent.height
+                    radius: height / 2
+                    color: "#3aa"
+                }
+            }
+            Text {
+                width: parent.width
+                text: root.progress.stage === "paths"
+                    ? qsTr("Copied: %1 files, %2 MB. Updating the folder paths in them...").arg(root.progress.files || 0).arg(root.mb(root.progress.totalBytes)) + api.tr
+                    : qsTr("%1% · %2 of %3 MB · %4 of %5 files").arg(Math.floor(root.fraction * 100))
+                        .arg(root.mb(root.progress.bytes)).arg(root.mb(root.progress.totalBytes))
+                        .arg(root.progress.files || 0).arg(root.progress.totalFiles || 0) + api.tr
+                color: "#eee"
+                font.family: globalFonts.sans
+                font.pixelSize: dialog.textSize * 0.85
+                horizontalAlignment: Text.AlignHCenter
+                wrapMode: Text.WordWrap
+            }
+            Text {
+                width: parent.width
+                visible: text !== ""
+                text: root.progress.stage === "copying" ? (root.progress.file || "") : ""
+                color: "#999"
+                font.family: globalFonts.sans
+                font.pixelSize: dialog.textSize * 0.7
+                horizontalAlignment: Text.AlignHCenter
+                elide: Text.ElideMiddle
+            }
         }
     }
 

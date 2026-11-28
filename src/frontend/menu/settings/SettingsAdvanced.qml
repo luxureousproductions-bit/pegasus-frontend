@@ -86,6 +86,12 @@ FocusScope {
         SettingsEntry {
             label: QT_TR_NOOP("Pegasus X folder...")
             desc: QT_TR_NOOP("Where everything is kept: settings, themes, metadata, scraped art (downloaded_media/<system>/<kind>) and logs. Pick a folder of your own and move your data there.")
+            // where it is now (the app's own storage until one is picked)
+            note: (Internal.settings.rootMissing !== ""
+                    ? qsTr("Now: %1 (%2 isn't there)").arg(Internal.settings.rootDir).arg(Internal.settings.rootMissing)
+                    : Internal.settings.rootChosen
+                    ? qsTr("Now: %1").arg(Internal.settings.rootDir)
+                    : qsTr("Now: %1 (inside the app)").arg(Internal.settings.rootDir)) + api.tr
             type: SettingsEntry.Type.Button
             section: "advanced"
             buttonAction: root.openRootFolder
@@ -147,7 +153,8 @@ FocusScope {
             roleValue: SettingsEntry.Type.Button
             SimpleButton {
                 label: qsTr(model.label) + api.tr
-                desc: model.desc ? qsTr(model.desc) + api.tr : ""
+                desc: (model.desc ? qsTr(model.desc) + api.tr : "")
+                      + (model.note ? (model.desc ? "\n" : "") + model.note : "")
                 onActivate: model.buttonAction()
                 enabled: model.enabled
             }

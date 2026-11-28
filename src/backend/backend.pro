@@ -31,6 +31,7 @@ SOURCES += \
     SafeFile.cpp \
     Scraper.cpp \
     EsrbDescriptors.cpp \
+    FolderCopy.cpp \
     LaunchBoxDb.cpp \
     RetroAchievements.cpp \
     AudioSpectrum.cpp \
@@ -56,6 +57,7 @@ HEADERS += \
     SafeFile.h \
     Scraper.h \
     EsrbDescriptors.h \
+    FolderCopy.h \
     LaunchBoxDb.h \
     RetroAchievements.h \
     AudioSpectrum.h \

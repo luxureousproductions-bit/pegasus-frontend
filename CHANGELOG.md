@@ -5,6 +5,40 @@ rolled back on its own with `git revert <commit>`.
 
 ## 2026-11-27
 
+### Pegasus X folder: where it is now, and a progress bar for moving the data
+
+- **What:** Settings > Advanced > Pegasus X folder... now shows where the
+  folder is under its description ("Now: /storage/emulated/0/PegasusX";
+  "(inside the app)" while it's the app's own storage; "(X isn't there)" when
+  the folder picked can't be found and the app's own is used). The Pegasus X
+  folder screen says the path too, also while it's the app's own storage
+  (before, only "the app's own storage").
+- **Progress:** "Use it and move my data there" shows a progress bar while
+  it copies: percent, MB copied of the total, files of the total, and the
+  file being copied; then "Updating the folder paths in them..." before the
+  restart. The total is counted first (the same files the move copies),
+  then files are copied 1 MiB at a time so a big video moves the bar too;
+  the screen is told 5 times a second at most. ("Use it, start fresh"
+  copies nothing: no bar.)
+- **How:** the copy moved out of Settings.cpp into
+  src/backend/FolderCopy.{h,cpp} (the same files, the same files left out,
+  what's there replaced, an error stops it as before; a part-written file is
+  removed). New signal Settings.rootDirProgress.
+- **Why:** you asked for the path to be shown, and moving a big library
+  gave no sign of how far along it was.
+- **Not changed:** what's moved, the checks before it, the restart after,
+  setup's use of the screen, the XBSX theme, the server.
+- **Tests (in compile-check):** new test_FolderCopy: the count (skips,
+  hidden files, an empty file), copying with progress (never backwards,
+  ends at the count, what's left out stays out, empty folders kept), a 3 MB
+  file reported in parts, an old file replaced, a failed copy reported.
+- **Files:** src/backend/FolderCopy.{h,cpp} (new), backend.pro,
+  CMakeLists.txt, model/internal/settings/Settings.{h,cpp},
+  src/frontend/menu/settings/{RootFolderSetup.qml, SettingsAdvanced.qml,
+  SettingsEntry.qml}, tests/backend/foldercopy/* (new),
+  tests/backend/backend.pro, tests/CMakeLists.txt, CHANGELOG.md.
+- **Commit:** "Pegasus X folder: show where it is, progress bar for moving the data".
+
 ### ESRB descriptors: "nothing found" remembered, cleaned-up names
 
 - **What (1), nothing found remembered:** a game the ESRB server answered

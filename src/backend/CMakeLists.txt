@@ -42,6 +42,8 @@ add_library(pegasus-backend
     Scraper.h
     EsrbDescriptors.cpp
     EsrbDescriptors.h
+    FolderCopy.cpp
+    FolderCopy.h
     LaunchBoxDb.cpp
     LaunchBoxDb.h
     RetroAchievements.cpp
