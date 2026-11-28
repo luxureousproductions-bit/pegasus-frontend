@@ -141,7 +141,8 @@ void test_SolidArt::near_solid_with_noise()
         const QByteArray jpg = encode(image, "JPG", 85);
         qInfo() << "noise" << amp << ": PNG" << png.size() << "JPEG" << jpg.size();
         const solid_art::Verdict a = solid_art::check(png);
-        QVERIFY2(a.reject, qPrintable(QString::number(a.share)));
+        QVERIFY2(a.reject, qPrintable(QStringLiteral("checked %1, share %2, %3 bytes a pixel")
+                 .arg(a.checked).arg(a.share).arg(double(png.size()) / (640 * 480))));
         QVERIFY(distance(colour_of(a.colour), QColor(0, 200, 0)) <= amp);
         QVERIFY(solid_art::check(jpg).reject);
     }

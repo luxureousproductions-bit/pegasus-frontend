@@ -13,7 +13,7 @@ rolled back on its own with `git revert <commit>`.
   pixels, at 96 px a side at most, within 20 of one colour per channel),
   fully transparent, or 2 px or less a side. Quick: a picture the scraper
   resizes anyway is decoded once and checked on that; the others are only
-  decoded when the file is small for its pixels (under 64 KB, or under 1.5
+  decoded when the file is small for its pixels (under 64 KB, or under 2.5
   bytes a pixel), JPEGs at the small size straight away. Size alone never
   rejects anything.
 - **What (2), when one's rejected:** not written, logged ("Rejected: solid
@@ -66,9 +66,13 @@ rolled back on its own with `git revert <commit>`.
   ScreenScraper's green back cover is). Along the way (2286), only a JPEG is
   read small now, other pictures decoded whole and made small after (the
   same work for a PNG), and a read that gives nothing is tried again whole.
+  Then (2287) a near-solid PNG with noise came out bigger with Qt than
+  estimated (over 1.5 bytes a pixel) and was passed unlooked: the quick
+  size test now looks at anything under 2.5 bytes a pixel.
 - **Commits:** "Scraper: reject solid-colour placeholder art, Find
-  solid-colour art cleanup", "Solid-colour check: PNGs decoded whole" and
-  "test_SolidArt: PNGs compressed as a server's are".
+  solid-colour art cleanup", "Solid-colour check: PNGs decoded whole",
+  "test_SolidArt: PNGs compressed as a server's are" and "Solid-colour
+  check: noisy PNGs looked at too".
 
 ### Pegasus X folder: where it is now, and a progress bar for moving the data
 

@@ -35,14 +35,14 @@ namespace {
 constexpr int EMPTY_SIDE = 2;
 
 // the file isn't big for its pixels: maybe one colour (a solid colour
-// compresses to almost nothing, even with a little noise: a PNG ~1.3 bytes a
-// pixel at most, a JPEG ~0.1). Bigger ones (detailed art) aren't decoded.
+// compresses to almost nothing; with a little noise a PNG can take ~2 bytes a
+// pixel, a JPEG ~0.1). Bigger ones (detailed art, ~3 a pixel) aren't decoded.
 bool worth_a_look(qint64 bytes, const QSize& size)
 {
     if (!size.isValid())
         return true;
     const double pixels = static_cast<double>(size.width()) * size.height();
-    return bytes < 64 * 1024 || static_cast<double>(bytes) < pixels * 1.5;
+    return bytes < 64 * 1024 || static_cast<double>(bytes) < pixels * 2.5;
 }
 
 QString hex(QRgb c)
