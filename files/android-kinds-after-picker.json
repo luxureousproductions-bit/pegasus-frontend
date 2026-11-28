@@ -1,0 +1,6 @@
+{
+    "android:com.test.camera": "Emulator",
+    "android:com.test.drift": "Game",
+    "android:com.test.notes": "Application",
+    "android:com.test.retroarch": "Emulator"
+}

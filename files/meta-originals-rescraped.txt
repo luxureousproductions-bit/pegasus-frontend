@@ -1,0 +1,15 @@
+158f438150125aacfa21280c78021bfe  /home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml
+172b3c250f5e6dc3a47fdd7d431c43d9  /home/runner/work/_temp/px/Pegasus/gamecube/metadata.pegasus.txt
+4de0ede3018f88aa8650ff54fcda0004  /home/runner/work/_temp/px/MetaTest/metadata.pegasus.txt
+5804934aea510b686305b2e5a60e0d54  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt
+6d83f72138a62291be13ac2440127a03  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt
+715c15e7e4da6034ce89b7ddeaba15e9  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt
+80e5a3a0c53dcfa3cd38c9c2eb60f550  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt
+86a3af8f630a16d591eee8fd970b484e  /home/runner/work/_temp/px/MyGames/psx/gamelist.xml
+b9cd1dc75cfcd03d5c6717c097d7e2f8  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt
+c41c1e2c05dc8f32999f6286ddc3d502  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/imported-folders.json
+c4b5e5f18f088d167801b0b371968810  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt
+e649fe1bb345d176f6d97c4dac5c92ff  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/android/metadata.pegasus.txt
+e9e7591bf99b480834175ee0831c43b2  /home/runner/work/_temp/px/storage/ROMs/metadata.pegasus.txt
+ebab2a0dc53bf666e242547a97ab957d  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt
+f0ca09d4145156b9d5942131fdff9693  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt

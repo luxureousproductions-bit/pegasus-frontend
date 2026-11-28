@@ -1,0 +1,3 @@
+.
+..
+pegasusx-setup-step

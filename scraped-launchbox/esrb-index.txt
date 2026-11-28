@@ -1,0 +1,7 @@
+nintendo_64.json: "Not Rated" 452, "E - Everyone" 214, "" 72, "T - Teen" 54, "M - Mature" 28, "EC - Early Childhood" 2
+nintendo_game_boy_advance.json: "Not Rated" 1095, "E - Everyone" 800, "" 339, "T - Teen" 95, "E10+ - Everyone 10+" 49, "M - Mature" 8, "EC - Early Childhood" 3
+nintendo_gamecube.json: "E - Everyone" 288, "T - Teen" 197, "Not Rated" 154, "" 91, "M - Mature" 48, "E10+ - Everyone 10+" 35, "RP - Rating Pending" 1, "EC - Early Childhood" 1
+nintendo_switch.json: "E - Everyone" 2373, "T - Teen" 1879, "E10+ - Everyone 10+" 1424, "" 1413, "M - Mature" 732, "Not Rated" 129
+nintendo_switch_2.json: "T - Teen" 69, "E - Everyone" 60, "E10+ - Everyone 10+" 49, "M - Mature" 27, "" 13, "Not Rated" 7, "RP - Rating Pending" 4
+sony_playstation.json: "" 1842, "Not Rated" 1422, "E - Everyone" 869, "T - Teen" 360, "M - Mature" 102, "EC - Early Childhood" 40, "E10+ - Everyone 10+" 16, "RP - Rating Pending" 2
+super_nintendo_entertainment_system.json: "Not Rated" 2417, "" 366, "E - Everyone" 161, "T - Teen" 14, "M - Mature" 4

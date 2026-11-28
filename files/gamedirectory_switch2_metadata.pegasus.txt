@@ -1,0 +1,29 @@
+# Pegasus X game directory: Nintendo Switch 2
+# Made by Pegasus X from the ROM folder /home/runner/work/_temp/px/MyGames.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/MyGames/switch2
+
+collection: Nintendo Switch 2
+shortname: switch2
+
+game: Donkey Kong Bananza
+file: /home/runner/work/_temp/px/MyGames/switch2/Donkey Kong Bananza.nup
+description: Donkey Kong and His New Partner Pauline Smash, Bash, Climb and Sing Their Way Through a Brand-New 3D Platforming Action Adventure.
+  .
+  Bash through just about anything with the raw power of Donkey Kong! Crash through walls, carve tunnels with your fists, punch straight down into the ground, and even tear off chunks of terrain to swing around and throw – the more you smash, the more secrets you’ll open up to explore.
+developer: Nintendo EPD
+genre: Adventure
+  Platform
+players: 2
+publisher: Nintendo
+rating: 88%
+release: 2025-07-17
+assets.background: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/fanart/Donkey Kong Bananza.jpg
+assets.box_back: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/backcovers/Donkey Kong Bananza.jpg
+assets.box_front: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/covers/Donkey Kong Bananza.jpg
+assets.box_spine: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/spines/Donkey Kong Bananza.jpg
+assets.logo: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/marquees/Donkey Kong Bananza.png
+assets.screenshot: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/screenshots/Donkey Kong Bananza.png
+assets.steam: /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/miximages/Donkey Kong Bananza.png
+x-esrb: E10+
+

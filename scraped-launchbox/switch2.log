@@ -1,0 +1,31 @@
+[i] qml: [test] LaunchBox database: reading in
+[i] LaunchBox: Nintendo 64: 822 games
+[i] LaunchBox: Nintendo Game Boy Advance: 2389 games
+[i] LaunchBox: Sony Playstation: 4653 games
+[i] LaunchBox: Super Nintendo Entertainment System: 2962 games
+[i] LaunchBox: Nintendo GameCube: 815 games
+[i] LaunchBox: Nintendo Switch 2: 229 games
+[i] LaunchBox: Nintendo Switch: 7950 games
+[i] LaunchBox: ESRB values in these games: "(none)" 4136, "E - Everyone" 4765, "E10+ - Everyone 10+" 1573, "EC - Early Childhood" 46, "M - Mature" 949, "Not Rated" 5676, "RP - Rating Pending" 7, "T - Teen" 2668
+[i] LaunchBox: The database is ready
+[i] qml: [test] LaunchBox database: ready, 19820 games
+[i] Scraper: Scraping 1 games into `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media` (source: launchbox, interactive: no, overwrite: yes, ScreenScraper login: missing, LaunchBox database: yes)
+[i] Scraper: Collection `Nintendo Switch 2`: system `switch2` (not a ScreenScraper system: LaunchBox and libretro only)
+[i] qml: [test] scraping "Donkey Kong Bananza" in "Nintendo Switch 2": started
+[i] Scraper: Checksum made (2 KB, 0.0 s)
+[i] Scraper: Hasheous: answered 404, checksum not known (0.1 s)
+[i] Scraper: LaunchBox: looked up "Donkey Kong Bananza" (0.0 s)
+[i] Scraper: LaunchBox: using "Donkey Kong Bananza" (Nintendo Switch 2, id 458703)
+[i] Scraper: LaunchBox: ESRB "E10+ - Everyone 10+" -> x-esrb: E10+
+[i] Scraper: LaunchBox: 6 pictures to download (of 14 it lists)
+[i] Scraper: Downloaded covers (782 KB, 0.1 s) -> https://images.launchbox-app.com/r2_cbebd5fa-6399-475e-998f-65ce4afb5b44.jpg
+[i] Scraper: Downloaded backcovers (757 KB, 0.1 s) -> https://images.launchbox-app.com/r2_304dbf7d-1cca-4aad-a93f-776918d9064b.jpg
+[i] Scraper: Downloaded marquees (1.3 MB, 0.0 s) -> https://images.launchbox-app.com/6545113a-7091-434e-85cc-4f82dba38bb4.png
+[i] Scraper: Downloaded fanart (1.9 MB, 0.2 s) -> https://images.launchbox-app.com/92216055-d1d2-450c-a2a6-0672cf56f065.jpg
+[i] Scraper: Downloaded spines (53 KB, 0.1 s) -> https://images.launchbox-app.com/r2_810a97f8-47d8-47a5-b45b-0b0aaa6fa716.jpg
+[i] Scraper: Downloaded screenshots (5.3 MB, 0.2 s) -> https://images.launchbox-app.com/73a566ba-2a37-42de-9d6e-4b21298ca82c.png
+[i] Scraper: Downloads done: 6 of 6 in 1.0 s (at most 4 at once)
+[i] Scraper: Miximage made (0.3 s)
+[i] Scraper: Saving `Donkey Kong Bananza` (/home/runner/work/_temp/px/MyGames/switch2/Donkey Kong Bananza.nup) into the metadata of `Nintendo Switch 2`: ok (0.0 s)
+[i] Scraper: Game done in 1.5 s: LaunchboxDB, details, covers, backcovers, screenshots, fanart, marquees, spines, miximages
+[i] Scraper: Done: 1 saved, 0 not found, 0 failed, 0 placeholder pictures not saved

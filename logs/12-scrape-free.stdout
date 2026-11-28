@@ -1,0 +1,84 @@
+[i] Pegasus X 3fd7df25 build 2175 (2026-11-28)[0m
+[i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)[0m
+[i] Qt version 5.15.3[0m
+[i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)[0m
+[i] Found locale `ar`[0m
+[i] Found locale `bs`[0m
+[i] Found locale `ca`[0m
+[i] Found locale `de`[0m
+[i] Found locale `en-GB`[0m
+[i] Found locale `en`[0m
+[i] Found locale `es`[0m
+[i] Found locale `fr`[0m
+[i] Found locale `hr`[0m
+[i] Found locale `hu`[0m
+[i] Found locale `it`[0m
+[i] Found locale `ja`[0m
+[i] Found locale `ko`[0m
+[i] Found locale `lt`[0m
+[i] Found locale `nl`[0m
+[i] Found locale `pt-BR`[0m
+[i] Found locale `ru`[0m
+[i] Found locale `sr@Latn`[0m
+[i] Found locale `sv`[0m
+[i] Found locale `zh-TW`[0m
+[i] Found locale `zh`[0m
+[i] Locale set to `en`[0m
+[i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`[0m
+[i] Recovery: `pegasusx.ini`: last good copy made (`pegasusx.ini.pxgood`)[0m
+[i] Setup: done (`/home/runner/work/_temp/px/home/.local/share/pegasus-frontend/pegasus-frontend/pegasusx-setup-done`)[0m
+[93m[w] Requested theme `:/themes/pegasus-theme-grid` not found, falling back to default[0m
+[i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)[0m
+[i] qml: Setup: off screen[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: `Chrono Trigger (my own file)` is defined earlier: this file's details filled its gaps[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Finished searching in 0ms[0m
+[i] Pegasus Media: Finished searching in 0ms[0m
+[i] Steam: No installation found[0m
+[i] Steam: Finished searching in 0ms[0m
+[i] GOG: 0 games found[0m
+[i] GOG: Finished searching in 0ms[0m
+[i] EmulationStation: No installation found[0m
+[i] EmulationStation: Finished searching in 0ms[0m
+[i] Logiqx: Finished searching in 0ms[0m
+[i] Lutris: No installation found[0m
+[i] Lutris: Finished searching in 0ms[0m
+[i] Skraper Assets: 0 assets found[0m
+[i] Skraper Assets: Finished searching in 0ms[0m
+[i] Pegasus Favorites: Finished searching in 0ms[0m
+[i] Pegasus Playtime: Finished searching in 0ms[0m
+[93m[w] The collection 'GOG' has no valid games, ignored[0m
+[i] Game list post-processing took 0ms[0m
+[i] Saved game index cache[0m
+[i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Switch` launches with Eden (Standalone) (recommended; none set in its metadata)[0m
+[i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)[0m
+[i] 13 games found[0m
+[i] ROM folders: Background refresh: 0 lists made again in 0 ms[0m
+[i] Scraper: Scraping 1 games into `/home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media` (source: screenscraper, interactive: no, overwrite: yes, ScreenScraper login: missing, LaunchBox database: missing)[0m
+[i] Scraper: Collection `Nintendo SNES (Super Nintendo)`: system `snes`[0m
+[i] qml: [test] scraping "Super Mario World" in "Nintendo SNES (Super Nintendo)": started[0m
+[i] qml: Theme: loaded qrc:///themes/pegasus-theme-grid/theme.qml[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/switch2.svg[0m
+[i] Scraper: Checksum made (2 KB, 0.0 s)[0m
+[i] Scraper: Hasheous: "Banjo-Kazooie" (sources: IGDB, TheGamesDb, RetroAchievements, GiantBomb, Steam, GOG, EpicGameStore, Wikipedia, SteamGridDb, ScreenScraper, LaunchBox, MobyGames, Libretro, 0.3 s)[0m
+[i] Scraper: Hasheous: IGDB 2148[0m
+[i] Scraper: libretro: the list of `Nintendo - Super Nintendo Entertainment System/Named_Boxarts` answered 404[0m
+[i] Scraper: libretro: Named_Boxarts: no match among 0 names[0m
+[i] Scraper: libretro: the list of `Nintendo - Super Nintendo Entertainment System/Named_Snaps` answered 404[0m
+[i] Scraper: libretro: Named_Snaps: no match among 0 names[0m
+[i] Scraper: libretro: the list of `Nintendo - Super Nintendo Entertainment System/Named_Titles` answered 404[0m
+[i] Scraper: libretro: Named_Titles: no match among 0 names[0m
+[i] Scraper: Game done in 0.8 s: not found[0m
+[i] Scraper: Done: 0 saved, 1 not found, 0 failed, 0 placeholder pictures not saved[0m
+[i] Updater: This is build 2175, the newest is 2288[0m

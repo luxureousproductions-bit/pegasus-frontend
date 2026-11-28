@@ -1,0 +1,75 @@
+058541b7509568a43c75e6924b4d2921  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/marquees/Super Mario World (USA).png
+05fc7d4eff88cc3e87de1102797c4b91  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/my snes picks/miximages/Chrono Trigger (USA).png
+0720b61f635f688996d35806d0c9db9f  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/backcovers/Donkey Kong Bananza.jpg
+1118ceddc75ec7b55af99d31d1416246  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/sony_playstation.json
+11d17cbbe3ead1bc42ea6e33cfc83449  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-themes/cache.json
+12f8459513b3aa67198ffe4b69ed87b0  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/nintendo_switch_2.json
+13230b22d1d4975a03d5c53a9af23b0e  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/status.json
+158f438150125aacfa21280c78021bfe  /home/runner/work/_temp/px/home/.config/pegasus-frontend/imported/snes/gamelist.xml
+17e2f17455d1e3e6d38a638f24d0f45a  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/physicalmedia/Super Mario World (USA).png
+2a10d3a2285a29f1ae84698b53f41f41  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/fanart/Super Mario World (USA).jpg
+2a57c4b111f95cc426d051c3049617b5  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/titlescreens/Super Mario World (USA).png
+2e075d26bed87bc6d3b50421131c6310  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/miximages/Star Fox 64 (USA).png
+32f0b17775feacb23e9651e4854c215c  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/nintendo_game_boy_advance.json
+394998802a99720cf2e7ec0a2eb3f13f  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/covers/Super Mario World (USA).png
+3c462121cedcb1a41553f9488375cfca  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/Metadata.zip
+428e0dd7b1117855d30af9bf8d563083  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/old-metadata-20261128-053221/game_dirs.txt
+463f8e747be7af944dd5029d700a08fb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/gc/metadata.pegasus.txt.edit.20261128-053528
+4a97bf6d20838049267d66e78d7c2697  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/backcovers/Super Mario World (USA).jpg
+563e8102275a738ccc88c63d5924f0b8  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/3dboxes/Super Mario World (USA).png
+5804934aea510b686305b2e5a60e0d54  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt
+585cd47972ef777f785a54f6b7bea9fc  /home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt
+585cd47972ef777f785a54f6b7bea9fc  /home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt.pxgood
+5c430e0cdf4755b587dbb3e1e22c00f9  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/snes/metadata.pegasus.txt.remove.20261128-053908
+60da1ba62efec06bfb964c299386ab4e  /home/runner/work/_temp/px/home/.config/pegasus-frontend/themes/FakeXBSX/theme.qml
+641164dac1d19b2c6c24df42f8cca137  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/snes/metadata.pegasus.txt.restore.20261128-053910
+67f8ba7132ac9489583b86d87349d679  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/nintendo_64.json
+69df8c5c6b1d95944216f881544ac7b9  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/switch2/metadata.pegasus.txt.scrape.20261128-054111
+6d83f72138a62291be13ac2440127a03  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt
+715c15e7e4da6034ce89b7ddeaba15e9  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt
+72550949e35889bfdebf30d30e50eccb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx.ini
+72550949e35889bfdebf30d30e50eccb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx.ini.pxgood
+7271daeada209384246e9e8101bc7be2  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/miximages/Donkey Kong Bananza.png
+752936371af66b7cf99532c282f214d0  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-android-kinds.json
+752936371af66b7cf99532c282f214d0  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-android-kinds.json.pxgood
+7963d9a49db7d53c6b5e8605e434581c  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/covers/Fake.png
+80e5a3a0c53dcfa3cd38c9c2eb60f550  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt
+84f620328b6edbd05cef59fbc8b729c8  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/spines/Super Mario World (USA).jpg
+88cf5262b2d44ea3a1f8640b6537e011  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/fanart/Donkey Kong Bananza.jpg
+8ce3e5c8acf39974bf33928db027bbd9  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/marquees/Donkey Kong Bananza.png
+8efa4741655d8ef6585f611f560b3faf  /home/runner/work/_temp/px/home/.config/pegasus-frontend/game_dirs.txt
+8efa4741655d8ef6585f611f560b3faf  /home/runner/work/_temp/px/home/.config/pegasus-frontend/game_dirs.txt.pxgood
+8f512ea345e687025d6e640e6ef5b42a  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/super_nintendo_entertainment_system.json
+9add26c798a2ba7f2f9e9a8278dd9df6  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/spines/Donkey Kong Bananza.jpg
+a331e83c07584e6c81bcd110fa82e1a3  /home/runner/work/_temp/px/home/.config/pegasus-frontend/esde-lists/es_find_rules.xml
+a4a82314d15ac741814982ac533df164  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-android-apps.json
+a4a82314d15ac741814982ac533df164  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-android-apps.json.pxgood
+a8dbf63347d33ccfb20793b5a0816b52  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/screenshots/Super Mario World (USA).png
+ace41a73ccf67f58c3f2000cc58a090b  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/snes/metadata.pegasus.txt.edit.20261128-053522
+ae1ece1b0b302877c7ce4c6ee8175ebb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-rom-folders.txt
+ae1ece1b0b302877c7ce4c6ee8175ebb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-rom-folders.txt.pxgood
+af1bf821dbf9f87f420752f97ba42b05  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/platforms.json
+b10329505b27dbef179995175e3fb58a  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-root-asked
+b9cd1dc75cfcd03d5c6717c097d7e2f8  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/switch2/metadata.pegasus.txt.scrape.20261128-054123
+b9cd1dc75cfcd03d5c6717c097d7e2f8  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt
+bec649c55e636e659d8357c6b15f3885  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/nintendo_gamecube.json
+c153f0817827461918c072f6eb0475d5  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/psx/metadata.pegasus.txt.edit.20261128-053522
+c41c1e2c05dc8f32999f6286ddc3d502  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/imported-folders.json
+c4b5e5f18f088d167801b0b371968810  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt
+c6877699077fd3f6a47f1bf22655beb8  /home/runner/work/_temp/px/home/.config/pegasus-frontend/esde-lists/es_systems.xml
+c6f56f8ddb66dc4363cbaba005f931c2  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-hidden.json
+c6f56f8ddb66dc4363cbaba005f931c2  /home/runner/work/_temp/px/home/.config/pegasus-frontend/pegasusx-hidden.json.pxgood
+cf6e58ae53ab53d09c7501096c646bf1  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/n64/miximages/Mario Kart 64 (USA).png
+d0415d3e792784cd6461898cdf93b0cd  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/snes/metadata.pegasus.txt.scrape.20261128-054057
+d41d8cd98f00b204e9800998ecf8427e  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/.nomedia
+dcb5a81f816d05f67508eb6633d8ca53  /home/runner/work/_temp/px/home/.config/pegasus-frontend/backup/snes/metadata.pegasus.txt.remove.20261128-053910
+dfee3fb67f671a13fe25b8d4ebb0fb5a  /home/runner/work/_temp/px/home/.config/pegasus-frontend/launchbox/index/nintendo_switch.json
+e01e0848295fc48e2fa9481fe8f131eb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/banners/Super Mario World (USA).png
+e0afe69d81619cabeb75ae22cd27e16a  /home/runner/work/_temp/px/home/.config/pegasus-frontend/metadata/library-index.json
+e63936ec6717137910ee6fe8a46121eb  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/.migrated
+e649fe1bb345d176f6d97c4dac5c92ff  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/android/metadata.pegasus.txt
+ebab2a0dc53bf666e242547a97ab957d  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt
+ee6db9ca889f02137f39b62003f6704d  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/covers/Donkey Kong Bananza.jpg
+f0ca09d4145156b9d5942131fdff9693  /home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt
+f410334e723586427a97f234cb1cc613  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/snes/miximages/Super Mario World (USA).png
+f9d8a3b14eb179c3664fd079f082da43  /home/runner/work/_temp/px/home/.config/pegasus-frontend/downloaded_media/switch2/screenshots/Donkey Kong Bananza.png

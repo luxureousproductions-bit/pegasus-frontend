@@ -1,0 +1,11 @@
+collection: Android
+shortname: android
+
+game: Notes
+file: android:com.test.notes
+
+game: Drift Racer
+file: android:com.test.drift
+
+game: Retro Emu
+file: android:com.test.retroarch

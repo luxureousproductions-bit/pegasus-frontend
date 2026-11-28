@@ -1,0 +1,7 @@
+{
+    "apps": [
+        "com.test.drift",
+        "com.test.notes",
+        "com.test.retroarch"
+    ]
+}

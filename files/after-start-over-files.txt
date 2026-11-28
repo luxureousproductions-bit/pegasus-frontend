@@ -1,0 +1,3 @@
+pegasusx-root.txt
+pegasusx-root.txt.pxgood
+themes/FakeXBSX/theme.qml

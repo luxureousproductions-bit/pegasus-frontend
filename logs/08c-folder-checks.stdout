@@ -1,0 +1,148 @@
+[i] Pegasus X 3fd7df25 build 2175 (2026-11-28)[0m
+[i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)[0m
+[i] Qt version 5.15.3[0m
+[i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)[0m
+[i] Found locale `ar`[0m
+[i] Found locale `bs`[0m
+[i] Found locale `ca`[0m
+[i] Found locale `de`[0m
+[i] Found locale `en-GB`[0m
+[i] Found locale `en`[0m
+[i] Found locale `es`[0m
+[i] Found locale `fr`[0m
+[i] Found locale `hr`[0m
+[i] Found locale `hu`[0m
+[i] Found locale `it`[0m
+[i] Found locale `ja`[0m
+[i] Found locale `ko`[0m
+[i] Found locale `lt`[0m
+[i] Found locale `nl`[0m
+[i] Found locale `pt-BR`[0m
+[i] Found locale `ru`[0m
+[i] Found locale `sr@Latn`[0m
+[i] Found locale `sv`[0m
+[i] Found locale `zh-TW`[0m
+[i] Found locale `zh`[0m
+[i] Locale set to `en`[0m
+[i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`[0m
+[i] Recovery: `pegasusx.ini`: last good copy made (`pegasusx.ini.pxgood`)[0m
+[i] Setup: done (`/home/runner/work/_temp/px/home/.local/share/pegasus-frontend/pegasus-frontend/pegasusx-setup-done`)[0m
+[i] Test: Folders: OK: the SNES system (made from ES-DE) is there[0m
+[i] Test: Folders: OK: refused the same folder with a trailing slash: "/home/runner/work/_temp/px/storage/ROMs/snes is already one of Nintendo SNES (Super Nintendo)'s folders."[0m
+[i] Test: Folders: OK: refused the same folder written another way: "/home/runner/work/_temp/px/storage/ROMs/snes is already one of Nintendo SNES (Super Nintendo)'s folders."[0m
+[i] Test: Folders: OK: refused a folder inside a listed one: "That folder is inside /home/runner/work/_temp/px/storage/ROMs/snes (a folder of Nintendo SNES (Super Nintendo)), which is read already."[0m
+[i] Test: Folders: OK: refused a folder with a listed one inside: "That folder has /home/runner/work/_temp/px/storage/ROMs/gba (a folder of Nintendo Game Boy Advance) inside it. Pick the folder next to it, not around it."[0m
+[i] Test: Folders: OK: refused another system's folder: "That's the Nintendo Game Boy Advance folder. Pick Nintendo SNES (Super Nintendo)'s own folder."[0m
+[i] Test: Folders: OK: refused a folder with only other systems' folders: "That folder has other systems' folders in it (Nintendo Game Boy Advance, Sony PlayStation), none for Nintendo SNES (Super Nintendo). Pick Nintendo SNES (Super Nintendo)'s own folder."[0m
+[i] Test: Folders: OK: nothing written by the refusals[0m
+[i] Test: Folders: OK: the SD card's folder can be added as snes[0m
+[i] ES-DE import: Found `/home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 2 games added, 0 already there[0m
+[i] Test: Folders: OK: added: 2 games read, error ``[0m
+[i] Test: Folders: OK: the SD card's folder is listed[0m
+[i] Test: Folders: OK: its game is in[0m
+[i] Test: Folders: OK: every entry there before is as it was (details, art, emulators, launch)[0m
+[i] Test: Folders: OK: the same file name in both folders: two entries[0m
+[i] Test: Folders: OK: Folders view: [storage/ROMs/snes internal 3 games] [sdcard/ROMs/snes sd 2 games][0m
+[i] Test: Folders: OK: a folder with snes and gba folders in it: reads /home/runner/work/_temp/px/sdcard/Mixed/snes[0m
+[i] ES-DE import: Found `/home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 1 games added, 0 already there[0m
+[i] Test: Folders: OK: only its SNES games came in[0m
+[i] Test: Folders: OK: the GBA system is as it was[0m
+[93m[w] ES-DE import: No gamelist file found for system `gba`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`: 0 games added, 1 already there[0m
+[i] ES-DE import: Found `/home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 0 games added, 3 already there[0m
+[93m[w] ES-DE import: No gamelist file found for system `n64`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`: 0 games added, 2 already there[0m
+[i] ES-DE import: Found `/home/runner/work/_temp/px/MyGames/psx/gamelist.xml`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`: 0 games added, 3 already there[0m
+[93m[w] ES-DE import: No gamelist file found for system `switch`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`: 0 games added, 1 already there[0m
+[93m[w] ES-DE import: No gamelist file found for system `switch2`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`: 0 games added, 1 already there[0m
+[i] ROM folders: 6 game lists made again (new or removed games)[0m
+[i] Test: Folders: OK: SD card out, rescan: its games and folder kept, still watched[0m
+[i] Test: Folders: OK: SD card out: the Folders view says not found, with its games counted[0m
+[i] Game directory: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: the ROM folder `/home/runner/work/_temp/px/sdcard/Mixed/snes` taken out (0 games removed, 1 kept)[0m
+[i] Test: Folders: OK: stop watching a folder: no line left, its games stay[0m
+[i] Game directory: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: the ROM folder `/home/runner/work/_temp/px/sdcard/Mixed/snes` taken out (1 games removed, 0 kept)[0m
+[i] Game directory: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: the ROM folder `/home/runner/work/_temp/px/sdcard/ROMs/snes` taken out (2 games removed, 0 kept)[0m
+[i] Test: Folders: OK: remove a folder and its games: 2 games out, no line left[0m
+[i] Test: Folders: OK: the first folder and its games are as they were[0m
+[i] Test: Folders: OK: removed folders are no longer watched[0m
+[i] Test: Folders: OK: the GBA system is as it was[0m
+[i] Test: Folders: done[0m
+[i] Test: Own metadata: OK: the SNES system is there[0m
+[i] Test: Own metadata: OK: the folder can be added ``[0m
+[i] ES-DE import: Found `/home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 2 games added, 0 already there[0m
+[i] Test: Own metadata: OK: added: error ``[0m
+[i] Test: Own metadata: OK: the games, with the titles from your file[0m
+[i] Test: Own metadata: OK: its fields (developer, publisher, genre, summary, an x- field)[0m
+[i] Test: Own metadata: OK: its box art, as a full path[0m
+[i] Test: Own metadata: OK: a game's relative launch command, made a full path[0m
+[i] Test: Own metadata: OK: a game's relative workdir, made a full path[0m
+[i] Test: Own metadata: OK: a game's own launch and workdir, as they are[0m
+[i] Test: Own metadata: OK: the system's other games are as they were[0m
+[i] Test: Own metadata: OK: read: title, developer, players, release[0m
+[i] Test: Own metadata: OK: read: box art[0m
+[i] Test: Own metadata: OK: read: x-test-field[0m
+[i] Test: Own metadata: OK: read: Alpha's launch `/home/runner/work/_temp/px/OwnMeta/snes/run-alpha.sh "{file.path}"`, workdir `/home/runner/work/_temp/px/OwnMeta/snes/tools`[0m
+[i] Test: Own metadata: OK: read: Beta's launch `/opt/emu/beta {file.path}`, workdir `/tmp/beta`[0m
+[i] Test: Own metadata: OK: the copy edited[0m
+[i] Game directory: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 2 games taken out (restore)[0m
+[i] ES-DE import: Found `/home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml`[0m
+[i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 2 games added, 0 already there[0m
+[i] Restore: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 2 games restored from the metadata files in `/home/runner/work/_temp/px/OwnMeta/snes`[0m
+[i] Test: Own metadata: OK: restored 2 games, error ``[0m
+[i] Test: Own metadata: OK: the edit is replaced by your file's developer[0m
+[i] Test: Own metadata: OK: each game once[0m
+[i] Test: Own metadata: OK: launch and workdir again[0m
+[i] Test: Own metadata: OK: the system's other games are still as they were[0m
+[i] Test: Own metadata: OK: a copy of the file in backup/snes/ first[0m
+[i] Test: Own metadata: OK: a folder that isn't the system's: refused `That folder isn't one of this system's.`, nothing written[0m
+[i] Game directory: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: the ROM folder `/home/runner/work/_temp/px/OwnMeta/snes` taken out (2 games removed, 0 kept)[0m
+[i] Test: Own metadata: OK: taken out again[0m
+[i] Test: Own metadata: done[0m
+[93m[w] Requested theme `:/themes/pegasus-theme-grid` not found, falling back to default[0m
+[i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)[0m
+[i] qml: Setup: off screen[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: `Chrono Trigger (my own file)` is defined earlier: this file's details filled its gaps[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Finished searching in 0ms[0m
+[i] Pegasus Media: Finished searching in 0ms[0m
+[i] Steam: No installation found[0m
+[i] Steam: Finished searching in 0ms[0m
+[i] GOG: 0 games found[0m
+[i] GOG: Finished searching in 0ms[0m
+[i] EmulationStation: No installation found[0m
+[i] EmulationStation: Finished searching in 0ms[0m
+[i] Logiqx: Finished searching in 0ms[0m
+[i] Lutris: No installation found[0m
+[i] Lutris: Finished searching in 0ms[0m
+[i] Skraper Assets: 0 assets found[0m
+[i] Skraper Assets: Finished searching in 0ms[0m
+[i] Pegasus Favorites: Finished searching in 0ms[0m
+[i] Pegasus Playtime: Finished searching in 0ms[0m
+[93m[w] The collection 'GOG' has no valid games, ignored[0m
+[i] Game list post-processing took 0ms[0m
+[i] Saved game index cache[0m
+[i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Switch` launches with Eden (Standalone) (recommended; none set in its metadata)[0m
+[i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)[0m
+[i] 13 games found[0m
+[i] ROM folders: Background refresh: 0 lists made again in 0 ms[0m
+[i] qml: Theme: loaded qrc:///themes/pegasus-theme-grid/theme.qml[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/switch2.svg[0m
+[i] qml: [timing] GameDirectory.qml opened in 25 ms[0m

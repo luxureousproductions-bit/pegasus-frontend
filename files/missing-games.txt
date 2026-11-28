@@ -1,0 +1,6 @@
+hide: written general.show-missing-games: false general.verify-files: true 
+show: written general.show-missing-games: true general.verify-files: true 
+dontcheck: written general.show-missing-games: false general.verify-files: false 
+dontcheck-show: written general.show-missing-games: true general.verify-files: false 
+picked Show: general.show-missing-games: true general.verify-files: true 
+picked Don't check: general.show-missing-games: true general.verify-files: false 

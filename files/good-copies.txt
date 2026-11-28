@@ -1,0 +1,7 @@
+game_dirs.txt.pxgood
+pegasusx-android-apps.json.pxgood
+pegasusx-android-kinds.json.pxgood
+pegasusx-hidden.json.pxgood
+pegasusx-rom-folders.txt.pxgood
+pegasusx.ini.pxgood
+settings.txt.pxgood

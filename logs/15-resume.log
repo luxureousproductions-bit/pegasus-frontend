@@ -1,0 +1,55 @@
+2026-11-28T05:43:16 [i] Pegasus X 3fd7df25 build 2175 (2026-11-28)
+2026-11-28T05:43:16 [i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)
+2026-11-28T05:43:16 [i] Qt version 5.15.3
+2026-11-28T05:43:16 [i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)
+2026-11-28T05:43:16 [i] Found locale `ar`
+2026-11-28T05:43:16 [i] Found locale `bs`
+2026-11-28T05:43:16 [i] Found locale `ca`
+2026-11-28T05:43:16 [i] Found locale `de`
+2026-11-28T05:43:16 [i] Found locale `en-GB`
+2026-11-28T05:43:16 [i] Found locale `en`
+2026-11-28T05:43:16 [i] Found locale `es`
+2026-11-28T05:43:16 [i] Found locale `fr`
+2026-11-28T05:43:16 [i] Found locale `hr`
+2026-11-28T05:43:16 [i] Found locale `hu`
+2026-11-28T05:43:16 [i] Found locale `it`
+2026-11-28T05:43:16 [i] Found locale `ja`
+2026-11-28T05:43:16 [i] Found locale `ko`
+2026-11-28T05:43:16 [i] Found locale `lt`
+2026-11-28T05:43:16 [i] Found locale `nl`
+2026-11-28T05:43:16 [i] Found locale `pt-BR`
+2026-11-28T05:43:16 [i] Found locale `ru`
+2026-11-28T05:43:16 [i] Found locale `sr@Latn`
+2026-11-28T05:43:16 [i] Found locale `sv`
+2026-11-28T05:43:16 [i] Found locale `zh-TW`
+2026-11-28T05:43:16 [i] Found locale `zh`
+2026-11-28T05:43:16 [i] Locale set to `en`
+2026-11-28T05:43:16 [i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`
+2026-11-28T05:43:16 [w] No `theme.cfg` file found in `/home/runner/work/_temp/px/home/.config/pegasus-frontend/themes/FakeXBSX/`, theme skipped
+2026-11-28T05:43:16 [i] Setup: not done, goes on at step 2
+2026-11-28T05:43:16 [w] Requested theme `:/themes/pegasus-theme-grid` not found, falling back to default
+2026-11-28T05:43:16 [i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)
+2026-11-28T05:43:16 [i] qml: Setup: off screen
+2026-11-28T05:43:16 [i] qml: Setup: open (no theme until it's finished or skipped)
+2026-11-28T05:43:16 [i] Setup: open: the library is read when setup asks for it
+2026-11-28T05:43:16 [i] qml: Setup: on screen
+2026-11-28T05:43:28 [i] Reloading the library...
+2026-11-28T05:43:28 [i] Setup: skipped at step 1: the theme loads
+2026-11-28T05:43:28 [i] qml: Setup: off screen
+2026-11-28T05:43:28 [i] Loaded game index cache
+2026-11-28T05:43:28 [i] Skipping full scan due to game index cache
+2026-11-28T05:43:28 [i] Running lightweight provider after cache restore: Pegasus Favorites
+2026-11-28T05:43:28 [i] Running lightweight provider after cache restore: Pegasus Playtime
+2026-11-28T05:43:28 [i] Library: Android: 3 entries, 0 duplicates left out
+2026-11-28T05:43:28 [i] Library: Hidden: 1 games, 0 collections
+2026-11-28T05:43:28 [i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)
+2026-11-28T05:43:28 [i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)
+2026-11-28T05:43:28 [i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)
+2026-11-28T05:43:28 [i] Library: `Nintendo Switch` launches with Eden (Standalone) (recommended; none set in its metadata)
+2026-11-28T05:43:28 [i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)
+2026-11-28T05:43:28 [i] Game list cache restore took 3ms
+2026-11-28T05:43:28 [i] 15 games found
+2026-11-28T05:43:28 [i] ROM folders: Background refresh: 0 lists made again in 1 ms
+2026-11-28T05:43:28 [i] qml: Theme: loaded qrc:///themes/pegasus-theme-grid/theme.qml
+2026-11-28T05:43:28 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg
+2026-11-28T05:43:28 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/switch2.svg

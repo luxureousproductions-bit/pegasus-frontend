@@ -1,0 +1,7 @@
+{
+    "apps": [
+        "com.test.camera",
+        "com.test.drift",
+        "com.test.retroarch"
+    ]
+}

@@ -1,0 +1,11 @@
+# Pegasus X game directory: Nintendo Switch
+# Made by Pegasus X from the ROM folder /home/runner/work/_temp/px/MyGames.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/MyGames/switch
+
+collection: Nintendo Switch
+shortname: switch
+
+game: Super Mario Odyssey
+file: /home/runner/work/_temp/px/MyGames/switch/Super Mario Odyssey.nsp
+

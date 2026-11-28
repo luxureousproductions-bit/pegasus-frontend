@@ -1,0 +1,76 @@
+2026-11-28T05:45:03 [i] Pegasus X 3fd7df25 build 2175 (2026-11-28)
+2026-11-28T05:45:03 [i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)
+2026-11-28T05:45:03 [i] Qt version 5.15.3
+2026-11-28T05:45:03 [i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)
+2026-11-28T05:45:03 [i] Found locale `ar`
+2026-11-28T05:45:03 [i] Found locale `bs`
+2026-11-28T05:45:03 [i] Found locale `ca`
+2026-11-28T05:45:03 [i] Found locale `de`
+2026-11-28T05:45:03 [i] Found locale `en-GB`
+2026-11-28T05:45:03 [i] Found locale `en`
+2026-11-28T05:45:03 [i] Found locale `es`
+2026-11-28T05:45:03 [i] Found locale `fr`
+2026-11-28T05:45:03 [i] Found locale `hr`
+2026-11-28T05:45:03 [i] Found locale `hu`
+2026-11-28T05:45:03 [i] Found locale `it`
+2026-11-28T05:45:03 [i] Found locale `ja`
+2026-11-28T05:45:03 [i] Found locale `ko`
+2026-11-28T05:45:03 [i] Found locale `lt`
+2026-11-28T05:45:03 [i] Found locale `nl`
+2026-11-28T05:45:03 [i] Found locale `pt-BR`
+2026-11-28T05:45:03 [i] Found locale `ru`
+2026-11-28T05:45:03 [i] Found locale `sr@Latn`
+2026-11-28T05:45:03 [i] Found locale `sv`
+2026-11-28T05:45:03 [i] Found locale `zh-TW`
+2026-11-28T05:45:03 [i] Found locale `zh`
+2026-11-28T05:45:03 [i] Locale set to `en`
+2026-11-28T05:45:03 [i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`
+2026-11-28T05:45:03 [i] Recovery: `game_dirs.txt`: last good copy made (`game_dirs.txt.pxgood`)
+2026-11-28T05:45:03 [i] Setup: done (`/home/runner/work/_temp/px/home/.local/share/pegasus-frontend/pegasus-frontend/pegasusx-setup-done`)
+2026-11-28T05:45:03 [w] Requested theme `:/themes/pegasus-theme-grid` not found, falling back to default
+2026-11-28T05:45:03 [i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)
+2026-11-28T05:45:03 [i] qml: Setup: off screen
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/MetaTest/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/android/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: `Chrono Trigger (my own file)` is defined earlier: this file's details filled its gaps
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`
+2026-11-28T05:45:03 [i] Pegasus Metafiles: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Pegasus Media: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Steam: No installation found
+2026-11-28T05:45:03 [i] Steam: Finished searching in 0ms
+2026-11-28T05:45:03 [i] GOG: 0 games found
+2026-11-28T05:45:03 [i] GOG: Finished searching in 0ms
+2026-11-28T05:45:03 [i] EmulationStation: No installation found
+2026-11-28T05:45:03 [i] EmulationStation: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Logiqx: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Lutris: No installation found
+2026-11-28T05:45:03 [i] Lutris: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Skraper Assets: 0 assets found
+2026-11-28T05:45:03 [i] Skraper Assets: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Pegasus Favorites: Finished searching in 0ms
+2026-11-28T05:45:03 [i] Pegasus Playtime: Finished searching in 0ms
+2026-11-28T05:45:03 [w] The collection 'GOG' has no valid games, ignored
+2026-11-28T05:45:03 [i] Game list post-processing took 0ms
+2026-11-28T05:45:03 [i] Saved game index cache
+2026-11-28T05:45:03 [i] Library: Android: 3 entries, 0 duplicates left out
+2026-11-28T05:45:03 [i] Library: Hidden: 1 games, 0 collections
+2026-11-28T05:45:03 [i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)
+2026-11-28T05:45:03 [i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)
+2026-11-28T05:45:03 [i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)
+2026-11-28T05:45:03 [i] Library: `Nintendo Switch` launches with Eden (Standalone) (recommended; none set in its metadata)
+2026-11-28T05:45:03 [i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)
+2026-11-28T05:45:03 [i] 23 games found
+2026-11-28T05:45:03 [i] ROM folders: Background refresh: 0 lists made again in 0 ms
+2026-11-28T05:45:03 [i] qml: Theme: loaded qrc:///themes/pegasus-theme-grid/theme.qml
+2026-11-28T05:45:03 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg
+2026-11-28T05:45:03 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/metatest.svg
+2026-11-28T05:45:03 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/switch2.svg
+2026-11-28T05:45:05 [i] Library: 314 words for the keyboard's suggestions (0 ms)
+2026-11-28T05:45:05 [w] qrc:/frontend/menu/settings/MetadataEditor.qml:3563:9: QML OnScreenKeyboard: Binding loop detected for property "suggestions"

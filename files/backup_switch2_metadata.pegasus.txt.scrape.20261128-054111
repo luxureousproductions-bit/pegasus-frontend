@@ -1,0 +1,11 @@
+# Pegasus X game directory: Nintendo Switch 2
+# Made by Pegasus X from the ROM folder /home/runner/work/_temp/px/MyGames.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+# folder: /home/runner/work/_temp/px/MyGames/switch2
+
+collection: Nintendo Switch 2
+shortname: switch2
+
+game: Donkey Kong Bananza
+file: /home/runner/work/_temp/px/MyGames/switch2/Donkey Kong Bananza.nup
+

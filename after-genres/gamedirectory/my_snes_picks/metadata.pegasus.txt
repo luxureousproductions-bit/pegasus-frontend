@@ -1,0 +1,12 @@
+# Pegasus X game directory: My SNES picks
+# Made from your library on 2026-11-28T05:32:21.
+# Pegasus X writes here (imports, Settings > Library, the scraper).
+
+collection: My SNES picks
+shortname: my snes picks
+
+game: Chrono Trigger (my own file)
+file: /home/runner/work/_temp/px/storage/ROMs/snes/Chrono Trigger (USA).sfc
+description: Written in my own metadata file: it wins over the ES-DE import.
+assets.screenshot: /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/screenshots/Chrono Trigger (USA).png
+

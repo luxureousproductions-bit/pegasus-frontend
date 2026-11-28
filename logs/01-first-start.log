@@ -1,0 +1,111 @@
+2026-11-28T05:31:38 [i] Pegasus X 3fd7df25 build 2175 (2026-11-28)
+2026-11-28T05:31:38 [i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)
+2026-11-28T05:31:38 [i] Qt version 5.15.3
+2026-11-28T05:31:38 [i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)
+2026-11-28T05:31:38 [i] Found locale `ar`
+2026-11-28T05:31:38 [i] Found locale `bs`
+2026-11-28T05:31:38 [i] Found locale `ca`
+2026-11-28T05:31:38 [i] Found locale `de`
+2026-11-28T05:31:38 [i] Found locale `en-GB`
+2026-11-28T05:31:38 [i] Found locale `en`
+2026-11-28T05:31:38 [i] Found locale `es`
+2026-11-28T05:31:38 [i] Found locale `fr`
+2026-11-28T05:31:38 [i] Found locale `hr`
+2026-11-28T05:31:38 [i] Found locale `hu`
+2026-11-28T05:31:38 [i] Found locale `it`
+2026-11-28T05:31:38 [i] Found locale `ja`
+2026-11-28T05:31:38 [i] Found locale `ko`
+2026-11-28T05:31:38 [i] Found locale `lt`
+2026-11-28T05:31:38 [i] Found locale `nl`
+2026-11-28T05:31:38 [i] Found locale `pt-BR`
+2026-11-28T05:31:38 [i] Found locale `ru`
+2026-11-28T05:31:38 [i] Found locale `sr@Latn`
+2026-11-28T05:31:38 [i] Found locale `sv`
+2026-11-28T05:31:38 [i] Found locale `zh-TW`
+2026-11-28T05:31:38 [i] Found locale `zh`
+2026-11-28T05:31:38 [i] Locale set to `en`
+2026-11-28T05:31:38 [i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`
+2026-11-28T05:31:38 [i] Recovery: `pegasusx.ini`: last good copy made (`pegasusx.ini.pxgood`)
+2026-11-28T05:31:38 [i] Recovery: `game_dirs.txt`: last good copy made (`game_dirs.txt.pxgood`)
+2026-11-28T05:31:38 [i] Setup: not done; Pegasus data found in `/home/runner/work/_temp/px/home/.config/pegasus-frontend`: step 1 asks to use it or start fresh
+2026-11-28T05:31:38 [i] Library: Android apps to import: a new install, no app picked yet
+2026-11-28T05:31:38 [i] Genres: the hidden genres of an older build were removed (no genre is hidden now)
+2026-11-28T05:31:38 [w] ES-DE import: No gamelist file found for system `gba`
+2026-11-28T05:31:38 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`: 1 games added, 0 already there
+2026-11-28T05:31:38 [i] ES-DE import: Found `/home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml`
+2026-11-28T05:31:38 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: 3 games added, 0 already there
+2026-11-28T05:31:38 [i] Test: ES-DE import: 2 systems, 4 games, error ``
+2026-11-28T05:31:38 [i] Test: ROM folder `/home/runner/work/_temp/px/MyGames`: systems n64=2, switch=1, switch2=1, psx=6
+2026-11-28T05:31:38 [w] ES-DE import: No gamelist file found for system `n64`
+2026-11-28T05:31:38 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`: 2 games added, 0 already there
+2026-11-28T05:31:38 [i] ES-DE import: Found `/home/runner/work/_temp/px/MyGames/psx/gamelist.xml`
+2026-11-28T05:31:38 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`: 2 games added, 0 already there
+2026-11-28T05:31:38 [w] ES-DE import: No gamelist file found for system `switch`
+2026-11-28T05:31:38 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`: 1 games added, 0 already there
+2026-11-28T05:31:38 [w] ES-DE import: No gamelist file found for system `switch2`
+2026-11-28T05:31:38 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`: 1 games added, 0 already there
+2026-11-28T05:31:38 [i] Test: ROM folder import: 4 systems, 6 games, error ``
+2026-11-28T05:31:38 [i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)
+2026-11-28T05:31:38 [i] qml: Setup: off screen
+2026-11-28T05:31:38 [i] qml: Setup: open (no theme until it's finished or skipped)
+2026-11-28T05:31:38 [i] Setup: open: the library is read when setup asks for it
+2026-11-28T05:31:38 [i] qml: Setup: on screen
+2026-11-28T05:31:57 [i] qml: Setup: the Pegasus data found in /home/runner/work/_temp/px/home/.config/pegasus-frontend is used
+2026-11-28T05:32:07 [i] qml: Game directory: Pick my ROMs folder /home/runner/work/_temp/px/MyGames: 4 systems found, 0 folders not matched
+2026-11-28T05:32:12 [w] ES-DE import: No gamelist file found for system `n64`
+2026-11-28T05:32:12 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`: 0 games added, 2 already there
+2026-11-28T05:32:12 [i] ES-DE import: Found `/home/runner/work/_temp/px/MyGames/psx/gamelist.xml`
+2026-11-28T05:32:12 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`: 0 games added, 2 already there
+2026-11-28T05:32:12 [w] ES-DE import: No gamelist file found for system `switch`
+2026-11-28T05:32:12 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`: 0 games added, 1 already there
+2026-11-28T05:32:12 [w] ES-DE import: No gamelist file found for system `switch2`
+2026-11-28T05:32:12 [i] ES-DE import: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`: 0 games added, 1 already there
+2026-11-28T05:32:21 [i] Reloading the library...
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/Pegasus/gamecube/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/storage/ROMs/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: `Chrono Trigger (my own file)` is defined earlier: this file's details filled its gaps
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Pegasus Metafiles: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Pegasus Media: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Steam: No installation found
+2026-11-28T05:32:21 [i] Steam: Finished searching in 0ms
+2026-11-28T05:32:21 [i] GOG: 0 games found
+2026-11-28T05:32:21 [i] GOG: Finished searching in 0ms
+2026-11-28T05:32:21 [i] EmulationStation: No installation found
+2026-11-28T05:32:21 [i] EmulationStation: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Logiqx: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Lutris: No installation found
+2026-11-28T05:32:21 [i] Lutris: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Skraper Assets: 0 assets found
+2026-11-28T05:32:21 [i] Skraper Assets: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Pegasus Favorites: Finished searching in 0ms
+2026-11-28T05:32:21 [i] Pegasus Playtime: Finished searching in 0ms
+2026-11-28T05:32:21 [w] The collection 'GOG' has no valid games, ignored
+2026-11-28T05:32:21 [i] Game list post-processing took 0ms
+2026-11-28T05:32:21 [i] Saved game index cache
+2026-11-28T05:32:21 [i] Game directory: Making the game directory from the library as it is (8 collections)
+2026-11-28T05:32:21 [i] Game directory: Wrote 2 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 1 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 2 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 1 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 3 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 1 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 1 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: Wrote 2 games to `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`
+2026-11-28T05:32:21 [i] Game directory: The game directory is the only game directory now (13 games); the library is read again
+2026-11-28T05:32:21 [i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)
+2026-11-28T05:32:21 [i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)
+2026-11-28T05:32:21 [i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)
+2026-11-28T05:32:21 [i] Library: `Nintendo Switch` launches with Eden (Standalone) (recommended; none set in its metadata)
+2026-11-28T05:32:21 [i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)
+2026-11-28T05:32:21 [i] 12 games found
+2026-11-28T05:32:28 [i] Setup: finished at step 4: the theme loads
+2026-11-28T05:32:28 [i] qml: Setup: off screen
+2026-11-28T05:32:28 [i] qml: Theme: loaded qrc:///themes/pegasus-theme-grid/theme.qml
+2026-11-28T05:32:28 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg
+2026-11-28T05:32:28 [w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/switch2.svg

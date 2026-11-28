@@ -1,0 +1,7 @@
+nintendo_64.json
+nintendo_game_boy_advance.json
+nintendo_gamecube.json
+nintendo_switch.json
+nintendo_switch_2.json
+sony_playstation.json
+super_nintendo_entertainment_system.json

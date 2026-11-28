@@ -1,0 +1,7 @@
+downloaded_media/switch2/miximages/Donkey Kong Bananza.png
+downloaded_media/switch2/backcovers/Donkey Kong Bananza.jpg
+downloaded_media/switch2/marquees/Donkey Kong Bananza.png
+downloaded_media/switch2/fanart/Donkey Kong Bananza.jpg
+downloaded_media/switch2/spines/Donkey Kong Bananza.jpg
+downloaded_media/switch2/covers/Donkey Kong Bananza.jpg
+downloaded_media/switch2/screenshots/Donkey Kong Bananza.png

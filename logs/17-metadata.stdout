@@ -1,0 +1,109 @@
+[i] Pegasus X 3fd7df25 build 2175 (2026-11-28)[0m
+[i] Running on Ubuntu 22.04.5 LTS (x86_64, xcb)[0m
+[i] Qt version 5.15.3[0m
+[i] Program settings loaded (`/home/runner/work/_temp/px/home/.config/pegasus-frontend/settings.txt`)[0m
+[i] Found locale `ar`[0m
+[i] Found locale `bs`[0m
+[i] Found locale `ca`[0m
+[i] Found locale `de`[0m
+[i] Found locale `en-GB`[0m
+[i] Found locale `en`[0m
+[i] Found locale `es`[0m
+[i] Found locale `fr`[0m
+[i] Found locale `hr`[0m
+[i] Found locale `hu`[0m
+[i] Found locale `it`[0m
+[i] Found locale `ja`[0m
+[i] Found locale `ko`[0m
+[i] Found locale `lt`[0m
+[i] Found locale `nl`[0m
+[i] Found locale `pt-BR`[0m
+[i] Found locale `ru`[0m
+[i] Found locale `sr@Latn`[0m
+[i] Found locale `sv`[0m
+[i] Found locale `zh-TW`[0m
+[i] Found locale `zh`[0m
+[i] Locale set to `en`[0m
+[i] Found theme `Pegasus Grid` at `:/themes/pegasus-theme-grid/`[0m
+[i] Recovery: `game_dirs.txt`: last good copy made (`game_dirs.txt.pxgood`)[0m
+[i] Setup: done (`/home/runner/work/_temp/px/home/.local/share/pegasus-frontend/pegasus-frontend/pegasusx-setup-done`)[0m
+[93m[w] Requested theme `:/themes/pegasus-theme-grid` not found, falling back to default[0m
+[i] Theme set to `Pegasus Grid` (`:/themes/pegasus-theme-grid/`)[0m
+[i] qml: Setup: off screen[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/MetaTest/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/android/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gba/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/gc/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/my_snes_picks/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/n64/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/psx/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/snes/metadata.pegasus.txt`: `Chrono Trigger (my own file)` is defined earlier: this file's details filled its gaps[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Found `/home/runner/work/_temp/px/home/.config/pegasus-frontend/gamedirectory/switch2/metadata.pegasus.txt`[0m
+[i] Pegasus Metafiles: Finished searching in 0ms[0m
+[i] Pegasus Media: Finished searching in 0ms[0m
+[i] Steam: No installation found[0m
+[i] Steam: Finished searching in 0ms[0m
+[i] GOG: 0 games found[0m
+[i] GOG: Finished searching in 0ms[0m
+[i] EmulationStation: No installation found[0m
+[i] EmulationStation: Finished searching in 0ms[0m
+[i] Logiqx: Finished searching in 0ms[0m
+[i] Lutris: No installation found[0m
+[i] Lutris: Finished searching in 0ms[0m
+[i] Skraper Assets: 0 assets found[0m
+[i] Skraper Assets: Finished searching in 0ms[0m
+[i] Pegasus Favorites: Finished searching in 0ms[0m
+[i] Pegasus Playtime: Finished searching in 0ms[0m
+[93m[w] The collection 'GOG' has no valid games, ignored[0m
+[i] Game list post-processing took 0ms[0m
+[i] Saved game index cache[0m
+[i] Library: Android: 3 entries, 0 duplicates left out[0m
+[i] Library: Hidden: 1 games, 0 collections[0m
+[i] Library: `Nintendo 64` launches with RetroArch · Mupen64Plus-Next (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Game Boy Advance` launches with RetroArch · mGBA (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo SNES (Super Nintendo)` launches with RetroArch · Snes9x - Current (recommended; none set in its metadata)[0m
+[i] Library: `Nintendo Switch` launches with Eden (Standalone) (recommended; none set in its metadata)[0m
+[i] Library: `Sony PlayStation` launches with RetroArch · Beetle PSX (recommended; none set in its metadata)[0m
+[i] 23 games found[0m
+[i] ROM folders: Background refresh: 0 lists made again in 0 ms[0m
+[i] qml: Theme: loaded qrc:///themes/pegasus-theme-grid/theme.qml[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/my snes picks.svg[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/metatest.svg[0m
+[93m[w] qrc:/themes/pegasus-theme-grid/layer_platform/PlatformCard.qml:71:5: QML Image: Cannot open: qrc:/themes/pegasus-theme-grid/assets/logos/switch2.svg[0m
+[i] Library: 314 words for the keyboard's suggestions (0 ms)[0m
+[93m[w] qrc:/frontend/menu/settings/MetadataEditor.qml:3563:9: QML OnScreenKeyboard: Binding loop detected for property "suggestions"[0m
+[i] qml: [timing] MetadataEditor.qml opened in 107 ms[0m
+[i] Updater: This is build 2175, the newest is 2288[0m
+[i] Metadata: 23 games read for genres in 0 ms: 5 values[0m
+[i] qml: Genres: 5 values: Action (1), Adventure (1), Platform (2), Platformer (1), Shoot'em Up (2)[0m
+[i] Metadata: 1 suggested merges for genres (5 values) in 0 ms[0m
+[i] qml: Genres: suggested merges (0 ms): maybe: Platform + Platformer[0m
+[i] Metadata: 23 games read for publishers in 0 ms: 5 values[0m
+[i] qml: Publishers: 5 values: Nintendo (4), Nintendo Co., Ltd. (1), Nintendo of America (2), Sega (1), SEGA Europe (1)[0m
+[i] qml: Metadata: tab Publishers[0m
+[i] Metadata: 3 suggested merges for publishers (5 values) in 0 ms[0m
+[i] qml: Publishers: suggested merges (0 ms): near-certain: Nintendo + Nintendo Co., Ltd. | regional: Nintendo + Nintendo of America + Nintendo Co., Ltd. | regional: Sega + SEGA Europe[0m
+[i] Metadata: publishers merged: Nintendo Co., Ltd. shown as "Nintendo" (1 games show it now); no game file changed[0m
+[i] qml: Publishers: merge Nintendo + Nintendo Co., Ltd. shown as "Nintendo": 1 spellings, 1 games[0m
+[i] Metadata: 23 games read for publishers in 0 ms: 4 values[0m
+[i] qml: Publishers: 4 values: Nintendo (5), Nintendo of America (2), Sega (1), SEGA Europe (1)[0m
+[i] Metadata: 2 suggested merges for publishers (4 values) in 0 ms[0m
+[i] qml: Publishers: suggested merges (0 ms): regional: Nintendo + Nintendo of America | regional: Sega + SEGA Europe[0m
+[i] Metadata: publishers merged: Nintendo Co., Ltd. | Nintendo of America shown as "Nintendo" (2 games show it now); no game file changed[0m
+[i] qml: Publishers: merge Nintendo + Nintendo of America shown as "Nintendo": 2 spellings, 2 games[0m
+[i] Metadata: 23 games read for publishers in 0 ms: 3 values[0m
+[i] qml: Publishers: 3 values: Nintendo (6), Sega (1), SEGA Europe (1)[0m
+[i] Metadata: 1 suggested merges for publishers (3 values) in 0 ms[0m
+[i] qml: Publishers: suggested merges (0 ms): regional: Sega + SEGA Europe[0m
+[i] Metadata: 23 games read for developers in 0 ms: 6 values[0m
+[i] qml: Developers: 6 values: Hudson Soft (1), HudsonSoft (1), Nintendo EAD (3), Nintendo EPD (1), Sega (1), Sega AM2 (2)[0m
+[i] qml: Metadata: tab Developers[0m
+[i] Metadata: 2 suggested merges for developers (6 values) in 0 ms[0m
+[i] qml: Developers: suggested merges (0 ms): maybe: Nintendo EAD + Nintendo EPD | maybe: Hudson Soft + HudsonSoft[0m
+[i] Metadata: 23 games read for publishers in 0 ms: 3 values[0m
+[i] qml: Publishers: 3 values: Nintendo (6), Sega (1), SEGA Europe (1)[0m
+[i] qml: Metadata: tab Publishers[0m
+[i] Metadata: 1 suggested merges for publishers (3 values) in 0 ms[0m
+[i] qml: Publishers: suggested merges (0 ms): regional: Sega + SEGA Europe[0m

@@ -1,0 +1,39 @@
+004fab8fc6b7b284b55c3a495670ce4a  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/3dboxes/Super Mario World (USA).png
+027be7ac20f4b1c4620a68d4ba879ee5  /home/runner/work/_temp/px/MyGames/psx/Final Fantasy VII (USA) (Disc 2).bin
+10bb6763c307d70024095ff8383e9070  /home/runner/work/_temp/px/MyGames/psx/Crash Bandicoot (USA).chd
+11026e2718c7d168252911df1ac2e0ff  /home/runner/work/_temp/px/storage/ROMs/snes/Chrono Trigger (USA).sfc
+158f438150125aacfa21280c78021bfe  /home/runner/work/_temp/px/storage/ES-DE/gamelists/snes/gamelist.xml
+164a0829d5cc5f1607c6506954e992e2  /home/runner/work/_temp/px/MyGames/switch2/Donkey Kong Bananza.nup
+2042afa309d10f2e32477ea051d59671  /home/runner/work/_temp/px/MyGames/Nintendo 64/Star Fox 64 (USA).z64
+29c112ae513b671719b84fe53ac1420b  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/Star Fox 64 (USA)/boxFront.png
+3291e78c7f457fd4d514ec7dd8344ace  /home/runner/work/_temp/px/MyGames/switch/Super Mario Odyssey.nsp
+45a8e54dcfbb466c4391bd2646b3f199  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/covers/Mario Kart 64 (USA).png
+49a88379d59936074a6a88e2edc97059  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/fanart/Mario Kart 64 (USA).png
+60da1ba62efec06bfb964c299386ab4e  /home/runner/work/_temp/px/PXFolder/themes/OtherTheme/theme.qml
+60da1ba62efec06bfb964c299386ab4e  /home/runner/work/_temp/px/home/.config/pegasus-frontend/themes/FakeXBSX/theme.qml
+63662d3c5756802ea0fe8d35a537c51b  /home/runner/work/_temp/px/MyGames/psx/media/crash.png
+69e51083c1f5858cdfe040ca18d6062c  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/physicalmedia/Super Mario World (USA).png
+6d6af4226e49269c4ab999d5794ac56b  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/screenshots/Super Mario World (USA).png
+6f317bf1785aaf6e33cba966eba7f880  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/screenshots/Chrono Trigger (USA).png
+701592dc043879d805df5cadb4ca262b  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/Star Fox 64 (USA)/screenshot.png
+75ccd6f8c005240752b02658f737c3cb  /home/runner/work/_temp/px/MyGames/psx/Final Fantasy VII (USA).m3u
+809d9f2c67b9f55201789f910e0578e7  /home/runner/work/_temp/px/storage/ROMs/snes/Super Mario World (USA).sfc
+820f1539602d2c26eb3f879f2be3971e  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/covers/Super Mario World (USA).png
+826a2ce6bbfa6c03fd570418d12b6fea  /home/runner/work/_temp/px/MyGames/psx/media/Crash Bandicoot (USA).zip
+86a3af8f630a16d591eee8fd970b484e  /home/runner/work/_temp/px/MyGames/psx/gamelist.xml
+9117fa8f931430c0f57aa533bd8f8127  /home/runner/work/_temp/px/MyGames/psx/skraper/box2d/Crash Bandicoot (USA).zip
+a3a514b598fac130683591cfa824cdcd  /home/runner/work/_temp/px/storage/ES-DE/settings/es_settings.xml
+a42ff41289816d2be0fed74adb98be36  /home/runner/work/_temp/px/MyGames/psx/Final Fantasy VII (USA) (Disc 2).cue
+a6e41af32466f9b7c9e9f2a29d7e0996  /home/runner/work/_temp/px/MyGames/psx/Extra/Ape Escape (USA).chd
+ac649670e405f9024c9fcfa52bcfcdae  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/screenshot/Mario Kart 64 (USA).png
+ad3afd60486c3f9697636908159809e7  /home/runner/work/_temp/px/storage/ROMs/gba/Metroid Fusion (USA).gba
+b1cdb0a39fabb2830f11c98581462f3b  /home/runner/work/_temp/px/MyGames/Nintendo 64/Mario Kart 64 (USA).z64
+c20e4cadb22a9940811171c21f086ae2  /home/runner/work/_temp/px/outside.txt
+cad8266ab8be624c868918598056d717  /home/runner/work/_temp/px/MyGames/psx/Final Fantasy VII (USA) (Disc 1).cue
+da90e61ac6c114ec4aea322bcf10853e  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/3D Boxes/Mario Kart 64 (USA).png
+e6963005d4223657d7a863cb873e1078  /home/runner/work/_temp/px/MyGames/Nintendo 64/media/wheel/Mario Kart 64 (USA).png
+e6963005d4223657d7a863cb873e1078  /home/runner/work/_temp/px/storage/ES-DE/downloaded_media/snes/marquees/Super Mario World (USA).png
+e6c6b27eb7eec576f9bb1805403d5a03  /home/runner/work/_temp/px/MyGames/psx/Final Fantasy VII (USA) (Disc 1).bin
+e9e7591bf99b480834175ee0831c43b2  /home/runner/work/_temp/px/storage/ROMs/metadata.pegasus.txt
+f003a140db32564a4a117334535e498b  /home/runner/work/_temp/px/MyGames/switch/Stray Package.nup
+f8bd26ebe91faca3713afe00d7a92691  /home/runner/work/_temp/px/storage/ROMs/snes/The Legend of Zelda - A Link to the Past (USA).sfc
